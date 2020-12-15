@@ -6,8 +6,10 @@ open Data.Nat using (ℕ ; zero ; suc)
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not)
 open import Data.Bool.Properties
-  using (∧-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; not-¬ ; ∧-comm ; ∧-assoc ; ∧-idem ; ∧-distribʳ-∨ ;
-    ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra)
+  using (
+      ∧-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; ∧-comm ; ∧-assoc ; ∧-idem ;
+      ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ; not-¬
+    )
   renaming (_≟_ to _≟ᵇ_)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_)
 open import Data.Maybe using (Maybe ; just ; nothing)
@@ -16,7 +18,6 @@ open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
 open import Data.Vec.Properties using () renaming (≡-dec to ≡-decᵛ)
 open import Function using (_$_ ; _∘_ ; case_of_)
--- open import Relation.Binary using (Decidable)
 open import Relation.Binary.PropositionalEquality
   using (_≡_ ; refl ; sym ; inspect ; [_] ; cong ; subst)
 open import Relation.Nullary using (Dec ; _because_ ; ofʸ ; ofⁿ)
@@ -209,16 +210,75 @@ rupL′ : ∀ a f c → eval a f ≡ false ⊎ evalᶜ a c ≡ true → eval a f
 rupL′ a f c (inj₁ p) rewrite p = refl
 rupL′ a f c (inj₂ p) rewrite p = sym $ ∧-identityʳ (eval a f)
 
-{-
-insertEmpty : ∀ n a i c → evalᶜ a c ≡ true → eval′ n a (insert′ n nothing i c) ≡ true
-insertEmpty zero    _ []ᵛ           _ p = p
+nextIndex′ : (n : ℕ) → Maybe (Trie n) → Maybe (Vec Bool n)
+nextIndex′ zero    nothing = just []ᵛ
+nextIndex′ zero    (just _) = nothing
 
-insertEmpty (suc n) a (false ∷ᵛ is) c p
+nextIndex′ (suc n) nothing with nextIndex′ n nothing
+... | just i  = just $ false ∷ᵛ i
+... | nothing = nothing
+
+nextIndex′ (suc n) (just (node l r)) with nextIndex′ n l
+... | just i  = just $ false ∷ᵛ i
+... | nothing with nextIndex′ n r
+... | just i  = just $ true ∷ᵛ i
+... | nothing = nothing
+
+nextIndex : Formula → Maybe Index
+nextIndex f = nextIndex′ bitsᶜ f
+
+nextIndexLeftL′ : (n : ℕ) → (l r : Maybe (Trie n)) → (i : Vec Bool n) →
+  nextIndex′ (suc n) (just (node l r)) ≡ just (false ∷ᵛ i) → nextIndex′ n l ≡ just i
+
+nextIndexLeftL′ n l r i p
+  with nextIndex′ n l
+... | just i′ = case p of λ { refl → refl }
+... | nothing
+  with nextIndex′ n r
+... | just i′ = case p of λ ()
+... | nothing = case p of λ ()
+
+nextIndexRightL′ : (n : ℕ) → (l r : Maybe (Trie n)) → (i : Vec Bool n) →
+  nextIndex′ (suc n) (just (node l r)) ≡ just (true ∷ᵛ i) → nextIndex′ n r ≡ just i
+
+nextIndexRightL′ n l r i p
+  with nextIndex′ n l
+... | just i′ = case p of λ ()
+... | nothing
+  with nextIndex′ n r
+... | just i′ = case p of λ { refl → refl }
+... | nothing = case p of λ ()
+
+insertEmptyL′ : ∀ n a i c → eval′ n a (insert′ n nothing i c) ≡ evalᶜ a c
+insertEmptyL′ zero _ []ᵛ _ = refl
+
+insertEmptyL′ (suc n) a (false ∷ᵛ is) c
   rewrite ∧-identityʳ (eval′ n a (insert′ n nothing is c))
-  = insertEmpty n a is c p
+  = insertEmptyL′ n a is c
 
-insertEmpty (suc n) a (true ∷ᵛ is)  c p = insertEmpty n a is c p
+insertEmptyL′ (suc n) a (true ∷ᵛ is) c = insertEmptyL′ n a is c
 
+appendL′ : ∀ n mt i c a → nextIndex′ n mt ≡ just i →
+  eval′ n a (insert′ n mt i c) ≡ eval′ n a mt ∧ evalᶜ a c
+
+appendL′ zero    nothing []ᵛ       _ _ _ = refl
+appendL′ (suc n) nothing (i ∷ᵛ is) c a p = insertEmptyL′ (suc n) a (i ∷ᵛ is) c
+
+appendL′ (suc n) (just (node l r)) (false ∷ᵛ is) c a p
+  rewrite appendL′ n l is c a (nextIndexLeftL′ n l r is p)
+        | ∧-assoc (eval′ n a l) (evalᶜ a c) (eval′ n a r)
+        | ∧-assoc (eval′ n a l) (eval′ n a r) (evalᶜ a c)
+        | ∧-comm (eval′ n a r) (evalᶜ a c)
+  = refl
+
+appendL′ (suc n) (just (node l r)) (true ∷ᵛ is)  c a p
+  rewrite appendL′ n r is c a (nextIndexRightL′ n l r is p)
+  = sym $ ∧-assoc (eval′ n a l) (eval′ n a r) (evalᶜ a c)
+
+appendL : ∀ f i c a → nextIndex f ≡ just i → eval a (insert f i c) ≡ eval a f ∧ evalᶜ a c
+appendL f i c a p = appendL′ bitsᶜ f i c a p
+
+{-
 insertLemma : ∀ n a f i c → evalᶜ a c ≡ true → eval′ n a (insert′ n f i c) ≡ false →
   eval′ n a f ≡ false
 
