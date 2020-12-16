@@ -165,19 +165,19 @@ flipInjective {neg v} {neg v′} refl = refl
 ∨-trueExtend : ∀ x y → x ≡ true → x ∨ y ≡ true
 ∨-trueExtend x y refl = refl
 
-trueLiteralAny : ∀ a l c → evalˡ a l ≡ true → l ∈ c → evalᶜ a c ≡ true
-trueLiteralAny a l (l′ ∷ˡ ls′) p₁ (here refl) rewrite p₁ = refl
-trueLiteralAny a l (l′ ∷ˡ ls′) p₁ (there p₂)
-  rewrite trueLiteralAny a l ls′ p₁ p₂ = ∨-zeroʳ (evalˡ a l′)
+anyLiteralTrue : ∀ a l c → evalˡ a l ≡ true → l ∈ c → evalᶜ a c ≡ true
+anyLiteralTrue a l (l′ ∷ˡ ls′) p₁ (here refl) rewrite p₁ = refl
+anyLiteralTrue a l (l′ ∷ˡ ls′) p₁ (there p₂)
+  rewrite anyLiteralTrue a l ls′ p₁ p₂ = ∨-zeroʳ (evalˡ a l′)
 
-falseClauseAll : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a l ≡ false) c
-falseClauseAll _ []ˡ       _ = []ᵃ
-falseClauseAll a (l ∷ˡ ls) p =
+allLiteralsFalse : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a l ≡ false) c
+allLiteralsFalse _ []ˡ       _ = []ᵃ
+allLiteralsFalse a (l ∷ˡ ls) p =
   let p₁ , p₂ = ∨-falseSplit (evalˡ a l) (evalᶜ a ls) p in
-  p₁ ∷ᵃ falseClauseAll a ls p₂
+  p₁ ∷ᵃ allLiteralsFalse a ls p₂
 
-falseClauseFlipAll : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a (flip l) ≡ true) c
-falseClauseFlipAll a c p = go c (falseClauseAll a c p)
+allFlippedTrue : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a (flip l) ≡ true) c
+allFlippedTrue a c p = go c (allLiteralsFalse a c p)
   where
   go : ∀ c → All (λ l → evalˡ a l ≡ false) c → All (λ l → evalˡ a (flip l) ≡ true) c
   go []ˡ       []ᵃ       = []ᵃ
@@ -208,37 +208,37 @@ removeLiteral (l′ ∷ˡ ls′) l with l′ ≟ˡ l
 ... | true  because ofʸ _ = removeLiteral ls′ l
 ... | false because ofⁿ _ = l′ ∷ˡ removeLiteral ls′ l
 
-removeLiteralRW : ∀ a c l →
+removeLiteralBool : ∀ a c l →
   evalᶜ a c ∧ not (evalˡ a l) ≡ evalᶜ a (removeLiteral c l) ∧ not (evalˡ a l)
 
-removeLiteralRW a []ˡ         _ = refl
+removeLiteralBool a []ˡ         _ = refl
 
-removeLiteralRW a (l′ ∷ˡ ls′) l with l′ ≟ˡ l
+removeLiteralBool a (l′ ∷ˡ ls′) l with l′ ≟ˡ l
 ... | true because ofʸ refl
   rewrite ∧-distribʳ-∨ (not (evalˡ a l′)) (evalˡ a l′) (evalᶜ a ls′)
-        | ∧-inverseʳ (evalˡ a l′) = removeLiteralRW a ls′ l′
+        | ∧-inverseʳ (evalˡ a l′) = removeLiteralBool a ls′ l′
 
 ... | false because ofⁿ _
   rewrite ∧-distribʳ-∨ (not (evalˡ a l)) (evalˡ a l′) (evalᶜ a (removeLiteral ls′ l))
         | ∧-distribʳ-∨ (not (evalˡ a l)) (evalˡ a l′) (evalᶜ a ls′)
-        | sym $ removeLiteralRW a ls′ l
+        | sym $ removeLiteralBool a ls′ l
   = refl
 
 andNot : (c₁ c₂ : Clause) → Clause
 andNot c₁ []ˡ       = c₁
 andNot c₁ (l ∷ˡ ls) = andNot (removeLiteral c₁ l) ls
 
-andNotRW : ∀ a c₁ c₂ → evalᶜ a c₁ ∧ not (evalᶜ a c₂) ≡ evalᶜ a (andNot c₁ c₂) ∧ not (evalᶜ a c₂)
-andNotRW a c₁ []ˡ = refl
-andNotRW a c₁ (l ∷ˡ ls)
+andNotBool : ∀ a c₁ c₂ → evalᶜ a c₁ ∧ not (evalᶜ a c₂) ≡ evalᶜ a (andNot c₁ c₂) ∧ not (evalᶜ a c₂)
+andNotBool a c₁ []ˡ = refl
+andNotBool a c₁ (l ∷ˡ ls)
   rewrite deMorgan₂ (evalˡ a l) (evalᶜ a ls)
         | sym $ ∧-assoc (evalᶜ a c₁) (not (evalˡ a l)) (not (evalᶜ a ls))
-        | removeLiteralRW a c₁ l
+        | removeLiteralBool a c₁ l
         | ∧-assoc (evalᶜ a (removeLiteral c₁ l)) (not (evalˡ a l)) (not (evalᶜ a ls))
         | ∧-comm (not (evalˡ a l)) (not (evalᶜ a ls))
         | sym $ ∧-assoc (evalᶜ a (removeLiteral c₁ l)) (not (evalᶜ a ls)) (not (evalˡ a l))
         | sym $ ∧-assoc (evalᶜ a (andNot (removeLiteral c₁ l) ls)) (not (evalᶜ a ls)) (not (evalˡ a l))
-        | andNotRW a (removeLiteral c₁ l) ls
+        | andNotBool a (removeLiteral c₁ l) ls
   = refl
 
 pushUnit : ∀ a l c → evalᶜ a (l ∷ˡ []ˡ) ∧ not (evalᶜ a c) ≡ not (evalᶜ a (flip l ∷ˡ c))
@@ -355,60 +355,60 @@ adjustOther a v v′ b p
 ... | true  because ofʸ q = contradiction (sym q) p
 ... | false because ofⁿ _ = refl
 
-makeTrue : Assignment → Literal → Assignment
-makeTrue a (pos v) = adjust a v true
-makeTrue a (neg v) = adjust a v false
+forceTrue : Assignment → Literal → Assignment
+forceTrue a (pos v) = adjust a v true
+forceTrue a (neg v) = adjust a v false
 
-makeTrueLiteral : ∀ l l′ a → l ≢ l′ → evalˡ a l′ ≡ true → evalˡ (makeTrue a (flip l)) l′ ≡ true
-makeTrueLiteral (pos v) (pos v′) a p₁ p₂ rewrite adjustOther a v v′ false (p₁ ∘ cong pos) = p₂
-makeTrueLiteral (pos v) (neg v′) a p₁ p₂
+forceTrueNoChange : ∀ l l′ a → l ≢ l′ → evalˡ a l′ ≡ true → evalˡ (forceTrue a (flip l)) l′ ≡ true
+forceTrueNoChange (pos v) (pos v′) a p₁ p₂ rewrite adjustOther a v v′ false (p₁ ∘ cong pos) = p₂
+forceTrueNoChange (pos v) (neg v′) a p₁ p₂
   with v′ ≟ᵛ v
 ... | true  because ofʸ refl = refl
 ... | false because ofⁿ _    = p₂
-makeTrueLiteral (neg v) (pos v′) a p₁ p₂
+forceTrueNoChange (neg v) (pos v′) a p₁ p₂
   with v′ ≟ᵛ v
 ... | true  because ofʸ refl = refl
 ... | false because ofⁿ q    = p₂
-makeTrueLiteral (neg v) (neg v′) a p₁ p₂ rewrite adjustOther a v v′ true (p₁ ∘ cong neg) = p₂
+forceTrueNoChange (neg v) (neg v′) a p₁ p₂ rewrite adjustOther a v v′ true (p₁ ∘ cong neg) = p₂
 
-makeTrue-∈ : ∀ l c a → l ∈ c → evalᶜ (makeTrue a l) c ≡ true
-makeTrue-∈ (pos v) (pos v ∷ˡ ls′) a (here refl) rewrite adjustSame a v true = refl
-makeTrue-∈ (neg v) (neg v ∷ˡ ls′) a (here refl) rewrite cong not $ adjustSame a v false = refl
-makeTrue-∈ l       (l′ ∷ˡ ls′)    a (there p)
-  rewrite makeTrue-∈ l ls′ a p = ∨-zeroʳ (evalˡ (makeTrue a l) l′)
+forceTrue-∈ : ∀ l c a → l ∈ c → evalᶜ (forceTrue a l) c ≡ true
+forceTrue-∈ (pos v) (pos v ∷ˡ ls′) a (here refl) rewrite adjustSame a v true = refl
+forceTrue-∈ (neg v) (neg v ∷ˡ ls′) a (here refl) rewrite cong not $ adjustSame a v false = refl
+forceTrue-∈ l       (l′ ∷ˡ ls′)    a (there p)
+  rewrite forceTrue-∈ l ls′ a p = ∨-zeroʳ (evalˡ (forceTrue a l) l′)
 
-makeTrue-∉ : ∀ l c a → l ∉ c → evalᶜ a c ≡ true → evalᶜ (makeTrue a (flip l)) c ≡ true
-makeTrue-∉ l (l′ ∷ˡ ls′) a p₁ p₂
+forceTrue-∉ : ∀ l c a → l ∉ c → evalᶜ a c ≡ true → evalᶜ (forceTrue a (flip l)) c ≡ true
+forceTrue-∉ l (l′ ∷ˡ ls′) a p₁ p₂
   with ∨-trueSplit (evalˡ a l′) (evalᶜ a ls′) p₂
-... | inj₁ q rewrite makeTrueLiteral l l′ a (p₁ ∘ here) q = refl
-... | inj₂ q rewrite makeTrue-∉ l ls′ a (p₁ ∘ there) q = ∨-zeroʳ (evalˡ (makeTrue a (flip l)) l′)
+... | inj₁ q rewrite forceTrueNoChange l l′ a (p₁ ∘ here) q = refl
+... | inj₂ q rewrite forceTrue-∉ l ls′ a (p₁ ∘ there) q = ∨-zeroʳ (evalˡ (forceTrue a (flip l)) l′)
 
 ∉-tail : ∀ x y ys → x ∉ y ∷ˡ ys → x ∉ ys
 ∉-tail _ _ (_ ∷ˡ _)    p (here n)  = p $ there (here n)
 ∉-tail x y (y′ ∷ˡ ys′) p (there n) = p $ there (there n)
 
-clauseTrue₁ : ∀ a c l → evalᶜ a c ≡ true → flip l ∉ c → evalᶜ (makeTrue a l) c ≡ true
+clauseTrue₁ : ∀ a c l → evalᶜ a c ≡ true → flip l ∉ c → evalᶜ (forceTrue a l) c ≡ true
 clauseTrue₁ a (l′ ∷ˡ ls′) l p₁ p₂
   with evalˡ a l′ | inspect (evalˡ a) l′
 ... | false | _
   rewrite clauseTrue₁ a ls′ l p₁ (∉-tail (flip l) l′ ls′ p₂)
-  = ∨-zeroʳ $ evalˡ (makeTrue a l) l′
+  = ∨-zeroʳ $ evalˡ (forceTrue a l) l′
 ... | true | [ eq ]
   with l ≟ˡ l′
-... | true  because ofʸ refl = makeTrue-∈ l (l′ ∷ˡ ls′) a (here refl)
+... | true  because ofʸ refl = forceTrue-∈ l (l′ ∷ˡ ls′) a (here refl)
 ... | false because ofⁿ q
-  with r ← makeTrue-∉ (flip l) (l′ ∷ˡ ls′) a p₂ (∨-trueExtend (evalˡ a l′) (evalᶜ a ls′) eq)
+  with r ← forceTrue-∉ (flip l) (l′ ∷ˡ ls′) a p₂ (∨-trueExtend (evalˡ a l′) (evalᶜ a ls′) eq)
   rewrite flipFlip l
   = r
 
 clauseTrue₂ : ∀ a l ls c l′ → evalᶜ a (l ∷ˡ ls) ≡ false → l′ ∈ ls → flip l′ ∈ c → l ≢ l′ →
-  evalᶜ (makeTrue a l) c ≡ true
+  evalᶜ (forceTrue a l) c ≡ true
 
 clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (here refl) p₃ p₄
-  with (q₁ ∷ᵃ q₂ ∷ᵃ q₃) ← falseClauseFlipAll a (l ∷ˡ l″ ∷ˡ ls″) p₁
-  with r ← makeTrueLiteral (flip l) (flip l″) a (p₄ ∘ flipInjective) q₂
+  with (q₁ ∷ᵃ q₂ ∷ᵃ q₃) ← allFlippedTrue a (l ∷ˡ l″ ∷ˡ ls″) p₁
+  with r ← forceTrueNoChange (flip l) (flip l″) a (p₄ ∘ flipInjective) q₂
   rewrite flipFlip l
-  = trueLiteralAny (makeTrue a l) (flip l″) c r p₃
+  = anyLiteralTrue (forceTrue a l) (flip l″) c r p₃
 
 clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (there p₂) p₃ p₄ =
   clauseTrue₂ a l ls″ c l′ (lem (evalˡ a l) (evalˡ a l″) (evalᶜ a ls″) p₁) p₂ p₃ p₄
