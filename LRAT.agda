@@ -4,48 +4,81 @@ module LRAT (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc)
 
-open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not)
+open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then_else_)
 open import Data.Bool.Properties
   using (
-      ∧-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; ∧-comm ; ∧-assoc ; ∧-idem ;
+      ∧-zeroʳ ; ∨-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; ∧-comm ; ∨-comm ; ∧-assoc ; ∧-idem ;
       ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ; not-¬
     )
   renaming (_≟_ to _≟ᵇ_)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_)
+open import Data.List.Relation.Unary.All using (All) renaming ([] to []ᵃ ; _∷_ to _∷ᵃ_)
+open import Data.List.Relation.Unary.Any using (Any ; here ; there)
 open import Data.Maybe using (Maybe ; just ; nothing)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
 open import Data.Vec.Properties using () renaming (≡-dec to ≡-decᵛ)
 open import Function using (_$_ ; _∘_ ; case_of_)
+open import Level using (0ℓ)
+open import Relation.Binary using (DecSetoid)
 open import Relation.Binary.PropositionalEquality
-  using (_≡_ ; refl ; sym ; inspect ; [_] ; cong ; subst)
+  using (_≡_ ; _≢_ ; refl ; sym ; ≢-sym ; inspect ; [_] ; cong ; subst ; decSetoid)
 open import Relation.Nullary using (Dec ; _because_ ; ofʸ ; ofⁿ)
 open import Relation.Nullary.Negation using (contradiction)
 
 open import Algebra.Properties.BooleanAlgebra ∨-∧-booleanAlgebra using (deMorgan₁ ; deMorgan₂)
 
-data Variable : Set where
-  var : Vec Bool bitsᵛ → Variable
+Variable : Set
+Variable = Vec Bool bitsᵛ
 
+Assignment : Set
 Assignment = Variable → Bool
 
 data Literal : Set where
   pos : Variable → Literal
   neg : Variable → Literal
 
+Clause : Set
 Clause = List Literal
 
 data Trie : ℕ → Set where
   leaf : Clause → Trie 0
   node : {n : ℕ} → Maybe (Trie n) → Maybe (Trie n) → Trie (suc n)
 
+Formula : Set
 Formula = Maybe (Trie bitsᶜ)
+
+Index : Set
 Index = Vec Bool bitsᶜ
 
-flip : Literal → Literal
-flip (pos v) = neg v
-flip (neg v) = pos v
+posInjective : (v₁ v₂ : Vec Bool bitsᵛ) → pos v₁ ≡ pos v₂ → v₁ ≡ v₂
+posInjective v₁ v₂ refl = refl
+
+negInjective : (v₁ v₂ : Vec Bool bitsᵛ) → neg v₁ ≡ neg v₂ → v₁ ≡ v₂
+negInjective v₁ v₂ refl = refl
+
+infix 4 _≟ᵛ_ _≟ˡ_
+
+_≟ᵛ_ : (v₁ v₂ : Vec Bool bitsᵛ) → Dec (v₁ ≡ v₂)
+_≟ᵛ_ = ≡-decᵛ _≟ᵇ_
+
+_≟ˡ_ : (l₁ l₂ : Literal) → Dec (l₁ ≡ l₂)
+pos v₁ ≟ˡ pos v₂ with v₁ ≟ᵛ v₂
+... | true  because ofʸ refl = true because ofʸ refl
+... | false because ofⁿ p = false because ofⁿ (p ∘ posInjective v₁ v₂)
+
+pos _ ≟ˡ neg _ = false because ofⁿ λ ()
+neg _ ≟ˡ pos _ = false because ofⁿ λ ()
+
+neg v₁ ≟ˡ neg v₂ with v₁ ≟ᵛ v₂
+... | true  because ofʸ refl = true because ofʸ refl
+... | false because ofⁿ p = false because ofⁿ (p ∘ negInjective v₁ v₂)
+
+literalDS : DecSetoid 0ℓ 0ℓ
+literalDS = decSetoid _≟ˡ_
+
+open import Data.List.Membership.DecSetoid literalDS using (_∈_ ; _∉_ ; _∈?_)
 
 evalˡ : Assignment → Literal → Bool
 evalˡ a (pos v) = a v
@@ -91,6 +124,65 @@ remove′ (suc n) (just (node l r)) (true ∷ᵛ cs′)  = just (node l (remove�
 remove : Formula → Index → Formula
 remove f i = remove′ bitsᶜ f i
 
+evalTrueStepL′ : ∀ n a l r → eval′ (suc n) a (just (node l r)) ≡ true →
+  eval′ n a l ≡ true × eval′ n a r ≡ true
+
+evalTrueStepL′ n a l r p
+  with eval′ n a l
+... | false = case p of λ ()
+... | true
+  with eval′ n a r
+... | false = case p of λ ()
+... | true  = refl , refl
+
+flip : Literal → Literal
+flip (pos v) = neg v
+flip (neg v) = pos v
+
+notNotL : ∀ b → not (not b) ≡ b
+notNotL true  = refl
+notNotL false = refl
+
+flipL : ∀ a l → evalˡ a (flip l) ≡ not (evalˡ a l)
+flipL a (pos v) = refl
+flipL a (neg v) = sym $ notNotL (a v)
+
+flipFlipL : ∀ l → flip (flip l) ≡ l
+flipFlipL (pos v) = refl
+flipFlipL (neg v) = refl
+
+flipInjective : ∀ {l l′} → flip l ≡ flip l′ → l ≡ l′
+flipInjective {pos v} {pos v′} refl = refl
+flipInjective {neg v} {neg v′} refl = refl
+
+∨-falseSplit : ∀ x y → x ∨ y ≡ false → x ≡ false × y ≡ false
+∨-falseSplit false false refl = refl , refl
+
+∨-trueSplit : ∀ x y → x ∨ y ≡ true → x ≡ true ⊎ y ≡ true
+∨-trueSplit false _ refl = inj₂ refl
+∨-trueSplit true  _ refl = inj₁ refl
+
+∨-trueExtend : ∀ x y → x ≡ true → x ∨ y ≡ true
+∨-trueExtend x y refl = refl
+
+trueLiteralAnyL : ∀ a l c → evalˡ a l ≡ true → l ∈ c → evalᶜ a c ≡ true
+trueLiteralAnyL a l (l′ ∷ˡ ls′) p₁ (here refl) rewrite p₁ = refl
+trueLiteralAnyL a l (l′ ∷ˡ ls′) p₁ (there p₂)
+  rewrite trueLiteralAnyL a l ls′ p₁ p₂ = ∨-zeroʳ (evalˡ a l′)
+
+falseClauseAllL : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a l ≡ false) c
+falseClauseAllL _ []ˡ       _ = []ᵃ
+falseClauseAllL a (l ∷ˡ ls) p =
+  let p₁ , p₂ = ∨-falseSplit (evalˡ a l) (evalᶜ a ls) p in
+  p₁ ∷ᵃ falseClauseAllL a ls p₂
+
+falseClauseFlipAllL : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a (flip l) ≡ true) c
+falseClauseFlipAllL a c p = go c (falseClauseAllL a c p)
+  where
+  go : ∀ c → All (λ l → evalˡ a l ≡ false) c → All (λ l → evalˡ a (flip l) ≡ true) c
+  go []ˡ       []ᵃ       = []ᵃ
+  go (l ∷ˡ ls) (p ∷ᵃ ps) = subst (λ # → evalˡ a (flip l) ≡ not #) p (flipL a l) ∷ᵃ go ls ps
+
 duplicateL′ : ∀ n a f i → eval′ n a f ≡ eval′ n a f ∧ evalOne′ n a f i
 duplicateL′ zero    _ nothing           []ᵛ           = refl
 duplicateL′ zero    a (just (leaf c))   []ᵛ           = sym $ ∧-idem (evalᶜ a c)
@@ -109,31 +201,6 @@ duplicateL′ (suc n) a (just (node l r)) (true ∷ᵛ is)
 
 duplicateL : ∀ a f i → eval a f ≡ eval a f ∧ evalOne a f i
 duplicateL a f i = duplicateL′ bitsᶜ a f i
-
-infix 4 _≟ᵛ_ _≟ˡ_
-
-_≟ᵛ_ : (v₁ v₂ : Vec Bool bitsᵛ) → Dec (v₁ ≡ v₂)
-_≟ᵛ_ = ≡-decᵛ _≟ᵇ_
-
-_≟ˡ_ : (l₁ l₂ : Literal) → Dec (l₁ ≡ l₂)
-pos (var v₁) ≟ˡ pos (var v₂) with v₁ ≟ᵛ v₂
-... | true  because ofʸ refl = true  because ofʸ refl
-
-... | false because ofⁿ p = false because ofⁿ (p ∘ posVarInj v₁ v₂)
-  where
-  posVarInj : (v₁ v₂ : Vec Bool bitsᵛ) → pos (var v₁) ≡ pos (var v₂) → v₁ ≡ v₂
-  posVarInj v₁ v₂ refl = refl
-
-pos _ ≟ˡ neg _ = false because ofⁿ λ ()
-neg _ ≟ˡ pos _ = false because ofⁿ λ ()
-
-neg (var v₁) ≟ˡ neg (var v₂) with v₁ ≟ᵛ v₂
-... | true  because ofʸ refl = true  because ofʸ refl
-
-... | false because ofⁿ p = false because ofⁿ (p ∘ negVarInj v₁ v₂)
-  where
-  negVarInj : (v₁ v₂ : Vec Bool bitsᵛ) → neg (var v₁) ≡ neg (var v₂) → v₁ ≡ v₂
-  negVarInj v₁ v₂ refl = refl
 
 removeLiteral : (c : Clause) → (l : Literal) → Clause
 removeLiteral []ˡ         _ = []ˡ
@@ -173,14 +240,6 @@ andNotL a c₁ (l ∷ˡ ls)
         | sym $ ∧-assoc (evalᶜ a (andNot (removeLiteral c₁ l) ls)) (not (evalᶜ a ls)) (not (evalˡ a l))
         | andNotL a (removeLiteral c₁ l) ls
   = refl
-
-notNotL : ∀ b → not (not b) ≡ b
-notNotL true  = refl
-notNotL false = refl
-
-flipL : ∀ a l → evalˡ a (flip l) ≡ not (evalˡ a l)
-flipL a (pos v) = refl
-flipL a (neg v) = sym $ notNotL (a v)
 
 pushUnitL : ∀ a l c → evalᶜ a (l ∷ˡ []ˡ) ∧ not (evalᶜ a c) ≡ not (evalᶜ a (flip l ∷ˡ c))
 pushUnitL a l []ˡ
@@ -277,6 +336,86 @@ appendL′ (suc n) (just (node l r)) (true ∷ᵛ is)  c a p
 
 appendL : ∀ f i c a → nextIndex f ≡ just i → eval a (insert f i c) ≡ eval a f ∧ evalᶜ a c
 appendL f i c a p = appendL′ bitsᶜ f i c a p
+
+adjust : Assignment → Variable → Bool → Assignment
+adjust a v b v′
+  with v′ ≟ᵛ v
+... | true  because ofʸ _ = b
+... | false because ofⁿ _ = a v′
+
+adjustSameL : ∀ a v b → (adjust a v b) v ≡ b
+adjustSameL a v b
+  with v ≟ᵛ v
+... | true  because ofʸ _ = refl
+... | false because ofⁿ q = contradiction refl q
+
+adjustOtherL : ∀ a v v′ b → v ≢ v′ → (adjust a v b) v′ ≡ a v′
+adjustOtherL a v v′ b p
+  with v′ ≟ᵛ v
+... | true  because ofʸ q = contradiction (sym q) p
+... | false because ofⁿ _ = refl
+
+makeTrue : Assignment → Literal → Assignment
+makeTrue a (pos v) = adjust a v true
+makeTrue a (neg v) = adjust a v false
+
+makeTrueLiteralL : ∀ l l′ a → l ≢ l′ → evalˡ a l′ ≡ true → evalˡ (makeTrue a (flip l)) l′ ≡ true
+makeTrueLiteralL (pos v) (pos v′) a p₁ p₂ rewrite adjustOtherL a v v′ false (p₁ ∘ cong pos) = p₂
+makeTrueLiteralL (pos v) (neg v′) a p₁ p₂
+  with v′ ≟ᵛ v
+... | true  because ofʸ refl = refl
+... | false because ofⁿ _    = p₂
+makeTrueLiteralL (neg v) (pos v′) a p₁ p₂
+  with v′ ≟ᵛ v
+... | true  because ofʸ refl = refl
+... | false because ofⁿ q    = p₂
+makeTrueLiteralL (neg v) (neg v′) a p₁ p₂ rewrite adjustOtherL a v v′ true (p₁ ∘ cong neg) = p₂
+
+makeTrue-∈-L : ∀ l c a → l ∈ c → evalᶜ (makeTrue a l) c ≡ true
+makeTrue-∈-L (pos v) (pos v ∷ˡ ls′) a (here refl) rewrite adjustSameL a v true = refl
+makeTrue-∈-L (neg v) (neg v ∷ˡ ls′) a (here refl) rewrite cong not $ adjustSameL a v false = refl
+makeTrue-∈-L l       (l′ ∷ˡ ls′)    a (there p)
+  rewrite makeTrue-∈-L l ls′ a p = ∨-zeroʳ (evalˡ (makeTrue a l) l′)
+
+makeTrue-∉-L : ∀ l c a → l ∉ c → evalᶜ a c ≡ true → evalᶜ (makeTrue a (flip l)) c ≡ true
+makeTrue-∉-L l (l′ ∷ˡ ls′) a p₁ p₂
+  with ∨-trueSplit (evalˡ a l′) (evalᶜ a ls′) p₂
+... | inj₁ q rewrite makeTrueLiteralL l l′ a (p₁ ∘ here) q = refl
+... | inj₂ q rewrite makeTrue-∉-L l ls′ a (p₁ ∘ there) q = ∨-zeroʳ (evalˡ (makeTrue a (flip l)) l′)
+
+∉-tail : ∀ x y ys → x ∉ y ∷ˡ ys → x ∉ ys
+∉-tail _ _ (_ ∷ˡ _)    p (here n)  = p $ there (here n)
+∉-tail x y (y′ ∷ˡ ys′) p (there n) = p $ there (there n)
+
+clauseTrue₁ : ∀ a c l → evalᶜ a c ≡ true → flip l ∉ c → evalᶜ (makeTrue a l) c ≡ true
+clauseTrue₁ a (l′ ∷ˡ ls′) l p₁ p₂
+  with evalˡ a l′ | inspect (evalˡ a) l′
+... | false | _
+  rewrite clauseTrue₁ a ls′ l p₁ (∉-tail (flip l) l′ ls′ p₂)
+  = ∨-zeroʳ $ evalˡ (makeTrue a l) l′
+... | true | [ eq ]
+  with l ≟ˡ l′
+... | true  because ofʸ refl = makeTrue-∈-L l (l′ ∷ˡ ls′) a (here refl)
+... | false because ofⁿ q
+  with r ← makeTrue-∉-L (flip l) (l′ ∷ˡ ls′) a p₂ (∨-trueExtend (evalˡ a l′) (evalᶜ a ls′) eq)
+  rewrite flipFlipL l
+  = r
+
+clauseTrue₂ : ∀ a l ls c l′ → evalᶜ a (l ∷ˡ ls) ≡ false → l′ ∈ ls → flip l′ ∈ c → l ≢ l′ →
+  evalᶜ (makeTrue a l) c ≡ true
+
+clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (here refl) p₃ p₄
+  with (q₁ ∷ᵃ q₂ ∷ᵃ q₃) ← falseClauseFlipAllL a (l ∷ˡ l″ ∷ˡ ls″) p₁
+  with r ← makeTrueLiteralL (flip l) (flip l″) a (p₄ ∘ flipInjective) q₂
+  rewrite flipFlipL l
+  = trueLiteralAnyL (makeTrue a l) (flip l″) c r p₃
+
+clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (there p₂) p₃ p₄ =
+  clauseTrue₂ a l ls″ c l′ (∨-helper (evalˡ a l) (evalˡ a l″) (evalᶜ a ls″) p₁) p₂ p₃ p₄
+  where
+  ∨-helper : ∀ x y z → x ∨ y ∨ z ≡ false → x ∨ z ≡ false
+  ∨-helper x true  z p rewrite ∨-zeroʳ x = case p of λ ()
+  ∨-helper x false z p = p
 
 {-
 insertLemma : ∀ n a f i c → evalᶜ a c ≡ true → eval′ n a (insert′ n f i c) ≡ false →
