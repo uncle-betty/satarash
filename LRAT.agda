@@ -7,11 +7,11 @@ open Data.Nat using (ℕ ; zero ; suc)
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then_else_)
 open import Data.Bool.Properties
   using (
-      ∧-zeroʳ ; ∨-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; ∧-comm ; ∨-comm ; ∧-assoc ; ∧-idem ;
-      ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ; not-¬
+      ∧-zeroʳ ; ∨-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; ∧-comm ; ∨-comm ; ∧-assoc ; ∨-assoc ;
+      ∧-idem ; ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ; not-¬
     )
   renaming (_≟_ to _≟ᵇ_)
-open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_)
+open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++_ to _++ˡ_)
 open import Data.List.Relation.Unary.All using (All) renaming ([] to []ᵃ ; _∷_ to _∷ᵃ_)
 open import Data.List.Relation.Unary.Any using (Any ; here ; there)
 open import Data.Maybe using (Maybe ; just ; nothing)
@@ -122,6 +122,13 @@ remove′ (suc n) (just (node l r)) (true ∷ᵛ cs′)  = just (node l (remove�
 remove : Formula → Index → Formula
 remove f i = remove′ bitsᶜ f i
 
+++ˡ⇒∨ : ∀ a c₁ c₂ → evalᶜ a (c₁ ++ˡ c₂) ≡ evalᶜ a c₁ ∨ evalᶜ a c₂
+++ˡ⇒∨ _ []ˡ       _  = refl
+++ˡ⇒∨ a (l ∷ˡ ls) c₂ rewrite ∨-assoc (evalˡ a l) (evalᶜ a ls) (evalᶜ a c₂) | ++ˡ⇒∨ a ls c₂ = refl
+
+false-++ˡ : ∀ a c₁ c₂ → evalᶜ a c₁ ≡ false → evalᶜ a (c₁ ++ˡ c₂) ≡ evalᶜ a c₂
+false-++ˡ a c₁ c₂ p rewrite ++ˡ⇒∨ a c₁ c₂ | p = refl
+
 evalTrueStep′ : ∀ n a l r → eval′ (suc n) a (just (node l r)) ≡ true →
   eval′ n a l ≡ true × eval′ n a r ≡ true
 evalTrueStep′ n a l r p
@@ -167,6 +174,12 @@ anyLiteralTrue a l (l′ ∷ˡ ls′) p₁ (here refl) rewrite p₁ = refl
 anyLiteralTrue a l (l′ ∷ˡ ls′) p₁ (there p₂)
   rewrite anyLiteralTrue a l ls′ p₁ p₂ = ∨-zeroʳ (evalˡ a l′)
 
+allLiteralsFalse : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a l ≡ false) c
+allLiteralsFalse _ []ˡ       _ = []ᵃ
+allLiteralsFalse a (l ∷ˡ ls) p
+  with q₁ , q₂ ← ∨-falseSplit (evalˡ a l) (evalᶜ a ls) p
+  = q₁ ∷ᵃ allLiteralsFalse a ls q₂
+
 allFlippedTrue : ∀ a c → evalᶜ a c ≡ false → All (λ l → evalˡ a (flip l) ≡ true) c
 allFlippedTrue _ []ˡ       _ = []ᵃ
 allFlippedTrue a (l ∷ˡ ls) p
@@ -200,15 +213,54 @@ removeLiteralBool : ∀ a c l →
   evalᶜ a c ∧ not (evalˡ a l) ≡ evalᶜ a (removeLiteral c l) ∧ not (evalˡ a l)
 removeLiteralBool a []ˡ         _ = refl
 removeLiteralBool a (l′ ∷ˡ ls′) l with l′ ≟ˡ l
-... | true because ofʸ refl
+... | true  because ofʸ refl
   rewrite ∧-distribʳ-∨ (not (evalˡ a l′)) (evalˡ a l′) (evalᶜ a ls′)
         | ∧-inverseʳ (evalˡ a l′) = removeLiteralBool a ls′ l′
-
 ... | false because ofⁿ _
   rewrite ∧-distribʳ-∨ (not (evalˡ a l)) (evalˡ a l′) (evalᶜ a (removeLiteral ls′ l))
         | ∧-distribʳ-∨ (not (evalˡ a l)) (evalˡ a l′) (evalᶜ a ls′)
         | sym $ removeLiteralBool a ls′ l
   = refl
+
+removeLiteralFalse : ∀ a c l → evalᶜ a c ≡ false → evalᶜ a (removeLiteral c l) ≡ false
+removeLiteralFalse _ []ˡ         _ _ = refl
+removeLiteralFalse a (l′ ∷ˡ ls′) l p
+  with (q ∷ᵃ qs) ← allLiteralsFalse a (l′ ∷ˡ ls′) p
+  with l′ ≟ˡ l
+... | true  because ofʸ r rewrite q = removeLiteralFalse a ls′ l p
+... | false because ofⁿ r rewrite q = removeLiteralFalse a ls′ l p
+
+removeLiteralTrue : ∀ a c l → evalᶜ a (removeLiteral c l) ≡ true → evalᶜ a c ≡ true
+removeLiteralTrue a (l′ ∷ˡ ls′) l p
+  with l′ ≟ˡ l
+... | true  because ofʸ _ rewrite removeLiteralTrue a ls′ l p = ∨-zeroʳ (evalˡ a l′)
+... | false because ofⁿ q
+  with ∨-trueSplit (evalˡ a l′) (evalᶜ a (removeLiteral ls′ l)) p
+... | inj₁ r rewrite r = refl
+... | inj₂ r rewrite removeLiteralTrue a ls′ l r = ∨-zeroʳ (evalˡ a l′)
+
+removeLiteral-∉ : ∀ l c → l ∉ removeLiteral c l
+removeLiteral-∉ l []ˡ         = λ ()
+removeLiteral-∉ l (l′ ∷ˡ ls′)
+  with l′ ≟ˡ l
+... | true  because ofʸ _ = removeLiteral-∉ l ls′
+... | false because ofⁿ p = λ where
+  (here q)  → contradiction (sym q) p
+  (there q) → contradiction q (removeLiteral-∉ l ls′)
+
+resolvent : Literal → Clause → Clause → Clause
+resolvent l c₁ c₂ = removeLiteral c₁ l ++ˡ removeLiteral c₂ (flip l)
+
+resolventTrue : ∀ a l c₁ c₂ → evalᶜ a c₁ ≡ false → evalᶜ a (resolvent l c₁ c₂) ≡ true →
+  evalᶜ a (removeLiteral c₂ (flip l)) ≡ true
+resolventTrue _ _ []ˡ         _  _  p₂ = p₂
+resolventTrue a l (l′ ∷ˡ ls′) c₂ p₁ p₂
+  with q₁ , q₂ ← ∨-falseSplit (evalˡ a l′) (evalᶜ a ls′) p₁
+  with r ← removeLiteralFalse a ls′ l q₂
+  with s ← false-++ˡ a (removeLiteral ls′ l) (removeLiteral c₂ (flip l)) r
+  with l′ ≟ˡ l
+... | true  because ofʸ z rewrite s = p₂
+... | false because ofⁿ z rewrite q₁ | s = p₂
 
 andNot : (c₁ c₂ : Clause) → Clause
 andNot c₁ []ˡ       = c₁
@@ -384,6 +436,14 @@ clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (here refl) p₃ p₄
 clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (there p₂)  p₃ p₄
   with q ← ∨-falseStrip (evalˡ a l) (evalˡ a l″) (evalᶜ a ls″) p₁
   = clauseTrue₂ a l ls″ c l′ q  p₂ p₃ p₄
+
+clauseTrue₃ : ∀ a l ls c → evalᶜ a (l ∷ˡ ls) ≡ false → evalᶜ a (resolvent l (l ∷ˡ ls) c) ≡ true →
+  evalᶜ (forceTrue a l) c ≡ true
+clauseTrue₃ a l ls c p₁ p₂
+  with q ← resolventTrue a l (l ∷ˡ ls) c p₁ p₂
+  with r ← removeLiteral-∉ (flip l) c
+  with s ← forceTrue-∉ l (removeLiteral c (flip l)) a r q
+  = removeLiteralTrue (forceTrue a l) c (flip l) s
 
 {-
 insertLemma : ∀ n a f i c → evalᶜ a c ≡ true → eval′ n a (insert′ n f i c) ≡ false →
