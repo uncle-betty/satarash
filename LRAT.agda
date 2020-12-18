@@ -8,7 +8,7 @@ open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then
 open import Data.Bool.Properties
   using (
       ∧-zeroʳ ; ∨-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; ∧-comm ; ∨-comm ; ∧-assoc ; ∨-assoc ;
-      ∧-idem ; ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ; not-¬
+      ∧-idem ; ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ; not-¬ ; ¬-not
     )
   renaming (_≟_ to _≟ᵇ_)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++_ to _++ˡ_)
@@ -222,14 +222,6 @@ removeLiteralBool a (l′ ∷ˡ ls′) l with l′ ≟ˡ l
         | sym $ removeLiteralBool a ls′ l
   = refl
 
-removeLiteralFalse : ∀ a c l → evalᶜ a c ≡ false → evalᶜ a (removeLiteral c l) ≡ false
-removeLiteralFalse _ []ˡ         _ _ = refl
-removeLiteralFalse a (l′ ∷ˡ ls′) l p
-  with (q ∷ᵃ qs) ← allLiteralsFalse a (l′ ∷ˡ ls′) p
-  with l′ ≟ˡ l
-... | true  because ofʸ r rewrite q = removeLiteralFalse a ls′ l p
-... | false because ofⁿ r rewrite q = removeLiteralFalse a ls′ l p
-
 removeLiteralTrue : ∀ a c l → evalᶜ a (removeLiteral c l) ≡ true → evalᶜ a c ≡ true
 removeLiteralTrue a (l′ ∷ˡ ls′) l p
   with l′ ≟ˡ l
@@ -248,19 +240,19 @@ removeLiteral-∉ l (l′ ∷ˡ ls′)
   (here q)  → contradiction (sym q) p
   (there q) → contradiction q (removeLiteral-∉ l ls′)
 
+-- Not strictly a resolvent, as |l| isn't removed from |c₁|.
 resolvent : Literal → Clause → Clause → Clause
-resolvent l c₁ c₂ = removeLiteral c₁ l ++ˡ removeLiteral c₂ (flip l)
+resolvent l c₁ c₂ = c₁ ++ˡ removeLiteral c₂ (flip l)
 
 resolventTrue : ∀ a l c₁ c₂ → evalᶜ a c₁ ≡ false → evalᶜ a (resolvent l c₁ c₂) ≡ true →
   evalᶜ a (removeLiteral c₂ (flip l)) ≡ true
 resolventTrue _ _ []ˡ         _  _  p₂ = p₂
 resolventTrue a l (l′ ∷ˡ ls′) c₂ p₁ p₂
   with q₁ , q₂ ← ∨-falseSplit (evalˡ a l′) (evalᶜ a ls′) p₁
-  with r ← removeLiteralFalse a ls′ l q₂
-  with s ← false-++ˡ a (removeLiteral ls′ l) (removeLiteral c₂ (flip l)) r
+  with r ← false-++ˡ a ls′ (removeLiteral c₂ (flip l)) q₂
   with l′ ≟ˡ l
-... | true  because ofʸ z rewrite s = p₂
-... | false because ofⁿ z rewrite q₁ | s = p₂
+... | true  because ofʸ _ rewrite r | q₁ = p₂
+... | false because ofⁿ _ rewrite r | q₁ = p₂
 
 andNot : (c₁ c₂ : Clause) → Clause
 andNot c₁ []ˡ       = c₁
