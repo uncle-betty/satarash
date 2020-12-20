@@ -361,13 +361,13 @@ checkRUP′ f c (i ∷ˡ is) | just cᶠ | [ eq₁ ] | []ˡ | [ eq₂ ] = done $
 checkRUP′ f c (i ∷ˡ is) | just cᶠ | [ eq₁ ] | l ∷ˡ []ˡ | [ eq₂ ]
   with checkRUP′ f (flip l ∷ˡ c) is
 ... | done p = done $ λ a → begin
-  eval a f ∧ not (evalᶜ a c)                            ≡⟨ cong (_∧ not (evalᶜ a c)) $ duplicate f i cᶠ eq₁ a ⟩
-  (eval a f ∧ evalᶜ a cᶠ) ∧ not (evalᶜ a c)             ≡⟨ ∧-assoc (eval a f) (evalᶜ a cᶠ) (not (evalᶜ a c)) ⟩
-  eval a f ∧ evalᶜ a cᶠ ∧ not (evalᶜ a c)               ≡⟨ cong (eval a f ∧_) $ andNotIntro a cᶠ c ⟩
-  eval a f ∧ evalᶜ a (andNot cᶠ c) ∧ not (evalᶜ a c)    ≡⟨ cong (λ # → eval a f ∧ evalᶜ a # ∧ not (evalᶜ a c)) eq₂ ⟩
-  eval a f ∧ (evalˡ a l ∨ false) ∧ not (evalᶜ a c)      ≡⟨ cong (eval a f ∧_) $ pushUnit a l c ⟩
-  eval a f ∧ not (evalˡ a (flip l) ∨ evalᶜ a c)         ≡⟨ p a ⟩
-  false                                                 ∎
+  eval a f ∧ not (evalᶜ a c)                         ≡⟨ cong (_∧ not (evalᶜ a c)) $ duplicate f i cᶠ eq₁ a ⟩
+  (eval a f ∧ evalᶜ a cᶠ) ∧ not (evalᶜ a c)          ≡⟨ ∧-assoc (eval a f) (evalᶜ a cᶠ) (not (evalᶜ a c)) ⟩
+  eval a f ∧ evalᶜ a cᶠ ∧ not (evalᶜ a c)            ≡⟨ cong (eval a f ∧_) $ andNotIntro a cᶠ c ⟩
+  eval a f ∧ evalᶜ a (andNot cᶠ c) ∧ not (evalᶜ a c) ≡⟨ cong (λ # → eval a f ∧ evalᶜ a # ∧ not (evalᶜ a c)) eq₂ ⟩
+  eval a f ∧ (evalˡ a l ∨ false) ∧ not (evalᶜ a c)   ≡⟨ cong (eval a f ∧_) $ pushUnit a l c ⟩
+  eval a f ∧ not (evalˡ a (flip l) ∨ evalᶜ a c)      ≡⟨ p a ⟩
+  false                                              ∎
 ... | more cʳ = more cʳ
 ... | fail    = fail
 checkRUP′ _ _ _ | _ | _ | _ | _ = fail
