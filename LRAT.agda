@@ -12,14 +12,15 @@ open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then
 open import Data.Bool.Properties
   using (
       ∧-zeroʳ ; ∨-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; ∧-comm ; ∨-comm ; ∧-assoc ; ∨-assoc ;
-      ∧-idem ; ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ; not-¬ ; ¬-not
+      ∧-idem ; ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∨-distribˡ-∧ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ;
+      not-¬ ; ¬-not
     )
   renaming (_≟_ to _≟ᵇ_)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++_ to _++ˡ_)
 open import Data.List.Relation.Unary.All using (All) renaming ([] to []ᵃ ; _∷_ to _∷ᵃ_)
 open import Data.List.Relation.Unary.Any using (Any ; here ; there)
 open import Data.Maybe using (Maybe ; just ; nothing) renaming (map to mapᵐ)
-open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂ ; ∃)
+open import Data.Product using (Σ ; _×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂ ; ∃)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
 open import Data.Vec.Properties using () renaming (≡-dec to ≡-decᵛ)
@@ -157,6 +158,9 @@ remove = remove′ bitsᶜ
 notNot : (b : Bool) → not (not b) ≡ b
 notNot true  = refl
 notNot false = refl
+
+notSwap : (b₁ b₂ : Bool) → not b₁ ≡ b₂ → b₁ ≡ not b₂
+notSwap b₁ b₂ refl = sym $ notNot b₁
 
 notFalse : (b : Bool) → not b ≡ false → b ≡ true
 notFalse true _ = refl
@@ -321,6 +325,19 @@ andNotIntro a c₁ (lᶜ ∷ˡ lsᶜ) = begin
   evalᶜ a (andNot (removeLiteral c₁ lᶜ) lsᶜ) ∧ not (evalᶜ a lsᶜ ∨ evalˡ a lᶜ)         ≡⟨ (cong (λ # → evalᶜ a (andNot (removeLiteral c₁ lᶜ) lsᶜ) ∧ not #) $ ∨-comm (evalᶜ a lsᶜ) (evalˡ a lᶜ)) ⟩
   evalᶜ a (andNot (removeLiteral c₁ lᶜ) lsᶜ) ∧ not (evalˡ a lᶜ ∨ evalᶜ a lsᶜ)         ∎
 
+andNotRUP : (a : Assignment) → (c₁ c₂ : Clause) → (l : Literal) → andNot c₁ c₂ ≡ l ∷ˡ []ˡ →
+  evalˡ a l ≡ false → evalᶜ a c₁ ≡ evalᶜ a c₁ ∧ evalᶜ a c₂
+andNotRUP a c₁ c₂ l p₁ p₂
+  with q ← andNotIntro a c₁ c₂
+  with evalᶜ a c₁
+... | false = refl
+... | true  = sym $ begin
+  evalᶜ a c₂                                      ≡⟨ notSwap (evalᶜ a c₂) (evalᶜ a (andNot c₁ c₂) ∧ not (evalᶜ a c₂)) q ⟩
+  not (evalᶜ a (andNot c₁ c₂) ∧ not (evalᶜ a c₂)) ≡⟨ cong (λ # → not (evalᶜ a # ∧ not (evalᶜ a c₂))) p₁ ⟩
+  not ((evalˡ a l ∨ false) ∧ not (evalᶜ a c₂))    ≡⟨ cong (λ # → not (# ∧ not (evalᶜ a c₂))) (∨-identityʳ (evalˡ a l)) ⟩
+  not (evalˡ a l ∧ not (evalᶜ a c₂))              ≡⟨ cong (λ # → not (# ∧ not (evalᶜ a c₂))) p₂ ⟩
+  true                                            ∎
+
 pushUnit : (a : Assignment) → (l : Literal) → (c : Clause) →
   evalᶜ a (l ∷ˡ []ˡ) ∧ not (evalᶜ a c) ≡ not (evalᶜ a (flip l ∷ˡ c))
 pushUnit a (pos v) []ˡ = begin
@@ -344,8 +361,9 @@ pushUnit a l (lᶜ ∷ˡ lsᶜ) = begin
   not (evalˡ a (flip l) ∨ evalˡ a lᶜ ∨ evalᶜ a lsᶜ)             ∎
 
 checkRUP′ : (f : Formula) → (c : Clause) → (is : List Index) →
-  Result (∀ a → eval a f ∧ not (evalᶜ a c) ≡ false) Clause
-checkRUP′ f c []ˡ       = more c
+  Result (∀ a → eval a f ∧ not (evalᶜ a c) ≡ false)
+    (Σ Clause (λ cʳ → ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c))
+checkRUP′ f c []ˡ       = more (c , λ _ → refl)
 checkRUP′ f c (i ∷ˡ is)
   with lookup f i | inspect (lookup f) i
 ... | nothing | _       = fail
@@ -368,17 +386,38 @@ checkRUP′ f c (i ∷ˡ is) | just cᶠ | [ eq₁ ] | l ∷ˡ []ˡ | [ eq₂ ]
   eval a f ∧ (evalˡ a l ∨ false) ∧ not (evalᶜ a c)   ≡⟨ cong (eval a f ∧_) $ pushUnit a l c ⟩
   eval a f ∧ not (evalˡ a (flip l) ∨ evalᶜ a c)      ≡⟨ p a ⟩
   false                                              ∎
-... | more cʳ = more cʳ
-... | fail    = fail
+... | more (cʳ , q) = more (cʳ , aux)
+  where
+  aux : ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c
+  aux a
+    with evalˡ a l | inspect (evalˡ a) l
+  ... | true  | [ eq₃ ] = begin
+    eval a f ∧ evalᶜ a cʳ                     ≡⟨ q a ⟩
+    eval a f ∧ (evalˡ a (flip l) ∨ evalᶜ a c) ≡⟨ cong (λ # → eval a f ∧ (# ∨ evalᶜ a c)) (flipNot a l) ⟩
+    eval a f ∧ (not (evalˡ a l) ∨ evalᶜ a c)  ≡⟨ cong (λ # → eval a f ∧ ((not #) ∨ evalᶜ a c)) eq₃ ⟩
+    eval a f ∧ evalᶜ a c                      ∎
+  ... | false | [ eq₃ ] = begin
+    eval a f ∧ evalᶜ a cʳ                     ≡⟨ q a ⟩
+    eval a f ∧ (evalˡ a (flip l) ∨ evalᶜ a c) ≡⟨ cong (λ # → eval a f ∧ (# ∨ evalᶜ a c)) (flipNot a l) ⟩
+    eval a f ∧ (not (evalˡ a l) ∨ evalᶜ a c)  ≡⟨ cong (λ # → eval a f ∧ ((not #) ∨ evalᶜ a c)) eq₃ ⟩
+    eval a f ∧ true                           ≡⟨ ∧-identityʳ (eval a f) ⟩
+    eval a f                                  ≡⟨ duplicate f i cᶠ eq₁ a ⟩
+    eval a f ∧ evalᶜ a cᶠ                     ≡⟨ cong (eval a f ∧_) $ andNotRUP a cᶠ c l eq₂ eq₃ ⟩
+    eval a f ∧ evalᶜ a cᶠ ∧ evalᶜ a c         ≡⟨ sym $ ∧-assoc (eval a f) (evalᶜ a cᶠ) (evalᶜ a c) ⟩
+    (eval a f ∧ evalᶜ a cᶠ) ∧ evalᶜ a c       ≡⟨ cong (_∧ evalᶜ a c) $ sym $ duplicate f i cᶠ eq₁ a ⟩
+    eval a f ∧ evalᶜ a c                      ∎
+... | fail          = fail
 checkRUP′ _ _ _ | _ | _ | _ | _ = fail
 
 checkRUP : (f : Formula) → (c : Clause) → (is : List Index) →
-  Result (∀ a → eval a f ≡ eval a f ∧ evalᶜ a c) Clause
+  Result (∀ a → eval a f ≡ eval a f ∧ evalᶜ a c)
+    (Σ Clause (λ cʳ → ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c))
 checkRUP f c is
   with checkRUP′ f c is
-... | fail    = fail
-... | more cʳ = more cʳ
-... | done p  = done $ λ a → case ∧-splitFalse (eval a f) (not (evalᶜ a c)) (p a) of λ where
+... | fail          = fail
+... | more (cʳ , p) = more (cʳ , p)
+... | done p        = done $
+  λ a → case ∧-splitFalse (eval a f) (not (evalᶜ a c)) (p a) of λ where
     (inj₁ q) → trans q $ sym $ ∧-extendFalse (eval a f) (evalᶜ a c) q
     (inj₂ q) → begin
       eval a f             ≡⟨ sym $ ∧-identityʳ (eval a f) ⟩
@@ -670,13 +709,13 @@ checkLRAT _ []ˡ                  = nothing
 checkLRAT f (del _ ∷ˡ ss)        = checkLRAT f ss -- skip delete steps for now
 checkLRAT f (ext c is iss ∷ˡ ss)
   with checkRUP f c is
-... | fail             = nothing
-... | done p           = RUPStep f c ss p
-... | more []ˡ         = nothing
-... | more (lᶜ ∷ˡ lsᶜ)
+... | fail                 = nothing
+... | done p               = RUPStep f c ss p
+... | more ([]ˡ , _)       = nothing
+... | more (lᶜ ∷ˡ lsᶜ , p)
   with checkRAT f lᶜ lsᶜ is
 ... | nothing = nothing
-... | just p  = RATStep f c lᶜ lsᶜ ss {!!} p
+... | just q  = RATStep f c lᶜ lsᶜ ss p q
 
 module Test where
   v₀ : Variable
