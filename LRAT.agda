@@ -603,9 +603,9 @@ satisfiable a l ls f p₁ p₂
 -}
 
 postulate
-  -- FIXME - lᶜ ∷ˡ lsᶜ is the clause extended by checkRUP, not the original clause
   checkRAT : (f : Formula) → (lᶜ : Literal) → (lsᶜ : Clause) → (is : List Index) →
-    Maybe (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false → ∃ λ a′ → eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true)
+    Maybe (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false →
+      let a′ = forceTrue a lᶜ in eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true)
 
 ∀-∧-false : (f : Formula) → (∀ a → eval a f ≡ eval a f ∧ false) → ∀ a → eval a f ≡ false
 ∀-∧-false f p a = begin
@@ -628,35 +628,43 @@ RUPStep f (lᶜ ∷ˡ lsᶜ) ss p
   let r = append⇒∧ f i (lᶜ ∷ˡ lsᶜ) eq in
   just $ λ a → trans (trans (p a) (sym (r a))) (q a)
 
-RATStep′ : (f : Formula) → (lᶜ : Literal) → (lsᶜ : Clause) →
-  (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false → ∃ λ a′ → eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true) →
-  (∀ a → eval a f ∧ evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false) →
+RATStep′ : (f : Formula) → (c : Clause) → (lᶜ : Literal) → (lsᶜ : Clause) →
+  (∀ a → eval a f ∧ evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ eval a f ∧ evalᶜ a c) →
+  (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false →
+    let a′ = forceTrue a lᶜ in eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true) →
+  (∀ a → eval a f ∧ evalᶜ a c ≡ false) →
   ∀ a → eval a f ≡ false
-RATStep′ f lᶜ lsᶜ p q a
+RATStep′ f c lᶜ lsᶜ p q r a
   with evalᶜ a (lᶜ ∷ˡ lsᶜ) | inspect (evalᶜ a) (lᶜ ∷ˡ lsᶜ)
 ... | true  | [ eq₁ ] = begin
   eval a f                              ≡⟨ sym $ ∧-identityʳ (eval a f) ⟩
   eval a f ∧ true                       ≡⟨ cong (eval a f ∧_) $ sym eq₁ ⟩
-  eval a f ∧ (evalˡ a lᶜ ∨ evalᶜ a lsᶜ) ≡⟨ q a ⟩
+  eval a f ∧ (evalˡ a lᶜ ∨ evalᶜ a lsᶜ) ≡⟨ p a ⟩
+  eval a f ∧ evalᶜ a c                  ≡⟨ r a ⟩
   false                                 ∎
 ... | false | [ eq₁ ]
   with eval a f | inspect (eval a) f
 ... | false | _       = refl
-... | true  | [ eq₂ ] with a′ , s ← p a eq₂ eq₁ = trans (sym s) (q a′)
+... | true  | [ eq₂ ] =
+  let s = q a eq₂ eq₁ in
+  let a′ = forceTrue a lᶜ in
+  trans (sym s) (subst (_≡ false) (sym $ p a′) (r a′))
 
-RATStep : (f : Formula) → (lᶜ : Literal) → (lsᶜ : Clause) → Proof →
-  (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false → ∃ λ a′ → eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true) →
+RATStep : (f : Formula) → (c : Clause) → (lᶜ : Literal) → (lsᶜ : Clause) → Proof →
+  (∀ a → eval a f ∧ evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ eval a f ∧ evalᶜ a c) →
+  (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false →
+    let a′ = forceTrue a lᶜ in eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true) →
   Maybe (∀ a → eval a f ≡ false)
-RATStep f lᶜ lsᶜ ss p
+RATStep f c lᶜ lsᶜ ss p q
   with nextIndex f | inspect nextIndex f
 ... | nothing | _       = nothing
 ... | just i  | [ eq ]
-  with checkLRAT (insert f i (lᶜ ∷ˡ lsᶜ)) ss
+  with checkLRAT (insert f i c) ss
 ... | nothing = nothing
-... | just q =
-  let r = append⇒∧ f i (lᶜ ∷ˡ lsᶜ) eq in
-  let s = λ a → trans (sym (r a)) (q a) in
-  just $ RATStep′ f lᶜ lsᶜ p s
+... | just r =
+  let s = append⇒∧ f i c eq in
+  let t = λ a → trans (sym $ s a) (r a) in
+  just $ RATStep′ f c lᶜ lsᶜ p q t
 
 checkLRAT _ []ˡ                  = nothing
 checkLRAT f (del _ ∷ˡ ss)        = checkLRAT f ss -- skip delete steps for now
@@ -668,7 +676,7 @@ checkLRAT f (ext c is iss ∷ˡ ss)
 ... | more (lᶜ ∷ˡ lsᶜ)
   with checkRAT f lᶜ lsᶜ is
 ... | nothing = nothing
-... | just q  = RATStep f lᶜ lsᶜ ss q
+... | just p  = RATStep f c lᶜ lsᶜ ss {!!} p
 
 module Test where
   v₀ : Variable
