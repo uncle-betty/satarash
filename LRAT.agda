@@ -685,6 +685,13 @@ checkRAT f lᶜ lsᶜ iss = mapᵐ (λ p a q r → begin
 
 checkLRAT : (f : Formula) → Proof → Maybe (∀ a → eval a f ≡ false)
 
+deleteStep : (f : Formula) → List Index → Proof → Maybe (∀ a → eval a f ≡ false)
+deleteStep f []ˡ       ss = checkLRAT f ss
+deleteStep f (i ∷ˡ is) ss
+  with checkLRAT (remove f i) ss
+... | nothing = nothing
+... | just p  = just $ λ a → removePreserves f i a (p a)
+
 RUPStep : (f : Formula) → (c : Clause) → Proof →
   (∀ a → eval a f ≡ eval a f ∧ evalᶜ a c) → Maybe (∀ a → eval a f ≡ false)
 RUPStep f []ˡ         _  p = just $ ∀-∧-false f p
@@ -735,13 +742,6 @@ RATStep f c lᶜ lsᶜ ss p q
   let s = append⇒∧ f i c eq in
   let t = λ a → trans (sym $ s a) (r a) in
   just $ RATStep′ f c lᶜ lsᶜ p q t
-
-deleteStep : (f : Formula) → List Index → Proof → Maybe (∀ a → eval a f ≡ false)
-deleteStep f []ˡ       ss = checkLRAT f ss
-deleteStep f (i ∷ˡ is) ss
-  with checkLRAT (remove f i) ss
-... | nothing = nothing
-... | just p  = just $ λ a → removePreserves f i a (p a)
 
 checkLRAT _ []ˡ                  = nothing
 checkLRAT f (del is ∷ˡ ss)       = deleteStep f is ss
