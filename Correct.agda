@@ -688,7 +688,7 @@ checkLRAT : (f : Formula) → Proof → Maybe (∀ a → eval a f ≡ false)
 deleteStep : (f : Formula) → List Index → Proof → Maybe (∀ a → eval a f ≡ false)
 deleteStep f []ˡ       ss = checkLRAT f ss
 deleteStep f (i ∷ˡ is) ss
-  with checkLRAT (remove f i) ss
+  with deleteStep (remove f i) is ss
 ... | nothing = nothing
 ... | just p  = just $ λ a → removePreserves f i a (p a)
 
