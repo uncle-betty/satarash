@@ -1,10 +1,6 @@
 import Data.Nat
 
--- module LRAT (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
-module LRAT where
-
-bitsᵛ = 1
-bitsᶜ = 1
+module LRAT (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc)
 
@@ -140,6 +136,26 @@ remove′ (suc n) (just (node tˡ tʳ)) (true ∷ᵛ is)  = just (node tˡ (remo
 
 remove : Formula → Index → Formula
 remove = remove′ bitsᶜ
+
+removePreserves′ : (n : ℕ) → (t : Maybe (Trie n)) → (is : Vec Bool n) →
+  ∀ a → eval′ n a (remove′ n t is) ≡ false → eval′ n a t ≡ false
+removePreserves′ zero    nothing             []ᵛ           a p = case p of λ ()
+removePreserves′ zero    (just cˡ)           []ᵛ           a p = case p of λ ()
+removePreserves′ (suc n) nothing             (i ∷ᵛ is)     a p = case p of λ ()
+removePreserves′ (suc n) (just (node tˡ tʳ)) (false ∷ᵛ is) a p
+  with eval′ n a tʳ
+... | false = ∧-zeroʳ (eval′ n a tˡ)
+... | true  =
+  let q = subst (_≡ false) (∧-identityʳ (eval′ n a (remove′ n tˡ is))) p in
+  let r = removePreserves′ n tˡ is a q in
+  subst (_≡ false) (sym $ ∧-identityʳ (eval′ n a tˡ)) r
+removePreserves′ (suc n) (just (node tˡ tʳ)) (true ∷ᵛ is)  a p
+  with eval′ n a tˡ
+... | false = refl
+... | true  = removePreserves′ n tʳ is a p
+
+removePreserves : (f : Formula) → (i : Index) → ∀ a → eval a (remove f i) ≡ false → eval a f ≡ false
+removePreserves = removePreserves′ bitsᶜ
 
 ++⇒∨ : (a : Assignment) → (c₁ c₂ : Clause) → evalᶜ a (c₁ ++ˡ c₂) ≡ evalᶜ a c₁ ∨ evalᶜ a c₂
 ++⇒∨ _ []ˡ       _  = refl
@@ -720,8 +736,15 @@ RATStep f c lᶜ lsᶜ ss p q
   let t = λ a → trans (sym $ s a) (r a) in
   just $ RATStep′ f c lᶜ lsᶜ p q t
 
+deleteStep : (f : Formula) → List Index → Proof → Maybe (∀ a → eval a f ≡ false)
+deleteStep f []ˡ       ss = checkLRAT f ss
+deleteStep f (i ∷ˡ is) ss
+  with checkLRAT (remove f i) ss
+... | nothing = nothing
+... | just p  = just $ λ a → removePreserves f i a (p a)
+
 checkLRAT _ []ˡ                  = nothing
-checkLRAT f (del _ ∷ˡ ss)        = checkLRAT f ss -- skip delete steps for now
+checkLRAT f (del is ∷ˡ ss)       = deleteStep f is ss
 checkLRAT f (ext c is iss ∷ˡ ss)
   with checkRUP f c is
 ... | fail                 = nothing
@@ -731,63 +754,3 @@ checkLRAT f (ext c is iss ∷ˡ ss)
   with checkRAT f lᶜ lsᶜ iss
 ... | nothing = nothing
 ... | just q  = RATStep f c lᶜ lsᶜ ss p q
-
-module Test where
-  v₀ : Variable
-  v₀ = false ∷ᵛ []ᵛ
-  v₁ : Variable
-  v₁ = false ∷ᵛ []ᵛ
-
-  c₀ : Clause
-  c₀ = neg v₀ ∷ˡ pos v₁ ∷ˡ []ˡ
-  c₁ : Clause
-  c₁ = pos v₀ ∷ˡ neg v₁ ∷ˡ []ˡ
-
-  i₀ : Index
-  i₀ = false ∷ᵛ []ᵛ
-  i₁ : Index
-  i₁ = false ∷ᵛ []ᵛ
-
-  f : Formula
-  f = just $ node (just $ leaf c₀) (just $ leaf c₁)
-
-{-
-insertLemma : ∀ n a f i c → evalᶜ a c ≡ true → eval′ n a (insert′ n f i c) ≡ false →
-  eval′ n a f ≡ false
-
-insertLemma zero    _ _                 []ᵛ           _ p₁ p₂ = contradiction p₁ (not-¬ p₂)
-
-insertLemma (suc n) a nothing           (false ∷ᵛ is) c p₁ p₂
-  rewrite ∧-identityʳ (eval′ n a (insert′ n nothing is c))
-  = contradiction (insertEmpty n a is c p₁) (not-¬ p₂)
-
-insertLemma (suc n) a nothing           (true ∷ᵛ is)  c p₁ p₂ =
-  contradiction (insertEmpty n a is c p₁) (not-¬ p₂)
-
-insertLemma (suc n) a (just (node l r)) (false ∷ᵛ is) c p₁ p₂ with eval′ n a r
-... | true rewrite ∧-identityʳ (eval′ n a l)
-                 | ∧-identityʳ (eval′ n a (insert′ n l is c))
-           = insertLemma n a l is c p₁ p₂
-
-... | false = ∧-zeroʳ (eval′ n a l)
-
-insertLemma (suc n) a (just (node l r)) (true ∷ᵛ is)  c p₁ p₂ with eval′ n a l
-... | true = insertLemma n a r is c p₁ p₂
-... | false = refl
-
-removeLemma : ∀ n a f i → eval′ n a (remove′ n f i) ≡ false → eval′ n a f ≡ false
-removeLemma zero    _ nothing           []ᵛ           p = p
-removeLemma zero    _ (just (leaf c))   []ᵛ           p = case p of λ ()
-removeLemma (suc n) _ nothing           (_ ∷ᵛ _)      p = p
-
-removeLemma (suc n) a (just (node l r)) (false ∷ᵛ is) p with eval′ n a r
-... | true rewrite ∧-identityʳ (eval′ n a l)
-                 | ∧-identityʳ (eval′ n a (remove′ n l is))
-           = removeLemma n a l is p
-
-... | false = ∧-zeroʳ (eval′ n a l)
-
-removeLemma (suc n) a (just (node l r)) (true ∷ᵛ is)  p with eval′ n a l
-... | true = removeLemma n a r is p
-... | false = refl
--}
