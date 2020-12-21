@@ -526,125 +526,140 @@ forceTrue : Assignment → Literal → Assignment
 forceTrue a (pos v) = adjust a v true
 forceTrue a (neg v) = adjust a v false
 
-{-
-forceTrueForces : ∀ a l → evalˡ (forceTrue a l) l ≡ true
-forceTrueForces a (pos v) = adjustSame a v true
-forceTrueForces a (neg v) = cong not $ adjustSame a v false
+forceTrueSame : (a : Assignment) → (l : Literal) → evalˡ (forceTrue a l) l ≡ true
+forceTrueSame a (pos v) = adjustSame a v true
+forceTrueSame a (neg v) = cong not $ adjustSame a v false
 
-forceTrueNoChange : ∀ l l′ a → flip l ≢ l′ → evalˡ a l′ ≡ true → evalˡ (forceTrue a l) l′ ≡ true
-forceTrueNoChange (pos v) (pos v′) a p₁ p₂
-  with v′ ≟ᵛ v
+forceTrueOther : (l₁ l₂ : Literal) → (a : Assignment) → flip l₁ ≢ l₂ → evalˡ a l₂ ≡ true →
+  evalˡ (forceTrue a l₁) l₂ ≡ true
+forceTrueOther (pos v₁) (pos v₂) a p₁ p₂
+  with v₂ ≟ᵛ v₁
 ... | true  because ofʸ _ = refl
 ... | false because ofⁿ _ = p₂
-forceTrueNoChange (pos v) (neg v′) a p₁ p₂ rewrite adjustOther a v v′ true  (p₁ ∘ cong neg) = p₂
-forceTrueNoChange (neg v) (pos v′) a p₁ p₂ rewrite adjustOther a v v′ false (p₁ ∘ cong pos) = p₂
-forceTrueNoChange (neg v) (neg v′) a p₁ p₂
-  with v′ ≟ᵛ v
+forceTrueOther (pos v₁) (neg v₂) a p₁ p₂ = begin
+  not (adjust a v₁ true v₂) ≡⟨ cong not $ adjustOther a v₁ v₂ true (p₁ ∘ cong neg) ⟩
+  not (a v₂)                ≡⟨ p₂ ⟩
+  true                      ∎
+forceTrueOther (neg v₁) (pos v₂) a p₁ p₂ = begin
+  adjust a v₁ false v₂ ≡⟨ adjustOther a v₁ v₂ false (p₁ ∘ cong pos) ⟩
+  a v₂                 ≡⟨ p₂ ⟩
+  true                 ∎
+forceTrueOther (neg v₁) (neg v₂) a p₁ p₂
+  with v₂ ≟ᵛ v₁
 ... | true  because ofʸ _ = refl
 ... | false because ofⁿ _ = p₂
 
-forceTrue-∈ : ∀ l c a → l ∈ c → evalᶜ (forceTrue a l) c ≡ true
-forceTrue-∈ (pos v) (pos v ∷ˡ ls′) a (here refl) rewrite adjustSame a v true = refl
-forceTrue-∈ (neg v) (neg v ∷ˡ ls′) a (here refl) rewrite cong not $ adjustSame a v false = refl
-forceTrue-∈ l       (l′ ∷ˡ ls′)    a (there p)
-  rewrite forceTrue-∈ l ls′ a p = ∨-zeroʳ (evalˡ (forceTrue a l) l′)
+forceTrue-∈ : (l : Literal) → (c : Clause) → (a : Assignment) → l ∈ c →
+  evalᶜ (forceTrue a l) c ≡ true
+forceTrue-∈ (pos v) (pos v ∷ˡ lsᶜ) a (here refl) =
+  cong (_∨ evalᶜ (adjust a v true) lsᶜ) $ adjustSame a v true
+forceTrue-∈ (neg v) (neg v ∷ˡ lsᶜ) a (here refl) =
+  cong (λ # → not # ∨ evalᶜ (adjust a v false) lsᶜ) $ adjustSame a v false
+forceTrue-∈ l       (lᶜ ∷ˡ lsᶜ)    a (there p)   = begin
+  evalˡ (forceTrue a l) lᶜ ∨ evalᶜ (forceTrue a l) lsᶜ ≡⟨ cong (evalˡ (forceTrue a l) lᶜ ∨_) $ forceTrue-∈ l lsᶜ a p ⟩
+  evalˡ (forceTrue a l) lᶜ ∨ true                      ≡⟨ ∨-zeroʳ (evalˡ (forceTrue a l) lᶜ) ⟩
+  true                                                 ∎
 
-forceTrue-∉ : ∀ l c a → flip l ∉ c → evalᶜ a c ≡ true → evalᶜ (forceTrue a l) c ≡ true
-forceTrue-∉ l (l′ ∷ˡ ls′) a p₁ p₂
-  with ∨-splitTrue (evalˡ a l′) (evalᶜ a ls′) p₂
-... | inj₁ q rewrite forceTrueNoChange l l′ a (p₁ ∘ here) q = refl
-... | inj₂ q rewrite forceTrue-∉ l ls′ a (p₁ ∘ there) q = ∨-zeroʳ (evalˡ (forceTrue a l) l′)
+forceTrue-∉ : (l : Literal) → (c : Clause) → (a : Assignment) → flip l ∉ c → evalᶜ a c ≡ true →
+  evalᶜ (forceTrue a l) c ≡ true
+forceTrue-∉ l (lᶜ ∷ˡ lsᶜ) a p₁ p₂
+  with ∨-splitTrue (evalˡ a lᶜ) (evalᶜ a lsᶜ) p₂
+... | inj₁ q = cong (_∨ evalᶜ (forceTrue a l) lsᶜ) $ forceTrueOther l lᶜ a (p₁ ∘ here) q
+... | inj₂ q = begin
+  evalˡ (forceTrue a l) lᶜ ∨ evalᶜ (forceTrue a l) lsᶜ ≡⟨ cong (evalˡ (forceTrue a l) lᶜ ∨_) $ forceTrue-∉ l lsᶜ a (p₁ ∘ there) q ⟩
+  evalˡ (forceTrue a l) lᶜ ∨ true                      ≡⟨ ∨-zeroʳ (evalˡ (forceTrue a l) lᶜ) ⟩
+  true                                                 ∎
 
-∉-tail : ∀ x y ys → x ∉ y ∷ˡ ys → x ∉ ys
+∉-tail : (l lᶜ : Literal) → (lsᶜ : Clause) → l ∉ lᶜ ∷ˡ lsᶜ → l ∉ lsᶜ
 ∉-tail _ _ (_ ∷ˡ _) p (here n)  = p $ there (here n)
 ∉-tail _ _ (_ ∷ˡ _) p (there n) = p $ there (there n)
 
-clauseTrue₁ : ∀ a c l → evalᶜ a c ≡ true → flip l ∉ c → evalᶜ (forceTrue a l) c ≡ true
-clauseTrue₁ a (l′ ∷ˡ ls′) l p₁ p₂
-  with evalˡ a l′ | inspect (evalˡ a) l′
-... | false | _
-  rewrite clauseTrue₁ a ls′ l p₁ (∉-tail (flip l) l′ ls′ p₂)
-  = ∨-zeroʳ $ evalˡ (forceTrue a l) l′
-... | true | [ eq ]
-  with l ≟ˡ l′
-... | true  because ofʸ refl = forceTrue-∈ l (l′ ∷ˡ ls′) a (here refl)
-... | false because ofⁿ _    = forceTrue-∉ l (l′ ∷ˡ ls′) a p₂ (∨-trueExtend (evalᶜ a ls′) eq)
-
-clauseTrue₂ : ∀ a l ls c l′ → evalᶜ a (l ∷ˡ ls) ≡ false → l′ ∈ ls → flip l′ ∈ c → l ≢ l′ →
-  evalᶜ (forceTrue a l) c ≡ true
-clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (here refl) p₃ p₄
-  with (_ ∷ᵃ q ∷ᵃ _) ← allFlippedTrue a (l ∷ˡ l″ ∷ˡ ls″) p₁
-  with r ← forceTrueNoChange l (flip l″) a (p₄ ∘ flipInjective) q
-  = anyLiteralTrue (forceTrue a l) (flip l″) c r p₃
-clauseTrue₂ a l (l″ ∷ˡ ls″) c l′ p₁ (there p₂)  p₃ p₄
-  with q ← ∨-falseStrip (evalˡ a l) (evalˡ a l″) (evalᶜ a ls″) p₁
-  = clauseTrue₂ a l ls″ c l′ q  p₂ p₃ p₄
-
-clauseTrue₃ : ∀ a l ls c → evalᶜ a (l ∷ˡ ls) ≡ false → evalᶜ a (resolvent l (l ∷ˡ ls) c) ≡ true →
-  evalᶜ (forceTrue a l) c ≡ true
-clauseTrue₃ a l ls c p₁ p₂
-  with q ← resolventTrue a l (l ∷ˡ ls) c p₁ p₂
-  with r ← removeLiteral-∉ (flip l) c
-  with s ← forceTrue-∉ l (removeLiteral c (flip l)) a r q
-  = removeLiteralTrue (forceTrue a l) c (flip l) s
-
-clauseCheck₁ : ∀ l c → Maybe (flip l ∉ c)
+clauseCheck₁ : (l : Literal) → (c : Clause) → Maybe (flip l ∉ c)
 clauseCheck₁ l c
   with flip l ∈? c
 ... | false because ofⁿ p = just p
 ... | true  because ofʸ _ = nothing
 
-clauseCheck₂ : ∀ ls c l → Maybe (∃ λ l′ → l′ ∈ ls × flip l′ ∈ c × l ≢ l′)
-clauseCheck₂ []ˡ         _ _ = nothing
-clauseCheck₂ (l″ ∷ˡ ls″) c l
-  with l ≟ˡ l″
-... | true  because ofʸ _ = mapᵐ ((map₂ (map₁ there))) (clauseCheck₂ ls″ c l)
+clauseProof₁ : (c : Clause) → (l : Literal) → ∀ a → evalᶜ a c ≡ true → flip l ∉ c →
+  evalᶜ (forceTrue a l) c ≡ true
+clauseProof₁ c l a p q = forceTrue-∉ l c a q p
+
+clauseCheck₂ : (c₁ c₂ : Clause) → (l : Literal) → Maybe (∃ λ lᶜ → lᶜ ∈ c₁ × flip lᶜ ∈ c₂ × l ≢ lᶜ)
+clauseCheck₂ []ˡ         _  _ = nothing
+clauseCheck₂ (l₁ ∷ˡ ls₁) c₂ l
+  with l ≟ˡ l₁
+... | true  because ofʸ _ = mapᵐ ((map₂ (map₁ there))) (clauseCheck₂ ls₁ c₂ l)
 ... | false because ofⁿ p
-  with flip l″ ∈? c
-... | false because ofⁿ _ = mapᵐ ((map₂ (map₁ there))) (clauseCheck₂ ls″ c l)
-... | true  because ofʸ q = just $ l″ , here refl , q , p
+  with flip l₁ ∈? c₂
+... | false because ofⁿ _ = mapᵐ ((map₂ (map₁ there))) (clauseCheck₂ ls₁ c₂ l)
+... | true  because ofʸ q = just $ l₁ , here refl , q , p
 
-clauseCheck₃ : ∀ is a f l ls c → eval a f ≡ true → Maybe (evalᶜ a (resolvent l (l ∷ˡ ls) c) ≡ true)
-clauseCheck₃ is a f l ls c p
-  with q ← checkRUP is a f (resolvent l (l ∷ˡ ls) c)
-  rewrite p
-  = mapᵐ sym {!!}
+clauseProof₂ : (l₁ : Literal) → (ls₁ c₂ : Clause) → (l : Literal) → l ∈ ls₁ → flip l ∈ c₂ → l₁ ≢ l →
+  ∀ a → evalᶜ a (l₁ ∷ˡ ls₁) ≡ false → evalᶜ (forceTrue a l₁) c₂ ≡ true
+clauseProof₂ l₁ (l₁′ ∷ˡ ls₁′) c₂ l (here refl) q r a s
+  with (_ ∷ᵃ t ∷ᵃ _) ← allFlippedTrue a (l₁ ∷ˡ l₁′ ∷ˡ ls₁′) s =
+  let u = forceTrueOther l₁ (flip l₁′) a (r ∘ flipInjective) t in
+  anyLiteralTrue (forceTrue a l₁) (flip l₁′) c₂ u q
+clauseProof₂ l₁ (l₁′ ∷ˡ ls₁′) c₂ l (there p) q r a s =
+  let t = ∨-stripFalse (evalˡ a l₁) (evalˡ a l₁′) (evalᶜ a ls₁′) s in
+  clauseProof₂ l₁ ls₁′ c₂ l p q r a t
 
-satisfiable′ : ∀ n a f t l ls → eval a f ≡ true → eval′ n a t ≡ true →
-  evalᶜ a (l ∷ˡ ls) ≡ false → Maybe (eval′ n (forceTrue a l) t ≡ true)
-satisfiable′ zero    _ _ nothing             _ _  _  _  _  = just refl
-satisfiable′ zero    a f (just (leaf c))     l ls p₁ p₂ p₃
-  with clauseCheck₁ l c
-... | just q = just $ clauseTrue₁ a c l p₂ q
+clauseCheck₃ : (f : Formula) → (lᶜ : Literal) → (lsᶜ c : Clause) → List (List Index) →
+  List (List Index) × Maybe (∀ a → eval a f ≡ true → evalᶜ a (resolvent lᶜ (lᶜ ∷ˡ lsᶜ) c) ≡ true)
+clauseCheck₃ _ _ _  _ []ˡ           = []ˡ , nothing
+clauseCheck₃ f lᶜ lsᶜ c (is ∷ˡ iss)
+  with checkRUP f (resolvent lᶜ (lᶜ ∷ˡ lsᶜ) c) is
+... | more _        = iss , nothing
+... | fail          = iss , nothing
+... | done p        = iss , just λ a q →
+   sym $ subst (λ # → # ≡ # ∧ (evalˡ a lᶜ ∨ evalᶜ a (lsᶜ ++ˡ removeLiteral c (flip lᶜ)))) q (p a)
+
+clauseProof₃ : (lᶜ : Literal) → (lsᶜ c : Clause) →
+  ∀ a → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false → evalᶜ a (resolvent lᶜ (lᶜ ∷ˡ lsᶜ) c) ≡ true →
+    evalᶜ (forceTrue a lᶜ) c ≡ true
+clauseProof₃ lᶜ lsᶜ c = λ a p q →
+  let r = resolventTrue a lᶜ (lᶜ ∷ˡ lsᶜ) c p q in
+  let s = removeLiteral-∉ (flip lᶜ) c in
+  let t = forceTrue-∉ lᶜ (removeLiteral c (flip lᶜ)) a s r  in
+  removeLiteralTrue (forceTrue a lᶜ) c (flip lᶜ) t
+
+checkRAT′ : (n : ℕ) → (f : Formula) → (t : Maybe (Trie n)) → (lᶜ : Literal) → (lsᶜ : Clause) →
+  (iss : List (List Index)) →
+  List (List Index) × Maybe (∀ a → eval a f ≡ true → eval′ n a t ≡ true →
+    evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false → eval′ n (forceTrue a lᶜ) t ≡ true)
+checkRAT′ zero    f nothing             lᶜ lsᶜ iss  = iss , (just $ λ _ _ _ _ → refl)
+checkRAT′ zero    f (just (leaf cˡ))    lᶜ lsᶜ iss
+  with clauseCheck₁ lᶜ cˡ
+... | just p = iss , (just $ λ a _ q _ → clauseProof₁ cˡ lᶜ a q p)
 ... | nothing
-  with clauseCheck₂ ls c l
-... | just (l′ , r₁ , r₂ , r₃) = just $ clauseTrue₂ a l ls c l′ p₃ r₁ r₂ r₃
+  with clauseCheck₂ lsᶜ cˡ lᶜ
+... | just (lʳ , p , q , r) = iss , (just $ λ a _ _ s → clauseProof₂ lᶜ lsᶜ cˡ lʳ p q r a s)
 ... | nothing
-  with clauseCheck₃ {!!} a f l ls c p₁
-... | just s = just $ clauseTrue₃ a l ls c p₃ s
-... | nothing = nothing
-satisfiable′ (suc n) _ _ nothing             _ _  _  _  _ = just refl
-satisfiable′ (suc n) a f (just (node fˡ fʳ)) l ls p₁ p₂ p₃
-  with q₁ , q₂ ← ∧-trueSplit (eval′ n a fˡ) (eval′ n a fʳ) p₂
-  with satisfiable′ n a f fˡ l ls p₁ q₁ p₃
-... | nothing = nothing
-... | just r₁
-  with satisfiable′ n a f fʳ l ls p₁ q₂ p₃
-... | nothing = nothing
-... | just r₂ = just $ ∧-trueJoin (eval′ n (forceTrue a l) fˡ) (eval′ n (forceTrue a l) fʳ) r₁ r₂
+  with clauseCheck₃ f lᶜ lsᶜ cˡ iss
+... | (iss′ , just p)  = iss′ , (just $ λ a q _ r → clauseProof₃ lᶜ lsᶜ cˡ a r (p a q))
+... | (iss′ , nothing) = iss′ , nothing
+checkRAT′ (suc n) f nothing             lᶜ lsᶜ iss = iss , (just $ λ _ _ _ _ → refl)
+checkRAT′ (suc n) f (just (node tˡ tʳ)) lᶜ lsᶜ iss
+  with checkRAT′ n f tˡ lᶜ lsᶜ iss
+... | (iss′ , nothing) = (iss′ , nothing)
+... | (iss′ , just p)
+  with checkRAT′ n f tʳ lᶜ lsᶜ iss′
+... | (iss″ , nothing) = (iss″ , nothing)
+... | (iss″ , just q)  = iss″ , (
+    just $ λ a r s t →
+      let u₁ , u₂ = ∧-splitTrue (eval′ n a tˡ) (eval′ n a tʳ) s in
+      ∧-joinTrue (eval′ n (forceTrue a lᶜ) tˡ) (eval′ n (forceTrue a lᶜ) tʳ)
+        (p a r u₁ t) (q a r u₂ t)
+  )
 
-satisfiable : ∀ a l ls f → evalᶜ a (l ∷ˡ ls) ≡ false → eval a f ≡ true →
-  Maybe (eval (forceTrue a l) f ∧ evalᶜ (forceTrue a l) (l ∷ˡ ls) ≡ true)
-satisfiable a l ls f p₁ p₂
-  with satisfiable′ bitsᶜ a f f l ls p₂ p₂ p₁
-... | nothing = nothing
-... | just q  rewrite q | forceTrueForces a l = just refl
--}
-
-postulate
-  checkRAT : (f : Formula) → (lᶜ : Literal) → (lsᶜ : Clause) → (is : List Index) →
-    Maybe (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false →
-      let a′ = forceTrue a lᶜ in eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true)
+checkRAT : (f : Formula) → (lᶜ : Literal) → (lsᶜ : Clause) → (iss : List (List Index)) →
+  Maybe (∀ a → eval a f ≡ true → evalᶜ a (lᶜ ∷ˡ lsᶜ) ≡ false →
+    let a′ = forceTrue a lᶜ in eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true)
+checkRAT f lᶜ lsᶜ iss = mapᵐ (λ p a q r → begin
+    eval (forceTrue a lᶜ) f ∧ (evalˡ (forceTrue a lᶜ) lᶜ ∨ evalᶜ (forceTrue a lᶜ) lsᶜ) ≡⟨ cong (_∧ (evalˡ (forceTrue a lᶜ) lᶜ ∨ evalᶜ (forceTrue a lᶜ) lsᶜ)) $ p a q q r ⟩
+    evalˡ (forceTrue a lᶜ) lᶜ ∨ evalᶜ (forceTrue a lᶜ) lsᶜ                             ≡⟨ cong (_∨ (evalᶜ (forceTrue a lᶜ) lsᶜ)) $ forceTrueSame a lᶜ ⟩
+    true                                                                               ∎
+  ) (proj₂ $ checkRAT′ bitsᶜ f f lᶜ lsᶜ iss)
 
 ∀-∧-false : (f : Formula) → (∀ a → eval a f ≡ eval a f ∧ false) → ∀ a → eval a f ≡ false
 ∀-∧-false f p a = begin
@@ -713,7 +728,7 @@ checkLRAT f (ext c is iss ∷ˡ ss)
 ... | done p               = RUPStep f c ss p
 ... | more ([]ˡ , _)       = nothing
 ... | more (lᶜ ∷ˡ lsᶜ , p)
-  with checkRAT f lᶜ lsᶜ is
+  with checkRAT f lᶜ lsᶜ iss
 ... | nothing = nothing
 ... | just q  = RATStep f c lᶜ lsᶜ ss p q
 
