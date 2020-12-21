@@ -1,6 +1,6 @@
 import Data.Nat
 
-module LRAT (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
+module Correct (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc)
 
