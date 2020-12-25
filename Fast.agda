@@ -17,9 +17,13 @@ open import Relation.Nullary using (_because_ ; ofʸ ; ofⁿ)
 import Correct as C
 
 open C bitsᵛ bitsᶜ using (
-    Variable ; Literal ; pos ; neg ; Clause ; Formula ; Trie ; leaf ; node ;
-    Index ; Step ; del ; ext ; Proof ; Result ; done ; more ; fail ; literalDS ;
-    lookup ; insert ; remove ; nextIndex ; flip ; _≟ˡ_ ; andNot ; resolvent
+    Variable ; Literal ; pos ; neg ; Clause ; Formula ;
+    Trie ; leaf ; node ; Index ;
+    Step ; del ; ext ; Proof ;
+    Result ; done ; more ; fail ;
+    literalDS ;
+    lookup ; insert ; remove ; nextIndex ;
+    _≟ˡ_ ; flip ; andNot ; resolvent
   )
 
 open import Data.List.Membership.DecSetoid literalDS using (_∈?_)
@@ -36,13 +40,17 @@ checkRUP′ f c (i ∷ˡ is) | just cᶠ | l ∷ˡ []ˡ = checkRUP′ f (flip l 
 checkRUP′ _ _ _         | _       | _        = fail
 
 checkRUP : Formula → Clause → List Index → Result ⊤ Clause
-checkRUP f c is = checkRUP′ f c is
+checkRUP f c is
+  with checkRUP′ f c is
+... | fail    = fail
+... | more cʳ = more cʳ
+... | done p  = done p
 
 clauseCheck₁ : Literal → Clause → Bool
 clauseCheck₁ l c
   with flip l ∈? c
-... | false because ofⁿ _ = false
-... | true  because ofʸ _ = true
+... | false because ofⁿ _ = true
+... | true  because ofʸ _ = false
 
 clauseCheck₂ : Clause → Clause → Literal → Bool
 clauseCheck₂ []ˡ         _  _ = false

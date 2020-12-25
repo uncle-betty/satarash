@@ -16,7 +16,7 @@ open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++
 open import Data.List.Relation.Unary.All using (All) renaming ([] to []ᵃ ; _∷_ to _∷ᵃ_)
 open import Data.List.Relation.Unary.Any using (Any ; here ; there)
 open import Data.Maybe using (Maybe ; just ; nothing) renaming (map to mapᵐ)
-open import Data.Product using (Σ ; _×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂ ; ∃)
+open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂ ; ∃)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
 open import Data.Vec.Properties using () renaming (≡-dec to ≡-decᵛ)
@@ -378,7 +378,7 @@ pushUnit a l (lᶜ ∷ˡ lsᶜ) = begin
 
 checkRUP′ : (f : Formula) → (c : Clause) → (is : List Index) →
   Result (∀ a → eval a f ∧ not (evalᶜ a c) ≡ false)
-    (Σ Clause (λ cʳ → ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c))
+    (∃ λ cʳ → ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c)
 checkRUP′ f c []ˡ       = more (c , λ _ → refl)
 checkRUP′ f c (i ∷ˡ is)
   with lookup f i | inspect (lookup f) i
@@ -427,7 +427,7 @@ checkRUP′ _ _ _ | _ | _ | _ | _ = fail
 
 checkRUP : (f : Formula) → (c : Clause) → (is : List Index) →
   Result (∀ a → eval a f ≡ eval a f ∧ evalᶜ a c)
-    (Σ Clause (λ cʳ → ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c))
+    (∃ λ cʳ → ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c)
 checkRUP f c is
   with checkRUP′ f c is
 ... | fail          = fail
