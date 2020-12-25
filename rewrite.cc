@@ -27,15 +27,15 @@ typedef struct {
     indices_t indices;
 } delete_t;
 
-typedef std::list<index_t> rup_hints_t;
-typedef std::list<std::pair<index_t, rup_hints_t>> rat_hints_t;
+typedef std::list<index_t> rups_t;
+typedef std::list<std::pair<index_t, rups_t>> rats_t;
 
 typedef struct {
     index_t index;
     clause_t clause;
     bool empty;
-    rup_hints_t rup_hints;
-    rat_hints_t rat_hints;
+    rups_t rups;
+    rats_t rats;
 } extend_t;
 
 typedef enum { DELETE, EXTEND } type_t;
@@ -47,28 +47,40 @@ typedef struct {
 } step_t;
 
 typedef enum { DONE, MORE, FAIL } result_t;
+typedef std::pair<size_t, clause_t> sz_clause_t;
+
+#define DEBUG 0
 
 // --- Macros and inline functions ---------------------------------------------
 
 // --- Globals -----------------------------------------------------------------
 
+static variable_t g_n_vars;
+static index_t g_n_clauses;
+static formula_t g_f;
+
 // --- Helper declarations -----------------------------------------------------
 
+#if DEBUG > 0
 static void dump_clause(const std::string &label, const clause_t &c);
-static bool read_formula(formula_t &f, variable_t &n_vars, index_t &n_clauses, const char *path);
-static bool read_header(variable_t &n_vars, index_t &n_clauses, std::ifstream &ifs);
-static bool read_body(formula_t &f, std::ifstream &ifs, variable_t n_vars, index_t n_clauses);
-static bool make_literal(literal_t &l, int64_t val, variable_t n_vars);
-static bool check_proof(formula_t &f, const char *path, variable_t n_vars);
-static bool read_step(step_t &s, std::ifstream &ifs, variable_t n_vars);
-static bool read_delete(step_t &s, std::ifstream &ifs);
-static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs, variable_t n_vars);
-static bool run_step(formula_t &f, const step_t &s);
-static bool run_delete(formula_t &f, const delete_t &dp);
-static bool run_extend(formula_t &f, const extend_t &ep);
-static result_t check_rup(clause_t &c, const formula_t &f, const rup_hints_t &hs);
-static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2);
+#endif
+static bool read_formula(const char *path);
+static bool read_header(std::ifstream &ifs);
+static bool read_body(std::ifstream &ifs);
+static literal_t make_literal(int64_t val);
 static literal_t flip_literal(const literal_t &l);
+static bool check_proof(const char *path);
+static bool read_step(step_t &s, std::ifstream &ifs);
+static bool read_delete(step_t &s, std::ifstream &ifs);
+static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs);
+static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs);
+static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs);
+static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs);
+static bool run_step(const step_t &s);
+static bool run_delete(const delete_t &dp);
+static bool run_extend(const extend_t &ep);
+static result_t check_rup(clause_t &c, const rups_t &rups);
+static sz_clause_t minus(const clause_t &c1, const clause_t &c2);
 
 // --- API ---------------------------------------------------------------------
 
@@ -79,12 +91,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    formula_t f;
-    variable_t n_vars;
-    index_t n_clauses;
-
-    if (!read_formula(f, n_vars, n_clauses, argv[1]) ||
-            !check_proof(f, argv[2], n_vars)) {
+    if (!read_formula(argv[1]) || !check_proof(argv[2])) {
         return 1;
     }
 
@@ -93,20 +100,21 @@ int main(int argc, char *argv[])
 
 // --- Helpers -----------------------------------------------------------------
 
-static void dump_clause(const std::string &label, const clause_t &f)
+#if DEBUG > 0
+static void dump_clause(const std::string &label, const clause_t &c)
 {
     std::cout << label;
 
-    for (auto it = f.cbegin(); it != f.cend(); ++it) {
+    for (auto it = c.cbegin(); it != c.cend(); ++it) {
         std::cout << (it->first == POSITIVE ? " " : " -");
         std::cout << it->second;
     }
 
     std::cout << std::endl;
 }
+#endif
 
-static bool read_formula(formula_t &f, variable_t &n_vars, index_t &n_clauses,
-        const char *path)
+static bool read_formula(const char *path)
 {
     std::ifstream ifs(path, std::ifstream::in);
 
@@ -115,45 +123,29 @@ static bool read_formula(formula_t &f, variable_t &n_vars, index_t &n_clauses,
         return false;
     }
 
-    if (!read_header(n_vars, n_clauses, ifs) ||
-            !read_body(f, ifs, n_vars, n_clauses)) {
-        std::cerr << "failed to read formula" << std::endl;
+    if (!read_header(ifs) || !read_body(ifs)) {
         return false;
     }
 
     return true;
 }
 
-static bool read_header(variable_t &n_vars, index_t &n_clauses,
-        std::ifstream &ifs)
+static bool read_header(std::ifstream &ifs)
 {
     std::string token;
 
-    if (!(ifs >> token) || token != "p") {
-        std::cerr << "invalid header [1]" << std::endl;
-        return false;
-    }
-
-    if (!(ifs >> token) || token != "cnf") {
-        std::cerr << "invalid header [2]" << std::endl;
-        return false;
-    }
-
-    if (!(ifs >> n_vars)) {
-        std::cerr << "invalid header [3]" << std::endl;
-        return false;
-    }
-
-    if (!(ifs >> n_clauses)) {
-        std::cerr << "invalid header [4]" << std::endl;
+    if (!(ifs >> token) || token != "p" ||
+            !(ifs >> token) || token != "cnf" ||
+            !(ifs >> g_n_vars) ||
+            !(ifs >> g_n_clauses)) {
+        std::cerr << "invalid header" << std::endl;
         return false;
     }
 
     return true;
 }
 
-static bool read_body(formula_t &f, std::ifstream &ifs, variable_t n_vars,
-        index_t n_clauses)
+static bool read_body(std::ifstream &ifs)
 {
     index_t i = 0;
     clause_t c;
@@ -161,16 +153,11 @@ static bool read_body(formula_t &f, std::ifstream &ifs, variable_t n_vars,
 
     while (ifs >> val) {
         if (val == 0) {
-            f.insert(std::make_pair(++i, c));
+            g_f.insert(std::make_pair(++i, c));
             c.clear();
         }
         else {
-            literal_t l;
-
-            if (!make_literal(l, val, n_vars)) {
-                return false;
-            }
-
+            literal_t l = make_literal(val);
             c.push_back(l);
         }
     }
@@ -180,41 +167,24 @@ static bool read_body(formula_t &f, std::ifstream &ifs, variable_t n_vars,
         return false;
     }
 
-    if (i != n_clauses) {
-        std::cerr << "clause count mismatch: " << i << " vs. " << n_clauses <<
-                std::endl;
-        return false;
-    }
-
     return true;
 }
 
-static bool make_literal(literal_t &l, int64_t val, variable_t n_vars)
+static literal_t make_literal(int64_t val)
 {
-    polarity_t pol;
-    variable_t var;
-
-    if (val < 0) {
-        pol = NEGATIVE;
-        var = (variable_t)-val;
-    }
-    else {
-        pol = POSITIVE;
-        var = (variable_t)val;
-    }
-
-    if (var == 0 || var > n_vars) {
-        std::cerr << "invalid variable: " << var << " of " << n_vars <<
-                std::endl;
-        return false;
-    }
-
-    l.first = pol;
-    l.second = var;
-    return true;
+    return val < 0 ?
+        std::make_pair(NEGATIVE, (variable_t)-val) :
+        std::make_pair(POSITIVE, (variable_t)val);
 }
 
-static bool check_proof(formula_t &f, const char *path, variable_t n_vars)
+static literal_t flip_literal(const literal_t &l)
+{
+    return l.first == POSITIVE ?
+        std::make_pair(NEGATIVE, l.second) :
+        std::make_pair(POSITIVE, l.second);
+}
+
+static bool check_proof(const char *path)
 {
     std::ifstream ifs(path, std::ifstream::in);
 
@@ -226,13 +196,7 @@ static bool check_proof(formula_t &f, const char *path, variable_t n_vars)
     while (true) {
         step_t s;
 
-        if (!read_step(s, ifs, n_vars)) {
-            std::cerr << "failed to read from proof file " << path << std::endl;
-            return false;
-        }
-
-        if (!run_step(f, s)) {
-            std::cerr << "failed to run proof step" << std::endl;
+        if (!read_step(s, ifs) || !run_step(s)) {
             return false;
         }
 
@@ -242,19 +206,13 @@ static bool check_proof(formula_t &f, const char *path, variable_t n_vars)
     }
 }
 
-static bool read_step(step_t &s, std::ifstream &ifs, variable_t n_vars)
+static bool read_step(step_t &s, std::ifstream &ifs)
 {
     index_t i;
-
-    if (!(ifs >> i)) {
-        std::cerr << "invalid step [1]" << std::endl;
-        return false;
-    }
-
     std::string str;
 
-    if (!(ifs >> str)) {
-        std::cerr << "invalid step [2]" << std::endl;
+    if (!(ifs >> i) || !(ifs >> str)) {
+        std::cerr << "invalid step" << std::endl;
         return false;
     }
 
@@ -263,7 +221,7 @@ static bool read_step(step_t &s, std::ifstream &ifs, variable_t n_vars)
     }
     else {
         int64_t val = strtoll(str.c_str(), NULL, 10);
-        return read_extend(s, i, val, ifs, n_vars);
+        return read_extend(s, i, val, ifs);
     }
 }
 
@@ -285,95 +243,26 @@ static bool read_delete(step_t &s, std::ifstream &ifs)
     return false;
 }
 
-static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs,
-         variable_t n_vars)
+static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs)
 {
     s.type = EXTEND;
     extend_t &ep = s.extend;
     ep.index = i;
     ep.empty = val == 0;
 
+    return read_clause(ep.clause, val, ifs) &&
+            read_rup(ep.rups, val, ifs) &&
+            (val == 0 || read_rat(ep.rats, val, ifs));
+}
+
+static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs)
+{
     while (val != 0) {
-        literal_t l;
-
-        if (!make_literal(l, val, n_vars)) {
-            std::cerr << "invalid extend step [1]" << std::endl;
-            return false;
-        }
-
-        ep.clause.push_back(l);
+        literal_t l = make_literal(val);
+        c.push_back(l);
 
         if (!(ifs >> val)) {
-            std::cerr << "invalid extend step [2]" << std::endl;
-            return false;
-        }
-    }
-
-    while (true) {
-        if (!(ifs >> val)) {
-            std::cerr << "invalid extend step [3]" << std::endl;
-            return false;
-        }
-
-        if (val == 0) {
-            return true;
-        }
-
-        if (val < 0) {
-            break;
-        }
-
-        ep.rup_hints.push_back((index_t)val);
-    }
-
-    i = (index_t)-val;
-    rup_hints_t hs;
-
-    while (true) {
-        if (!(ifs >> val)) {
-            std::cerr << "invalid extend step [4]" << std::endl;
-            return false;
-        }
-
-        if (val > 0) {
-            hs.push_back((index_t)val);
-            continue;
-        }
-
-        ep.rat_hints.push_back(std::make_pair(i, hs));
-
-        if (val == 0) {
-            return true;
-        }
-
-        i = (index_t)-val;
-        hs.clear();
-    }
-
-    return false;
-}
-
-static bool run_step(formula_t &f, const step_t &s)
-{
-    switch (s.type) {
-    case DELETE:
-        return run_delete(f, s.delete_);
-
-    case EXTEND:
-        return run_extend(f, s.extend);
-
-    default:
-        assert(false);
-    }
-}
-
-static bool run_delete(formula_t &f, const delete_t &dp)
-{
-    const indices_t &indices = dp.indices;
-
-    for (auto it = indices.cbegin(); it != indices.cend(); ++it) {
-        if (f.erase(*it) == 0) {
-            std::cerr << "deleting with invalid index " << *it << std::endl;
+            std::cerr << "invalid clause" << std::endl;
             return false;
         }
     }
@@ -381,13 +270,75 @@ static bool run_delete(formula_t &f, const delete_t &dp)
     return true;
 }
 
-static bool run_extend(formula_t &f, const extend_t &ep)
+static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs)
+{
+    while (true) {
+        if (!(ifs >> val)) {
+            std::cerr << "invalid RUP hints" << std::endl;
+            return false;
+        }
+
+        if (val <= 0) {
+            return true;
+        }
+
+        rups.push_back((index_t)val);
+    }
+}
+
+static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs)
+{
+    index_t i = (index_t)-val;
+    rups_t rups;
+
+    while (true) {
+        if (!(ifs >> val)) {
+            std::cerr << "invalid RAT hints" << std::endl;
+            return false;
+        }
+
+        if (val > 0) {
+            rups.push_back((index_t)val);
+        }
+        else {
+            rats.push_back(std::make_pair(i, rups));
+
+            if (val == 0) {
+                return true;
+            }
+
+            i = (index_t)-val;
+            rups.clear();
+        }
+    }
+}
+
+static bool run_step(const step_t &s)
+{
+    return s.type == DELETE ? run_delete(s.delete_) : run_extend(s.extend);
+}
+
+static bool run_delete(const delete_t &dp)
+{
+    const indices_t &indices = dp.indices;
+
+    for (auto it = indices.cbegin(); it != indices.cend(); ++it) {
+        if (g_f.erase(*it) == 0) {
+            std::cerr << "invalid delete index " << *it << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool run_extend(const extend_t &ep)
 {
     clause_t c = ep.clause;
 
-    switch (check_rup(c, f, ep.rup_hints)) {
+    switch (check_rup(c, ep.rups)) {
     case DONE:
-        f.insert(std::make_pair(ep.index, ep.clause));
+        g_f.insert(std::make_pair(ep.index, ep.clause));
         return true;
 
     case FAIL:
@@ -401,13 +352,12 @@ static bool run_extend(formula_t &f, const extend_t &ep)
     return false;
 }
 
-static result_t check_rup(clause_t &c, const formula_t &f,
-        const rup_hints_t &hs)
+static result_t check_rup(clause_t &c, const rups_t &rups)
 {
-    for (auto it1 = hs.cbegin(); it1 != hs.cend(); ++it1) {
-        const auto it2 = f.find(*it1);
+    for (auto it1 = rups.cbegin(); it1 != rups.cend(); ++it1) {
+        const auto it2 = g_f.find(*it1);
 
-        if (it2 == f.end()) {
+        if (it2 == g_f.end()) {
             std::cerr << "invalid RUP hint index " << *it1 << std::endl;
             return FAIL;
         }
@@ -419,7 +369,7 @@ static result_t check_rup(clause_t &c, const formula_t &f,
         }
 
         if (diff.first > 1) {
-            std::cerr << "non-unit clause with RUP hint index " << *it1 <<
+            std::cerr << "non-unit clause for RUP hint index " << *it1 <<
                     std::endl;
             return FAIL;
         }
@@ -430,7 +380,7 @@ static result_t check_rup(clause_t &c, const formula_t &f,
     return MORE;
 }
 
-static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2)
+static sz_clause_t minus(const clause_t &c1, const clause_t &c2)
 {
     clause_t diff;
     size_t sz = 0;
@@ -445,15 +395,3 @@ static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2)
     return std::make_pair(sz, diff);
 }
 
-static literal_t flip_literal(const literal_t &l)
-{
-    switch (l.first) {
-    case POSITIVE:
-        return std::make_pair(NEGATIVE, l.second);
-
-    case NEGATIVE:
-        return std::make_pair(POSITIVE, l.second);
-    }
-
-    assert(false);
-}
