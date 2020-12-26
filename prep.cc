@@ -33,7 +33,6 @@ typedef std::list<std::pair<index_t, rups_t>> rats_t;
 typedef struct {
     index_t index;
     clause_t clause;
-    bool empty;
     rups_t rups;
     rats_t rats;
 } extend_t;
@@ -58,6 +57,7 @@ typedef std::pair<size_t, clause_t> sz_clause_t;
 static variable_t g_n_vars;
 static index_t g_n_clauses;
 static formula_t g_f;
+static uint32_t n_steps = 0;
 
 // --- Helper declarations -----------------------------------------------------
 
@@ -67,8 +67,8 @@ static void dump_clause(const std::string &label, const clause_t &c);
 static bool read_formula(const char *path);
 static bool read_header(std::ifstream &ifs);
 static bool read_body(std::ifstream &ifs);
-static literal_t make_literal(int64_t val);
-static literal_t flip_literal(const literal_t &l);
+static literal_t make_lit(int64_t val);
+static literal_t flip_lit(const literal_t &l);
 static bool check_proof(const char *path);
 static bool read_step(step_t &s, std::ifstream &ifs);
 static bool read_delete(step_t &s, std::ifstream &ifs);
@@ -76,11 +76,17 @@ static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs);
 static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs);
 static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs);
 static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs);
-static bool run_step(const step_t &s);
+static bool run_step(step_t &s);
 static bool run_delete(const delete_t &dp);
-static bool run_extend(const extend_t &ep);
+static bool run_extend(extend_t &ep);
 static result_t check_rup(clause_t &c, const rups_t &rups);
 static sz_clause_t minus(const clause_t &c1, const clause_t &c2);
+static bool check_rat(clause_t &c, rats_t &rats);
+static bool check_clause_1(const clause_t &cf, const literal_t &not_l);
+static bool check_clause_2(index_t i, const clause_t &cf, const clause_t &c, const literal_t &l, rats_t &rats);
+static bool check_clause_3(index_t i, const clause_t &cf, const clause_t &c, const literal_t &not_l, rats_t &rats);
+static bool validate_rats(index_t i, rats_t &rats);
+static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t &not_l);
 
 // --- API ---------------------------------------------------------------------
 
@@ -157,7 +163,7 @@ static bool read_body(std::ifstream &ifs)
             c.clear();
         }
         else {
-            literal_t l = make_literal(val);
+            literal_t l = make_lit(val);
             c.push_back(l);
         }
     }
@@ -170,14 +176,14 @@ static bool read_body(std::ifstream &ifs)
     return true;
 }
 
-static literal_t make_literal(int64_t val)
+static literal_t make_lit(int64_t val)
 {
     return val < 0 ?
         std::make_pair(NEGATIVE, (variable_t)-val) :
         std::make_pair(POSITIVE, (variable_t)val);
 }
 
-static literal_t flip_literal(const literal_t &l)
+static literal_t flip_lit(const literal_t &l)
 {
     return l.first == POSITIVE ?
         std::make_pair(NEGATIVE, l.second) :
@@ -200,7 +206,7 @@ static bool check_proof(const char *path)
             return false;
         }
 
-        if (s.type == EXTEND && s.extend.empty) {
+        if (s.type == EXTEND && s.extend.clause.empty()) {
             return true;
         }
     }
@@ -248,7 +254,6 @@ static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs)
     s.type = EXTEND;
     extend_t &ep = s.extend;
     ep.index = i;
-    ep.empty = val == 0;
 
     return read_clause(ep.clause, val, ifs) &&
             read_rup(ep.rups, val, ifs) &&
@@ -258,7 +263,7 @@ static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs)
 static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs)
 {
     while (val != 0) {
-        literal_t l = make_literal(val);
+        literal_t l = make_lit(val);
         c.push_back(l);
 
         if (!(ifs >> val)) {
@@ -313,9 +318,18 @@ static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs)
     }
 }
 
-static bool run_step(const step_t &s)
+static bool run_step(step_t &s)
 {
-    return s.type == DELETE ? run_delete(s.delete_) : run_extend(s.extend);
+    ++n_steps;
+
+    bool ok = s.type == DELETE ? run_delete(s.delete_) : run_extend(s.extend);
+
+    if (!ok) {
+        std::cerr << "step " << n_steps << " failed" << std::endl;
+        return false;
+    }
+
+    return true;
 }
 
 static bool run_delete(const delete_t &dp)
@@ -332,7 +346,7 @@ static bool run_delete(const delete_t &dp)
     return true;
 }
 
-static bool run_extend(const extend_t &ep)
+static bool run_extend(extend_t &ep)
 {
     clause_t c = ep.clause;
 
@@ -348,7 +362,11 @@ static bool run_extend(const extend_t &ep)
         break;
     }
 
-    std::cerr << "RAT not yet supported" << std::endl;
+    if (check_rat(c, ep.rats)) {
+        g_f.insert(std::make_pair(ep.index, ep.clause));
+        return true;
+    }
+
     return false;
 }
 
@@ -374,7 +392,7 @@ static result_t check_rup(clause_t &c, const rups_t &rups)
             return FAIL;
         }
 
-        c.push_back(flip_literal(diff.second.front()));
+        c.push_back(flip_lit(diff.second.front()));
     }
 
     return MORE;
@@ -395,3 +413,111 @@ static sz_clause_t minus(const clause_t &c1, const clause_t &c2)
     return std::make_pair(sz, diff);
 }
 
+static bool check_rat(clause_t &c, rats_t &rats)
+{
+    if (c.empty()) {
+        std::cerr << "RAT check with empty clause" << std::endl;
+        return false;
+    }
+
+    literal_t l = c.front();
+    literal_t not_l = flip_lit(l);
+
+    for (auto it = g_f.cbegin(); it != g_f.cend(); ++it) {
+        index_t i = it->first;
+        const clause_t &cf = it->second;
+
+        if (!check_clause_1(cf, not_l) &&
+                !check_clause_2(i, cf, c, l, rats) &&
+                !check_clause_3(i, cf, c, not_l, rats)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool check_clause_1(const clause_t &cf, const literal_t &not_l)
+{
+    return std::find(cf.cbegin(), cf.cend(), not_l) == cf.cend();
+}
+
+static bool check_clause_2(index_t i, const clause_t &cf, const clause_t &c,
+        const literal_t &l, rats_t &rats)
+{
+    // it's ok for |c| and |cf| to contain |not_l| and |l|, respectively, as
+    // it makes both clauses tautologies:
+    //   - |l| is |c|'s first literal by definition
+    //   - |not_l| is in |cf| since we passed check_clause_1()
+    for (auto it = c.cbegin(); it != c.cend(); ++it) {
+        if (*it != l &&
+                std::find(cf.cbegin(), cf.cend(), flip_lit(*it)) != cf.cend()) {
+            if (!validate_rats(i, rats)) {
+                return false;
+            }
+
+            rups_t &rups = rats.front().second;
+
+            if (!rups.empty()) {
+                std::cerr << "non-empty RUP hints" << std::endl;
+                return false;
+            }
+
+            rats.pop_front();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool check_clause_3(index_t i, const clause_t &cf, const clause_t &c,
+        const literal_t &not_l, rats_t &rats)
+{
+    if (!validate_rats(i, rats)) {
+        return false;
+    }
+
+    clause_t &&cr = resolvent(c, cf, not_l);
+    rups_t &rups = rats.front().second;
+
+    if (check_rup(cr, rups) != DONE) {
+        std::cerr << "resolvent RUP check failed for index " << i << std::endl;
+        return false;
+    }
+
+    rats.pop_front();
+    return true;
+}
+
+static bool validate_rats(index_t i, rats_t &rats)
+{
+    if (rats.empty()) {
+        std::cerr << "no RAT hint left for index " << i << std::endl;
+        return false;
+    }
+
+    auto &rat = rats.front();
+
+    if (rat.first != i) {
+        std::cerr << "invalid RAT hint index: " << rat.first << " vs. " << i <<
+                std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+static clause_t resolvent(const clause_t &c, const clause_t &cf,
+        const literal_t &not_l)
+{
+    clause_t res = c;
+
+    for (auto it = cf.cbegin(); it != cf.cend(); ++it) {
+        if (*it != not_l) {
+            res.push_back(*it);
+        }
+    }
+
+    return res;
+}

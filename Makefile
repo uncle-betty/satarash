@@ -9,8 +9,8 @@ CXXFLAGS :=		$(FLAGS)
 LDFLAGS :=		$(FLAGS)
 
 DIR :=			$(shell pwd)
-OBJS :=			rewrite.o
-EXE :=			rewrite
+OBJS :=			prep.o
+EXE :=			prep
 
 %.o:			%.cc
 				$(CXX) $(CXXFLAGS) -c -o $@ $<
