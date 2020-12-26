@@ -1,0 +1,9 @@
+compile_commands.json
+*.swp
+*.o
+*.blif
+*.cnf
+*.drat
+*.lrat
+/prep
+/_build/*
