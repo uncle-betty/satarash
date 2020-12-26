@@ -8,7 +8,7 @@
 #include <functional>
 #include <iostream>
 #include <list>
-#include <unordered_map>
+#include <map>
 #include <queue>
 #include <string>
 #include <utility>
@@ -22,7 +22,7 @@ typedef std::pair<polarity_t, variable_t> literal_t;
 
 typedef uint32_t index_t;
 typedef std::list<literal_t> clause_t;
-typedef std::unordered_map<index_t, clause_t> formula_t;
+typedef std::map<index_t, clause_t> formula_t;
 
 typedef std::list<index_t> indices_t;
 
@@ -50,7 +50,7 @@ typedef struct {
 
 typedef enum { DONE, MORE, FAIL } result_t;
 
-typedef std::unordered_map<index_t, index_t> index_map_t;
+typedef std::map<index_t, index_t> index_map_t;
 template <class T> using min_heap_t =
         std::priority_queue<T, std::vector<T>, std::greater<T>>;
 typedef min_heap_t<index_t> recycler_t;
@@ -86,12 +86,15 @@ static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs);
 static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs);
 static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs);
 static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs);
-static bool run_step(step_t &s);
-static bool run_delete(const delete_t &dp);
-static bool run_extend(extend_t &ep);
+static bool remap_step(step_t &s);
+static bool remap_delete(delete_t &dp);
+static bool remap_extend(extend_t &ep);
 static index_t get_index(index_t i0);
 static void put_index(index_t i0, index_t i);
 static bool map_index(index_t &i);
+static bool run_step(step_t &s);
+static bool run_delete(const delete_t &dp);
+static bool run_extend(extend_t &ep);
 static result_t check_rup(clause_t &c, const rups_t &rups);
 static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2);
 static bool check_rat(clause_t &c, rats_t &rats);
@@ -214,9 +217,10 @@ static bool check_proof(const char *path)
     }
 
     while (true) {
+        ++g_n_steps;
         step_t s;
 
-        if (!read_step(s, ifs) || !run_step(s)) {
+        if (!read_step(s, ifs) || !remap_step(s) || !run_step(s)) {
             return false;
         }
 
@@ -332,67 +336,64 @@ static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs)
     }
 }
 
-static bool run_step(step_t &s)
+static bool remap_step(step_t &s)
 {
-    ++g_n_steps;
-
-    bool ok = s.type == DELETE ? run_delete(s.delete_) : run_extend(s.extend);
+    bool ok = s.type == DELETE ?
+            remap_delete(s.delete_) : remap_extend(s.extend);
 
     if (!ok) {
-        std::cerr << "step " << g_n_steps << " failed" << std::endl;
+        std::cerr << "failed to remap step " << g_n_steps << std::endl;
         return false;
     }
 
     return true;
 }
 
-static bool run_delete(const delete_t &dp)
+static bool remap_delete(delete_t &dp)
 {
-    const indices_t &indices = dp.indices;
+    for (auto it = dp.indices.begin(); it != dp.indices.end(); ++it) {
+        index_t i0 = *it;
 
-    for (auto it = indices.cbegin(); it != indices.cend(); ++it) {
-        index_t i = *it;
-
-        if (!map_index(i)) {
-            std::cerr << "invalid original delete index" << std::endl;
+        if (!map_index(*it)) {
             return false;
         }
 
-        if (g_f.erase(i) == 0) {
-            std::cerr << "invalid delete index " << *it << " / " << i <<
-                    std::endl;
-            return false;
-        }
-
-        put_index(*it, i);
+        put_index(i0, *it);
     }
 
     return true;
 }
 
-static bool run_extend(extend_t &ep)
+static bool remap_extend(extend_t &ep)
 {
-    clause_t c = ep.clause;
-    index_t i = get_index(ep.index);
+    ep.index = get_index(ep.index);
 
-    switch (check_rup(c, ep.rups)) {
-    case DONE:
-        g_f.insert(std::make_pair(i, ep.clause));
-        return true;
-
-    case FAIL:
-        return false;
-
-    case MORE:
-        break;
+    for (auto it = ep.rups.begin(); it != ep.rups.end(); ++it) {
+        if (!map_index(*it)) {
+            return false;
+        }
     }
 
-    if (check_rat(c, ep.rats)) {
-        g_f.insert(std::make_pair(i, ep.clause));
-        return true;
+    for (auto it1 = ep.rats.begin(); it1 != ep.rats.end(); ++it1) {
+        if (!map_index(it1->first)) {
+            return false;
+        }
+
+        rups_t &rups = it1->second;
+
+        for (auto it2 = rups.begin(); it2 != rups.end(); ++it2) {
+            if (!map_index(*it2)) {
+                return false;
+            }
+        }
     }
 
-    return false;
+    // bring the mapped indices back in order
+    std::vector<std::pair<index_t, rups_t>> tmp(ep.rats.begin(), ep.rats.end());
+    std::sort(tmp.begin(), tmp.end());
+    ep.rats.assign(tmp.begin(), tmp.end());
+
+    return true;
 }
 
 static index_t get_index(index_t i0)
@@ -430,21 +431,63 @@ static bool map_index(index_t &i)
     return true;
 }
 
+static bool run_step(step_t &s)
+{
+    bool ok = s.type == DELETE ? run_delete(s.delete_) : run_extend(s.extend);
+
+    if (!ok) {
+        std::cerr << "step " << g_n_steps << " failed" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+static bool run_delete(const delete_t &dp)
+{
+    const indices_t &indices = dp.indices;
+
+    for (auto it = indices.cbegin(); it != indices.cend(); ++it) {
+        if (g_f.erase(*it) == 0) {
+            std::cerr << "invalid delete index " << *it << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool run_extend(extend_t &ep)
+{
+    clause_t c = ep.clause;
+
+    switch (check_rup(c, ep.rups)) {
+    case DONE:
+        g_f.insert(std::make_pair(ep.index, ep.clause));
+        return true;
+
+    case FAIL:
+        return false;
+
+    case MORE:
+        break;
+    }
+
+    if (check_rat(c, ep.rats)) {
+        g_f.insert(std::make_pair(ep.index, ep.clause));
+        return true;
+    }
+
+    return false;
+}
+
 static result_t check_rup(clause_t &c, const rups_t &rups)
 {
     for (auto it1 = rups.cbegin(); it1 != rups.cend(); ++it1) {
-        index_t i = *it1;
-
-        if (!map_index(i)) {
-            std::cerr << "invalid original RUP hint index" << std::endl;
-            return FAIL;
-        }
-
-        const auto it2 = g_f.find(i);
+        const auto it2 = g_f.find(*it1);
 
         if (it2 == g_f.end()) {
-            std::cerr << "invalid RUP hint index " << *it1 << " / " << i <<
-                    std::endl;
+            std::cerr << "invalid RUP hint index " << *it1 << std::endl;
             return FAIL;
         }
 
@@ -456,7 +499,7 @@ static result_t check_rup(clause_t &c, const rups_t &rups)
 
         if (diff.first > 1) {
             std::cerr << "non-unit clause for RUP hint index " << *it1 <<
-                    " / " << i << std::endl;
+                    std::endl;
             return FAIL;
         }
 
@@ -516,7 +559,7 @@ static bool check_clause_2(index_t i, const clause_t &cf, const clause_t &c,
     // it's ok for |c| and |cf| to contain |not_l| and |l|, respectively, as
     // it makes both clauses tautologies:
     //   - |l| is |c|'s first literal by definition
-    //   - |not_l| is in |cf| since we passed check_clause_1()
+    //   - |not_l| is in |cf| as we made it past check_clause_1() to get here
     for (auto it = c.cbegin(); it != c.cend(); ++it) {
         if (*it != l &&
                 std::find(cf.cbegin(), cf.cend(), flip_lit(*it)) != cf.cend()) {
@@ -566,16 +609,10 @@ static bool validate_rats(index_t i, rats_t &rats)
     }
 
     auto &rat = rats.front();
-    index_t k = rat.first;
 
-    if (!map_index(k)) {
-        std::cerr << "invalid original RAT hint index" << std::endl;
-        return false;
-    }
-
-    if (k != i) {
-        std::cerr << "invalid RAT hint index: " << rat.first << " / " << k <<
-                " vs. " << i << std::endl;
+    if (rat.first != i) {
+        std::cerr << "invalid RAT hint index: " << rat.first << " vs. " << i <<
+                std::endl;
         return false;
     }
 
