@@ -5,11 +5,14 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <list>
-#include <map>
+#include <unordered_map>
+#include <queue>
 #include <string>
 #include <utility>
+#include <vector>
 
 // --- Types and constants -----------------------------------------------------
 
@@ -19,7 +22,7 @@ typedef std::pair<polarity_t, variable_t> literal_t;
 
 typedef uint32_t index_t;
 typedef std::list<literal_t> clause_t;
-typedef std::map<index_t, clause_t> formula_t;
+typedef std::unordered_map<index_t, clause_t> formula_t;
 
 typedef std::list<index_t> indices_t;
 
@@ -47,6 +50,11 @@ typedef struct {
 
 typedef enum { DONE, MORE, FAIL } result_t;
 
+typedef std::unordered_map<index_t, index_t> index_map_t;
+template <class T> using min_heap_t =
+        std::priority_queue<T, std::vector<T>, std::greater<T>>;
+typedef min_heap_t<index_t> recycler_t;
+
 #define DEBUG 0
 
 // --- Macros and inline functions ---------------------------------------------
@@ -54,9 +62,12 @@ typedef enum { DONE, MORE, FAIL } result_t;
 // --- Globals -----------------------------------------------------------------
 
 static variable_t g_n_vars;
-static index_t g_n_clauses;
+static index_t g_n_clauses = 0;
 static formula_t g_f;
-static uint32_t n_steps = 0;
+static uint32_t g_n_steps = 0;
+
+static index_map_t g_index_map;
+static recycler_t g_recycler;
 
 // --- Helper declarations -----------------------------------------------------
 
@@ -78,6 +89,9 @@ static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs);
 static bool run_step(step_t &s);
 static bool run_delete(const delete_t &dp);
 static bool run_extend(extend_t &ep);
+static index_t get_index(index_t i0);
+static void put_index(index_t i0, index_t i);
+static bool map_index(index_t &i);
 static result_t check_rup(clause_t &c, const rups_t &rups);
 static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2);
 static bool check_rat(clause_t &c, rats_t &rats);
@@ -138,11 +152,11 @@ static bool read_formula(const char *path)
 static bool read_header(std::ifstream &ifs)
 {
     std::string token;
+    index_t dummy;
 
     if (!(ifs >> token) || token != "p" ||
             !(ifs >> token) || token != "cnf" ||
-            !(ifs >> g_n_vars) ||
-            !(ifs >> g_n_clauses)) {
+            !(ifs >> g_n_vars) || !(ifs >> dummy)) {
         std::cerr << "invalid header" << std::endl;
         return false;
     }
@@ -152,13 +166,14 @@ static bool read_header(std::ifstream &ifs)
 
 static bool read_body(std::ifstream &ifs)
 {
-    index_t i = 0;
+    index_t i0 = 0;
     clause_t c;
     int64_t val;
 
     while (ifs >> val) {
         if (val == 0) {
-            g_f.insert(std::make_pair(++i, c));
+            index_t i = get_index(++i0);
+            g_f.insert(std::make_pair(i, c));
             c.clear();
         }
         else {
@@ -319,12 +334,12 @@ static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs)
 
 static bool run_step(step_t &s)
 {
-    ++n_steps;
+    ++g_n_steps;
 
     bool ok = s.type == DELETE ? run_delete(s.delete_) : run_extend(s.extend);
 
     if (!ok) {
-        std::cerr << "step " << n_steps << " failed" << std::endl;
+        std::cerr << "step " << g_n_steps << " failed" << std::endl;
         return false;
     }
 
@@ -336,10 +351,20 @@ static bool run_delete(const delete_t &dp)
     const indices_t &indices = dp.indices;
 
     for (auto it = indices.cbegin(); it != indices.cend(); ++it) {
-        if (g_f.erase(*it) == 0) {
-            std::cerr << "invalid delete index " << *it << std::endl;
+        index_t i = *it;
+
+        if (!map_index(i)) {
+            std::cerr << "invalid original delete index" << std::endl;
             return false;
         }
+
+        if (g_f.erase(i) == 0) {
+            std::cerr << "invalid delete index " << *it << " / " << i <<
+                    std::endl;
+            return false;
+        }
+
+        put_index(*it, i);
     }
 
     return true;
@@ -348,10 +373,11 @@ static bool run_delete(const delete_t &dp)
 static bool run_extend(extend_t &ep)
 {
     clause_t c = ep.clause;
+    index_t i = get_index(ep.index);
 
     switch (check_rup(c, ep.rups)) {
     case DONE:
-        g_f.insert(std::make_pair(ep.index, ep.clause));
+        g_f.insert(std::make_pair(i, ep.clause));
         return true;
 
     case FAIL:
@@ -362,20 +388,63 @@ static bool run_extend(extend_t &ep)
     }
 
     if (check_rat(c, ep.rats)) {
-        g_f.insert(std::make_pair(ep.index, ep.clause));
+        g_f.insert(std::make_pair(i, ep.clause));
         return true;
     }
 
     return false;
 }
 
+static index_t get_index(index_t i0)
+{
+    index_t i;
+
+    if (!g_recycler.empty()) {
+        i = g_recycler.top();
+        g_recycler.pop();
+    }
+    else {
+        i = ++g_n_clauses;
+    }
+
+    g_index_map.insert(std::make_pair(i0, i));
+    return i;
+}
+
+static void put_index(index_t i0, index_t i)
+{
+    g_index_map.erase(i0);
+    g_recycler.push(i);
+}
+
+static bool map_index(index_t &i)
+{
+    auto it = g_index_map.find(i);
+
+    if (it == g_index_map.end()) {
+        std::cerr << "failed to map index " << i << std::endl;
+        return false;
+    }
+
+    i = it->second;
+    return true;
+}
+
 static result_t check_rup(clause_t &c, const rups_t &rups)
 {
     for (auto it1 = rups.cbegin(); it1 != rups.cend(); ++it1) {
-        const auto it2 = g_f.find(*it1);
+        index_t i = *it1;
+
+        if (!map_index(i)) {
+            std::cerr << "invalid original RUP hint index" << std::endl;
+            return FAIL;
+        }
+
+        const auto it2 = g_f.find(i);
 
         if (it2 == g_f.end()) {
-            std::cerr << "invalid RUP hint index " << *it1 << std::endl;
+            std::cerr << "invalid RUP hint index " << *it1 << " / " << i <<
+                    std::endl;
             return FAIL;
         }
 
@@ -387,7 +456,7 @@ static result_t check_rup(clause_t &c, const rups_t &rups)
 
         if (diff.first > 1) {
             std::cerr << "non-unit clause for RUP hint index " << *it1 <<
-                    std::endl;
+                    " / " << i << std::endl;
             return FAIL;
         }
 
@@ -497,10 +566,16 @@ static bool validate_rats(index_t i, rats_t &rats)
     }
 
     auto &rat = rats.front();
+    index_t k = rat.first;
 
-    if (rat.first != i) {
-        std::cerr << "invalid RAT hint index: " << rat.first << " vs. " << i <<
-                std::endl;
+    if (!map_index(k)) {
+        std::cerr << "invalid original RAT hint index" << std::endl;
+        return false;
+    }
+
+    if (k != i) {
+        std::cerr << "invalid RAT hint index: " << rat.first << " / " << k <<
+                " vs. " << i << std::endl;
         return false;
     }
 
