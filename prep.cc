@@ -11,6 +11,7 @@
 #include <map>
 #include <queue>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -21,16 +22,17 @@ typedef enum { POSITIVE, NEGATIVE } polarity_t;
 typedef std::pair<polarity_t, variable_t> literal_t;
 
 typedef uint32_t index_t;
-typedef std::list<literal_t> clause_t;
+typedef std::vector<literal_t> clause_t;
+// ordered map - traversal must be in index order
 typedef std::map<index_t, clause_t> formula_t;
 
-typedef std::list<index_t> indices_t;
+typedef std::vector<index_t> indices_t;
 
 typedef struct {
     indices_t indices;
 } delete_t;
 
-typedef std::list<index_t> rups_t;
+typedef std::vector<index_t> rups_t;
 typedef std::list<std::pair<index_t, rups_t>> rats_t;
 
 typedef struct {
@@ -50,7 +52,7 @@ typedef struct {
 
 typedef enum { DONE, MORE, FAIL } result_t;
 
-typedef std::map<index_t, index_t> index_map_t;
+typedef std::unordered_map<index_t, index_t> index_map_t;
 template <class T> using min_heap_t =
         std::priority_queue<T, std::vector<T>, std::greater<T>>;
 typedef min_heap_t<index_t> recycler_t;
@@ -388,11 +390,7 @@ static bool remap_extend(extend_t &ep)
         }
     }
 
-    // bring the mapped indices back in order
-    std::vector<std::pair<index_t, rups_t>> tmp(ep.rats.begin(), ep.rats.end());
-    std::sort(tmp.begin(), tmp.end());
-    ep.rats.assign(tmp.begin(), tmp.end());
-
+    ep.rats.sort(); // indices must appear in order
     return true;
 }
 
