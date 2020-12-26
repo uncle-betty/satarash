@@ -46,7 +46,6 @@ typedef struct {
 } step_t;
 
 typedef enum { DONE, MORE, FAIL } result_t;
-typedef std::pair<size_t, clause_t> sz_clause_t;
 
 #define DEBUG 0
 
@@ -80,7 +79,7 @@ static bool run_step(step_t &s);
 static bool run_delete(const delete_t &dp);
 static bool run_extend(extend_t &ep);
 static result_t check_rup(clause_t &c, const rups_t &rups);
-static sz_clause_t minus(const clause_t &c1, const clause_t &c2);
+static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2);
 static bool check_rat(clause_t &c, rats_t &rats);
 static bool check_clause_1(const clause_t &cf, const literal_t &not_l);
 static bool check_clause_2(index_t i, const clause_t &cf, const clause_t &c, const literal_t &l, rats_t &rats);
@@ -398,7 +397,7 @@ static result_t check_rup(clause_t &c, const rups_t &rups)
     return MORE;
 }
 
-static sz_clause_t minus(const clause_t &c1, const clause_t &c2)
+static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2)
 {
     clause_t diff;
     size_t sz = 0;
