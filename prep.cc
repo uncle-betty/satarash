@@ -603,13 +603,13 @@ static bool check_clause_2(const clause_t &cf, const clause_t &c,
 static clause_t resolvent(const clause_t &c, const clause_t &cf,
         const literal_t &not_l)
 {
-    clause_t res = c;
+    clause_t cr = c;
 
     for (auto it = cf.cbegin(); it != cf.cend(); ++it) {
         if (*it != not_l) {
-            res.push_back(*it);
+            cr.push_back(*it);
         }
     }
 
-    return res;
+    return cr;
 }
