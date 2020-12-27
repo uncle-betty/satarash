@@ -32,7 +32,8 @@ typedef struct {
 } delete_t;
 
 typedef std::vector<index_t> rups_t;
-typedef std::vector<std::pair<index_t, rups_t>> rats_t;
+typedef std::pair<index_t, rups_t> rat_t;
+typedef std::vector<rat_t> rats_t;
 
 typedef struct {
     index_t index;
@@ -99,10 +100,12 @@ static bool run_extend(const extend_t &ep);
 static result_t check_rup(clause_t &c, const rups_t &rups);
 static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2);
 static bool check_rat(clause_t &c, const rats_t &rats);
-static bool check_clause_1(const clause_t &cf, const literal_t &not_l);
-static bool check_clause_2(index_t i, const clause_t &cf, const clause_t &c, const literal_t &l, const rats_t &rats, uint32_t &i_rat);
-static bool check_clause_3(index_t i, const clause_t &cf, const clause_t &c, const literal_t &not_l, const rats_t &rats, uint32_t &i_rat);
+static bool needs_check(const clause_t &cf, const literal_t &not_l);
 static bool validate_rats(index_t i, const rats_t &rats, uint32_t i_rat);
+static bool check_rat_rup(const clause_t &cf, const clause_t &c,
+        const literal_t &l, const literal_t &not_l, const rat_t &rat);
+static bool check_clause_1(const clause_t &cf, const clause_t &c, const literal_t &l);
+static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &not_l, const rups_t &rups);
 static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t &not_l);
 
 // --- API ---------------------------------------------------------------------
@@ -411,7 +414,8 @@ static index_t get_index(index_t i0)
 
 static void put_index(index_t i0, index_t i)
 {
-    g_index_map.erase(i0);
+    size_t n = g_index_map.erase(i0);
+    assert (n == 1);
     g_recycler.push(i);
 }
 
@@ -484,7 +488,7 @@ static result_t check_rup(clause_t &c, const rups_t &rups)
         const auto it2 = g_f.find(*it1);
 
         if (it2 == g_f.end()) {
-            std::cerr << "invalid RUP hint index " << *it1 << std::endl;
+            std::cerr << "invalid RUP index " << *it1 << std::endl;
             return FAIL;
         }
 
@@ -495,8 +499,7 @@ static result_t check_rup(clause_t &c, const rups_t &rups)
         }
 
         if (diff.first > 1) {
-            std::cerr << "non-unit clause for RUP hint index " << *it1 <<
-                    std::endl;
+            std::cerr << "non-unit clause for RUP index " << *it1 << std::endl;
             return FAIL;
         }
 
@@ -536,43 +539,53 @@ static bool check_rat(clause_t &c, const rats_t &rats)
         index_t i = it->first;
         const clause_t &cf = it->second;
 
-        if (!check_clause_1(cf, not_l) &&
-                !check_clause_2(i, cf, c, l, rats, i_rat) &&
-                !check_clause_3(i, cf, c, not_l, rats, i_rat)) {
+        if (!needs_check(cf, not_l)) {
+            continue;
+        }
+
+        if (!validate_rats(i, rats, i_rat)) {
+            std::cerr << "invalid RAT hints at index " << i << std::endl;
             return false;
         }
+
+        if (!check_rat_rup(cf, c, l, not_l, rats[i_rat])) {
+            std::cerr << "RAT clause check failed at index " << i << std::endl;
+            return false;
+        }
+
+        ++i_rat;
     }
 
     return true;
 }
 
-static bool check_clause_1(const clause_t &cf, const literal_t &not_l)
+static bool needs_check(const clause_t &cf, const literal_t &not_l)
 {
-    return std::find(cf.cbegin(), cf.cend(), not_l) == cf.cend();
+    return std::find(cf.cbegin(), cf.cend(), not_l) != cf.cend();
 }
 
-static bool check_clause_2(index_t i, const clause_t &cf, const clause_t &c,
-        const literal_t &l, const rats_t &rats, uint32_t &i_rat)
+static bool validate_rats(index_t i, const rats_t &rats, uint32_t i_rat)
+{
+    return i_rat < rats.size() && rats[i_rat].first == i;
+}
+
+static bool check_rat_rup(const clause_t &cf, const clause_t &c,
+        const literal_t &l, const literal_t &not_l, const rat_t &rat)
+{
+    return rat.second.empty() ?
+            check_clause_1(cf, c, l) : check_clause_2(cf, c, not_l, rat.second);
+}
+
+static bool check_clause_1(const clause_t &cf, const clause_t &c,
+        const literal_t &l)
 {
     // it's ok for |c| and |cf| to contain |not_l| and |l|, respectively, as
     // it makes both clauses tautologies:
     //   - |l| is |c|'s first literal by definition
-    //   - |not_l| is in |cf| as we made it past check_clause_1() to get here
+    //   - |not_l| is in |cf| as we made it past needs_check() to get here
     for (auto it = c.cbegin(); it != c.cend(); ++it) {
         if (*it != l &&
                 std::find(cf.cbegin(), cf.cend(), flip_lit(*it)) != cf.cend()) {
-            if (!validate_rats(i, rats, i_rat)) {
-                return false;
-            }
-
-            const rups_t &rups = rats[i_rat].second;
-
-            if (!rups.empty()) {
-                std::cerr << "non-empty RUP hints" << std::endl;
-                return false;
-            }
-
-            ++i_rat;
             return true;
         }
     }
@@ -580,41 +593,11 @@ static bool check_clause_2(index_t i, const clause_t &cf, const clause_t &c,
     return false;
 }
 
-static bool check_clause_3(index_t i, const clause_t &cf, const clause_t &c,
-        const literal_t &not_l, const rats_t &rats, uint32_t &i_rat)
+static bool check_clause_2(const clause_t &cf, const clause_t &c,
+        const literal_t &not_l, const rups_t &rups)
 {
-    if (!validate_rats(i, rats, i_rat)) {
-        return false;
-    }
-
     clause_t &&cr = resolvent(c, cf, not_l);
-    const rups_t &rups = rats[i_rat].second;
-
-    if (check_rup(cr, rups) != DONE) {
-        std::cerr << "resolvent RUP check failed for index " << i << std::endl;
-        return false;
-    }
-
-    ++i_rat;
-    return true;
-}
-
-static bool validate_rats(index_t i, const rats_t &rats, uint32_t i_rat)
-{
-    if (i_rat == rats.size()) {
-        std::cerr << "no RAT hint left for index " << i << std::endl;
-        return false;
-    }
-
-    auto &rat = rats[i_rat];
-
-    if (rat.first != i) {
-        std::cerr << "invalid RAT hint index: " << rat.first << " vs. " << i <<
-                std::endl;
-        return false;
-    }
-
-    return true;
+    return check_rup(cr, rups) == DONE;
 }
 
 static clause_t resolvent(const clause_t &c, const clause_t &cf,
