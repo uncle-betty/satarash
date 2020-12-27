@@ -101,7 +101,7 @@ static result_t check_rup(clause_t &c, const rups_t &rups);
 static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2);
 static bool check_rat(clause_t &c, const rats_t &rats);
 static bool needs_check(const clause_t &cf, const literal_t &not_l);
-static bool validate_rats(index_t i, const rats_t &rats, uint32_t i_rat);
+static bool validate_rats(const rats_t &rats, uint32_t i_rat, index_t i);
 static bool check_rat_rup(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rat_t &rat);
 static bool check_clause_1(const clause_t &cf, const clause_t &c, const literal_t &l);
 static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &not_l, const rups_t &rups);
@@ -542,7 +542,7 @@ static bool check_rat(clause_t &c, const rats_t &rats)
             continue;
         }
 
-        if (!validate_rats(i, rats, i_rat)) {
+        if (!validate_rats(rats, i_rat, i)) {
             std::cerr << "invalid RAT hints at index " << i << std::endl;
             return false;
         }
@@ -563,7 +563,7 @@ static bool needs_check(const clause_t &cf, const literal_t &not_l)
     return std::find(cf.cbegin(), cf.cend(), not_l) != cf.cend();
 }
 
-static bool validate_rats(index_t i, const rats_t &rats, uint32_t i_rat)
+static bool validate_rats(const rats_t &rats, uint32_t i_rat, index_t i)
 {
     return i_rat < rats.size() && rats[i_rat].first == i;
 }
