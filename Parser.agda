@@ -77,7 +77,7 @@ parseHints _           = nothing
 
 {-# TERMINATING #-}
 parseProof′ : List Char → Maybe (List Step × List Char)
-parseProof′ []ˡ          = just $ []ˡ , []ˡ
+parseProof′ []ˡ          = nothing
 parseProof′ ('D' ∷ˡ cs)  = do
   (is , cs₁) ← parseIndices cs
   (ss , cs₂) ← parseProof′ cs₁
@@ -89,21 +89,32 @@ parseProof′ ('E' ∷ˡ cs)  = do
   (ss , cs₄) ← parseProof′ cs₃
   return $ ext ls is hs ∷ˡ ss , cs₄
 parseProof′ ('\n' ∷ˡ cs) = parseProof′ cs
+parseProof′ ('#' ∷ˡ cs)  = just $ []ˡ , cs
 parseProof′ _            = nothing
 
-parseProof : String → Maybe Proof
-parseProof s = map proj₁ $ parseProof′ (toList s)
+parseProof : String → Maybe (Proof × String)
+parseProof s = do
+  (ss , cs) ← parseProof′ (toList s)
+  return $ ss , fromList cs
 
-parseFormula′ : (n : ℕ) → List Char → Maybe (Maybe (Trie n) × List Char)
-parseFormula′ _       []ˡ          = just $ nothing , []ˡ
-parseFormula′ zero    ('\n' ∷ˡ cs) = parseFormula′ zero cs
-parseFormula′ zero    cs           = do
+parseFormula′ : (n : ℕ) → List Char → Maybe (Bool × Maybe (Trie n) × List Char)
+parseFormula′ _       []ˡ          = nothing
+parseFormula′ zero    ('C' ∷ˡ cs)  = do
   (ls , cs′) ← parseLiterals cs
-  return $ just (leaf ls) , cs′
+  return $ false , just (leaf ls) , cs′
+parseFormula′ zero    ('\n' ∷ˡ cs) = parseFormula′ zero cs
+parseFormula′ zero    ('#' ∷ˡ cs)  = just $ true , nothing , cs
+parseFormula′ zero    _            = nothing
 parseFormula′ (suc n) cs           = do
-  (tˡ , cs₁) ← parseFormula′ n cs
-  (tʳ , cs₂) ← parseFormula′ n cs₁
-  return $ just (node tˡ tʳ) , cs₂
+  (false , tˡ , cs₁) ← parseFormula′ n cs
+    where (true , tˡ , cs₁) → just $ true , just (node tˡ nothing) , cs₁
+  (false , tʳ , cs₂) ← parseFormula′ n cs₁
+    where (true , tʳ , cs₂) → just $ true , just (node tˡ tʳ) , cs₂
+  return $ false , just (node tˡ tʳ) , cs₂
 
-parseFormula : String → Maybe Formula
-parseFormula s = map proj₁ $ parseFormula′ bitsᶜ (toList s)
+parseFormula : String → Maybe (Formula × String)
+parseFormula s =
+  parseFormula′ bitsᶜ (toList s) >>= λ where
+    (true , f , cs)         → just $ f , fromList cs
+    (false , f , '#' ∷ˡ cs) → just $ f , fromList cs
+    (false , f , _)         → nothing
