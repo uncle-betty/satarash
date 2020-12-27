@@ -572,8 +572,9 @@ static bool validate_rats(index_t i, const rats_t &rats, uint32_t i_rat)
 static bool check_rat_rup(const clause_t &cf, const clause_t &c,
         const literal_t &l, const literal_t &not_l, const rat_t &rat)
 {
-    return rat.second.empty() ?
-            check_clause_1(cf, c, l) : check_clause_2(cf, c, not_l, rat.second);
+    const rups_t &rups = rat.second;
+    return rups.empty() ?
+            check_clause_1(cf, c, l) : check_clause_2(cf, c, not_l, rups);
 }
 
 static bool check_clause_1(const clause_t &cf, const clause_t &c,
