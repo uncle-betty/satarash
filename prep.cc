@@ -404,7 +404,7 @@ static index_t get_index(index_t i0)
         g_recycler.pop();
     }
     else {
-        i = ++g_n_clauses;
+        i = g_n_clauses++;
     }
 
     g_index_map.insert(std::make_pair(i0, i));
