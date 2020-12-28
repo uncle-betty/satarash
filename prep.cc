@@ -78,7 +78,9 @@ static uint32_t g_bits_c;
 // --- Helper declarations -----------------------------------------------------
 
 #if DEBUG > 0
-static void dump_clause(const std::string &label, const clause_t &c);
+static void show_binary(uint32_t val, uint32_t n_bits);
+static void show_clause(const clause_t &c);
+static void show_formula(void);
 #endif
 static bool read_formula(const char *path);
 static bool read_header(std::ifstream &ifs);
@@ -108,7 +110,7 @@ static bool needs_check(const clause_t &cf, const literal_t &not_l);
 static bool validate_rats(const rats_t &rats, uint32_t i_rat, index_t i);
 static bool check_rat_rup(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rat_t &rat);
 static bool check_clause_1(const clause_t &cf, const clause_t &c, const literal_t &l);
-static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &not_l, const rups_t &rups);
+static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rups_t &rups);
 static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t &not_l);
 static void prepare(void);
 static bool write_formula(const char *path);
@@ -159,16 +161,40 @@ int main(int argc, char *argv[])
 // --- Helpers -----------------------------------------------------------------
 
 #if DEBUG > 0
-static void dump_clause(const std::string &label, const clause_t &c)
+static void show_binary(uint32_t val, uint32_t n_bits)
 {
-    std::cout << label;
+    uint32_t mask = 1u << (n_bits - 1);
 
+    for (uint32_t i = 0; i < n_bits; ++i) {
+        std::cout << ((val & mask) == 0 ? "0" : "1");
+        mask >>= 1;
+    }
+}
+
+static void show_clause(const clause_t &c)
+{
     for (auto it = c.cbegin(); it != c.cend(); ++it) {
-        std::cout << (it->first == POSITIVE ? " " : " -");
-        std::cout << it->second;
+        std::cout << (it->first == POSITIVE ? "pos " : "neg ");
+        show_binary(it->second, g_bits_v);
+
+        if (it + 1 != c.cend()) {
+            std::cout << " : ";
+        }
     }
 
     std::cout << std::endl;
+}
+
+static void show_formula(void)
+{
+    for (auto it = g_f.cbegin(); it != g_f.cend(); ++it) {
+        index_t i = it->first;
+        clause_t c = it->second;
+
+        show_binary(i, g_bits_c);
+        std::cout << " | ";
+        show_clause(c);
+    }
 }
 #endif
 
@@ -608,7 +634,7 @@ static bool check_rat_rup(const clause_t &cf, const clause_t &c,
 {
     const rups_t &rups = rat.second;
     return rups.empty() ?
-            check_clause_1(cf, c, l) : check_clause_2(cf, c, not_l, rups);
+            check_clause_1(cf, c, l) : check_clause_2(cf, c, l, not_l, rups);
 }
 
 static bool check_clause_1(const clause_t &cf, const clause_t &c,
@@ -629,8 +655,16 @@ static bool check_clause_1(const clause_t &cf, const clause_t &c,
 }
 
 static bool check_clause_2(const clause_t &cf, const clause_t &c,
-        const literal_t &not_l, const rups_t &rups)
+        const literal_t &l, const literal_t &not_l, const rups_t &rups)
 {
+    // make sure that dropping empty hints in write_rats() doesn't confuse
+    // the Agda checker, which always runs check #1 and proceeds to check #2,
+    // if that failed
+    if (check_clause_1(cf, c, l)) {
+        std::cerr << "non-empty hints need check #1 to fail" << std::endl;
+        return false;
+    }
+
     clause_t &&cr = resolvent(c, cf, not_l);
     return check_rup(cr, rups) == DONE;
 }
@@ -720,6 +754,11 @@ static bool convert_proof(const char *path_out, const char *path_in)
         if (!read_step(s, ifs) || !remap_step(s) || !write_step(ofs, s)) {
             return false;
         }
+
+#if DEBUG > 0
+        std::cout << g_n_steps << std::endl;
+        show_formula();
+#endif
 
         if (s.type == EXTEND && s.extend.clause.empty()) {
             break;
@@ -822,11 +861,14 @@ static bool write_rats(std::ofstream &ofs, const rats_t &rats)
 {
     for (uint32_t i = 0; i < rats.size(); ++i) {
         const rat_t &rat = rats[i];
+        const rups_t &rups = rat.second;
 
-        ofs << 'H';
+        if (!rups.empty()) {
+            ofs << 'H';
 
-        if (!write_indices(ofs, rat.second)) {
-            return false;
+            if (!write_indices(ofs, rups)) {
+                return false;
+            }
         }
     }
 
