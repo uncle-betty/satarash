@@ -38,7 +38,7 @@ parseBinary _           (suc n) = nothing
 {-# TERMINATING #-}
 parseIndices : List Char → Maybe (List Index × List Char)
 parseIndices []ˡ         = nothing
-parseIndices (':' ∷ˡ cs) = do
+parseIndices ('I' ∷ˡ cs) = do
   (i , cs₁) ← parseBinary cs bitsᶜ
   (is , cs₂) ← parseIndices cs₁
   return $ i ∷ˡ is , cs₂
@@ -58,7 +58,7 @@ parseLiteral _           = nothing
 {-# TERMINATING #-}
 parseLiterals : List Char → Maybe (List Literal × List Char)
 parseLiterals []ˡ         = nothing
-parseLiterals (':' ∷ˡ cs) = do
+parseLiterals ('L' ∷ˡ cs) = do
   (l , cs₁) ← parseLiteral cs
   (ls , cs₂) ← parseLiterals cs₁
   return $ l ∷ˡ ls , cs₂
@@ -68,7 +68,7 @@ parseLiterals _           = nothing
 {-# TERMINATING #-}
 parseHints : List Char → Maybe (List (List Index) × List Char)
 parseHints []ˡ         = nothing
-parseHints ('|' ∷ˡ cs) = do
+parseHints ('H' ∷ˡ cs) = do
   (is , cs₁) ← parseIndices cs
   (iss , cs₂) ← parseHints cs₁
   return $ is ∷ˡ iss , cs₂
@@ -77,7 +77,7 @@ parseHints _           = nothing
 
 {-# TERMINATING #-}
 parseProof′ : List Char → Maybe (List Step × List Char)
-parseProof′ []ˡ          = nothing
+parseProof′ []ˡ          = just $ []ˡ , []ˡ
 parseProof′ ('D' ∷ˡ cs)  = do
   (is , cs₁) ← parseIndices cs
   (ss , cs₂) ← parseProof′ cs₁
@@ -89,32 +89,26 @@ parseProof′ ('E' ∷ˡ cs)  = do
   (ss , cs₄) ← parseProof′ cs₃
   return $ ext ls is hs ∷ˡ ss , cs₄
 parseProof′ ('\n' ∷ˡ cs) = parseProof′ cs
-parseProof′ ('#' ∷ˡ cs)  = just $ []ˡ , cs
 parseProof′ _            = nothing
 
-parseProof : String → Maybe (Proof × String)
-parseProof s = do
-  (ss , cs) ← parseProof′ (toList s)
-  return $ ss , fromList cs
+parseProof : String → Maybe Proof
+parseProof s = parseProof′ (toList s) >>= λ where
+  (p , []ˡ) → just p
+  _         → nothing
 
-parseFormula′ : (n : ℕ) → List Char → Maybe (Bool × Maybe (Trie n) × List Char)
-parseFormula′ _       []ˡ          = nothing
+parseFormula′ : (n : ℕ) → List Char → Maybe (Maybe (Trie n) × List Char)
+parseFormula′ zero    []ˡ          = just $ nothing , []ˡ
 parseFormula′ zero    ('C' ∷ˡ cs)  = do
   (ls , cs′) ← parseLiterals cs
-  return $ false , just (leaf ls) , cs′
+  return $ just (leaf ls) , cs′
 parseFormula′ zero    ('\n' ∷ˡ cs) = parseFormula′ zero cs
-parseFormula′ zero    ('#' ∷ˡ cs)  = just $ true , nothing , cs
 parseFormula′ zero    _            = nothing
 parseFormula′ (suc n) cs           = do
-  (false , tˡ , cs₁) ← parseFormula′ n cs
-    where (true , tˡ , cs₁) → just $ true , just (node tˡ nothing) , cs₁
-  (false , tʳ , cs₂) ← parseFormula′ n cs₁
-    where (true , tʳ , cs₂) → just $ true , just (node tˡ tʳ) , cs₂
-  return $ false , just (node tˡ tʳ) , cs₂
+  (tˡ , cs₁) ← parseFormula′ n cs
+  (tʳ , cs₂) ← parseFormula′ n cs₁
+  return $ just (node tˡ tʳ) , cs₂
 
-parseFormula : String → Maybe (Formula × String)
-parseFormula s =
-  parseFormula′ bitsᶜ (toList s) >>= λ where
-    (true , f , cs)         → just $ f , fromList cs
-    (false , f , '#' ∷ˡ cs) → just $ f , fromList cs
-    (false , f , _)         → nothing
+parseFormula : String → Maybe Formula
+parseFormula s = parseFormula′ bitsᶜ (toList s) >>= λ where
+  (f , []ˡ) → just f
+  _         → nothing
