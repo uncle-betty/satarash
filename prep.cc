@@ -21,7 +21,8 @@ typedef enum { POSITIVE, NEGATIVE } polarity_t;
 typedef std::pair<polarity_t, variable_t> literal_t;
 
 typedef uint32_t index_t;
-typedef std::vector<literal_t> clause_t;
+typedef std::vector<literal_t> literals_t;
+typedef literals_t clause_t;
 // ordered map - traversal must be in index order
 typedef std::map<index_t, clause_t> formula_t;
 
@@ -71,6 +72,9 @@ static uint32_t g_n_steps = 0;
 static index_map_t g_index_map;
 static recycler_t g_recycler;
 
+static uint32_t g_bits_v;
+static uint32_t g_bits_c;
+
 // --- Helper declarations -----------------------------------------------------
 
 #if DEBUG > 0
@@ -106,17 +110,45 @@ static bool check_rat_rup(const clause_t &cf, const clause_t &c, const literal_t
 static bool check_clause_1(const clause_t &cf, const clause_t &c, const literal_t &l);
 static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &not_l, const rups_t &rups);
 static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t &not_l);
+static void prepare(void);
+static bool write_formula(const char *path);
+static bool convert_proof(const char *path_out, const char *path_in);
+static bool write_step(std::ofstream &ofs, const step_t &s);
+static bool write_delete(std::ofstream &ofs, const delete_t &dp);
+static bool write_extend(std::ofstream &ofs, const extend_t &ep);
+static bool write_literals(std::ofstream &ofs, const clause_t &c);
+static bool write_indices(std::ofstream &ofs, const indices_t &is);
+static bool write_rats(std::ofstream &ofs, const rats_t &rats);
 
 // --- API ---------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3) {
-        std::cerr << "usage: rewrite formula-file lrat-file" << std::endl;
+    if (argc < 3 || argc > 5) {
+        std::cerr << "usage: rewrite formula proof [proof' [formula']]" <<
+                std::endl;
         return 1;
     }
 
     if (!read_formula(argv[1]) || !check_proof(argv[2])) {
+        return 1;
+    }
+
+    if (argc == 3) {
+        return 0;
+    }
+
+    prepare();
+
+    if (!read_formula(argv[1])) {
+        return 1;
+    }
+
+    if (argc == 5 && !write_formula(argv[4])) {
+        return 1;
+    }
+
+    if (!convert_proof(argv[3], argv[2])) {
         return 1;
     }
 
@@ -141,7 +173,7 @@ static void dump_clause(const std::string &label, const clause_t &c)
 
 static bool read_formula(const char *path)
 {
-    std::ifstream ifs(path, std::ifstream::in);
+    std::ifstream ifs(path, std::ios::in);
 
     if (!ifs.is_open()) {
         std::cerr << "failed to open formula file " << path << std::endl;
@@ -199,8 +231,8 @@ static bool read_body(std::ifstream &ifs)
 static literal_t make_lit(int64_t val)
 {
     return val < 0 ?
-        std::make_pair(NEGATIVE, (variable_t)-val) :
-        std::make_pair(POSITIVE, (variable_t)val);
+        std::make_pair(NEGATIVE, (variable_t)-val - 1) :
+        std::make_pair(POSITIVE, (variable_t)val - 1);
 }
 
 static literal_t flip_lit(const literal_t &l)
@@ -212,7 +244,7 @@ static literal_t flip_lit(const literal_t &l)
 
 static bool check_proof(const char *path)
 {
-    std::ifstream ifs(path, std::ifstream::in);
+    std::ifstream ifs(path, std::ios::in);
 
     if (!ifs.is_open()) {
         std::cerr << "failed to open proof file " << path << std::endl;
@@ -228,9 +260,11 @@ static bool check_proof(const char *path)
         }
 
         if (s.type == EXTEND && s.extend.clause.empty()) {
-            return true;
+            break;
         }
     }
+
+    return true;
 }
 
 static bool read_step(step_t &s, std::ifstream &ifs)
@@ -612,4 +646,171 @@ static clause_t resolvent(const clause_t &c, const clause_t &cf,
     }
 
     return cr;
+}
+
+static void prepare(void)
+{
+    --g_n_vars;
+    --g_n_clauses;
+
+    while (g_n_vars != 0) {
+        ++g_bits_v;
+        g_n_vars >>= 1;
+    }
+
+    while (g_n_clauses != 0) {
+        ++g_bits_c;
+        g_n_clauses >>= 1;
+    }
+
+    g_f.clear();
+    g_index_map.clear();
+
+    while (!g_recycler.empty()) {
+        g_recycler.pop();
+    }
+
+    g_n_steps = 0;
+}
+
+static bool write_formula(const char *path)
+{
+    std::ofstream ofs(path, std::ios::out | std::ios::binary | std::ios::trunc);
+
+    if (!ofs.is_open()) {
+        std::cerr << "failed to create formula file " << path << std::endl;
+        return false;
+    }
+
+    for (auto it1 = g_f.cbegin(); it1 != g_f.cend(); ++it1) {
+        ofs << 'C';
+        write_literals(ofs, it1->second);
+        ofs << '\n';
+    }
+
+    return ofs.good();
+}
+
+static bool convert_proof(const char *path_out, const char *path_in)
+{
+    std::ifstream ifs(path_in, std::ios::in);
+
+    if (!ifs.is_open()) {
+        std::cerr << "failed to open proof file " << path_in << std::endl;
+        return false;
+    }
+
+    std::ofstream ofs(path_out,
+            std::ios::out | std::ios::binary | std::ios::trunc);
+
+    if (!ofs.is_open()) {
+        std::cerr << "failed to create proof file " << path_out << std::endl;
+        return false;
+    }
+
+    while (true) {
+        ++g_n_steps;
+        step_t s;
+
+        if (!read_step(s, ifs) || !remap_step(s) || !write_step(ofs, s)) {
+            return false;
+        }
+
+        if (s.type == EXTEND && s.extend.clause.empty()) {
+            break;
+        }
+    }
+
+    return ofs.good();
+}
+
+static bool write_step(std::ofstream &ofs, const step_t &s)
+{
+    bool ok = s.type == DELETE ?
+            write_delete(ofs, s.delete_) : write_extend(ofs, s.extend);
+
+    if (!ok) {
+        std::cerr << "step " << g_n_steps << " failed" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+static bool write_delete(std::ofstream &ofs, const delete_t &dp)
+{
+    ofs << 'D';
+
+    if (!write_indices(ofs, dp.indices)) {
+        return false;
+    }
+
+    ofs << '\n';
+    return ofs.good();
+}
+
+static bool write_extend(std::ofstream &ofs, const extend_t &ep)
+{
+    ofs << 'E';
+
+    if (!write_literals(ofs, ep.clause) ||
+            !write_indices(ofs, ep.rups) ||
+            !write_rats(ofs, ep.rats)) {
+        return false;
+    }
+
+    ofs << '\n';
+    return ofs.good();
+}
+
+static bool write_literals(std::ofstream &ofs, const literals_t &ls)
+{
+    for (auto it = ls.cbegin(); it != ls.cend(); ++it) {
+        const literal_t &l = *it;
+        uint32_t mask = 1u << (g_bits_v - 1);
+
+        ofs << 'L' << (l.first == POSITIVE ? '+' : '-');
+
+        for (uint32_t i = 0; i < g_bits_v; ++i) {
+            ofs << ((l.second & mask) == 0 ? '0' : '1');
+            mask >>= 1;
+        }
+    }
+
+    ofs << '.';
+    return ofs.good();
+}
+
+static bool write_indices(std::ofstream &ofs, const indices_t &is)
+{
+    for (auto it = is.cbegin(); it != is.cend(); ++it) {
+        const index_t &i = *it;
+        uint32_t mask = 1u << (g_bits_c - 1);
+
+        ofs << 'I';
+
+        for (uint32_t k = 0; k < g_bits_c; ++k) {
+            ofs << ((i & mask) == 0 ? '0' : '1');
+            mask >>= 1;
+        }
+    }
+
+    ofs << '.';
+    return ofs.good();
+}
+
+static bool write_rats(std::ofstream &ofs, const rats_t &rats)
+{
+    for (uint32_t i = 0; i < rats.size(); ++i) {
+        const rat_t &rat = rats[i];
+
+        ofs << 'H';
+
+        if (!write_indices(ofs, rat.second)) {
+            return false;
+        }
+    }
+
+    ofs << '.';
+    return ofs.good();
 }
