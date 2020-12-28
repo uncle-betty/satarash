@@ -113,6 +113,7 @@ static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t
 static void prepare(void);
 static bool write_formula(const char *path);
 static bool convert_proof(const char *path_out, const char *path_in);
+static bool write_parameter(std::ofstream &ofs , uint32_t val);
 static bool write_step(std::ofstream &ofs, const step_t &s);
 static bool write_delete(std::ofstream &ofs, const delete_t &dp);
 static bool write_extend(std::ofstream &ofs, const extend_t &ep);
@@ -708,6 +709,10 @@ static bool convert_proof(const char *path_out, const char *path_in)
         return false;
     }
 
+    if (!write_parameter(ofs, g_bits_v) || !write_parameter(ofs, g_bits_c)) {
+        return false;
+    }
+
     while (true) {
         ++g_n_steps;
         step_t s;
@@ -720,6 +725,20 @@ static bool convert_proof(const char *path_out, const char *path_in)
             break;
         }
     }
+
+    return ofs.good();
+}
+
+static bool write_parameter(std::ofstream &ofs, uint32_t val)
+{
+    ofs << 'P';
+
+    while (val-- > 0) {
+        ofs << '+';
+    }
+
+    ofs << '.';
+    ofs << '\n';
 
     return ofs.good();
 }
