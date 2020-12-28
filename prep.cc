@@ -64,7 +64,7 @@ typedef min_heap_t<index_t> recycler_t;
 
 // --- Globals -----------------------------------------------------------------
 
-static variable_t g_n_vars;
+static variable_t g_n_vars = 0;
 static index_t g_n_clauses = 0;
 static formula_t g_f;
 static uint32_t g_n_steps = 0;
@@ -217,11 +217,11 @@ static bool read_formula(const char *path)
 static bool read_header(std::ifstream &ifs)
 {
     std::string token;
-    index_t dummy;
+    uint32_t dummy;
 
     if (!(ifs >> token) || token != "p" ||
             !(ifs >> token) || token != "cnf" ||
-            !(ifs >> g_n_vars) || !(ifs >> dummy)) {
+            !(ifs >> dummy) || !(ifs >> dummy)) {
         std::cerr << "invalid header" << std::endl;
         return false;
     }
@@ -257,9 +257,16 @@ static bool read_body(std::ifstream &ifs)
 
 static literal_t make_lit(int64_t val)
 {
-    return val < 0 ?
-        std::make_pair(NEGATIVE, (variable_t)-val - 1) :
-        std::make_pair(POSITIVE, (variable_t)val - 1);
+    literal_t l = val < 0 ?
+        std::make_pair(NEGATIVE, (variable_t)-val) :
+        std::make_pair(POSITIVE, (variable_t)val);
+
+    if (l.second > g_n_vars) {
+        g_n_vars = l.second;
+    }
+
+    --l.second;
+    return l;
 }
 
 static literal_t flip_lit(const literal_t &l)
