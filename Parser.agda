@@ -10,7 +10,7 @@ open import Data.Char using (Char)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_)
 open import Data.Maybe using (Maybe ; nothing ; just ; map)
 open import Data.Maybe.Categorical using (monad)
-open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂)
+open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
 open import Data.String using (String ; toList ; fromList)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
 open import Function using (_$_)
@@ -113,3 +113,26 @@ module _ (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
   parseFormula s = parseFormula′ bitsᶜ (toList s) >>= λ where
     (f , []ˡ) → just f
     _         → nothing
+
+parseUnary : List Char → Maybe (ℕ × List Char)
+parseUnary []ˡ       = nothing
+parseUnary ('+' ∷ˡ cs) = do
+  (n , cs′) ← parseUnary cs
+  return $ (suc n , cs′)
+parseUnary ('.' ∷ˡ cs) = return $ zero , cs
+parseUnary _           = nothing
+
+parseParameter : List Char → Maybe (ℕ × List Char)
+parseParameter []ˡ          = nothing
+parseParameter ('P' ∷ˡ cs)  = parseUnary cs
+parseParameter ('\n' ∷ˡ cs) = parseParameter cs
+parseParameter _            = nothing
+
+parseParameters′ : List Char → Maybe (ℕ × ℕ × List Char)
+parseParameters′ cs = do
+  (bitsᵛ , cs₁) ← parseParameter cs
+  (bitsᶜ , cs₂) ← parseParameter cs₁
+  return $ bitsᵛ , bitsᶜ , cs₂
+
+parseParameters : String → Maybe (ℕ × ℕ × String)
+parseParameters s = map (map₂ (map₂ fromList)) $ parseParameters′ (toList s)
