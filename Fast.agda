@@ -8,9 +8,10 @@ open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++_ to _++ˡ_)
 open import Data.Maybe using (Maybe ; just ; nothing)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂)
+open import Data.String using (String) renaming (_++_ to _++ˢ_)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Unit using (⊤ ; tt)
-open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
+open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_ ; _++_ to _++ᵛ_)
 open import Function using (_$_ ; _∘_ ; id ; case_of_)
 open import Relation.Nullary using (_because_ ; ofʸ ; ofⁿ)
 
@@ -27,6 +28,26 @@ open C bitsᵛ bitsᶜ using (
   )
 
 open import Data.List.Membership.DecSetoid literalDS using (_∈?_)
+
+showBinary : {n : ℕ} → Vec Bool n → String
+showBinary []ᵛ           = ""
+showBinary (true ∷ᵛ bs)  = "1" ++ˢ showBinary bs
+showBinary (false ∷ᵛ bs) = "0" ++ˢ showBinary bs
+
+showLiteral : Literal → String
+showLiteral (pos v) = "pos " ++ˢ showBinary v
+showLiteral (neg v) = "neg " ++ˢ showBinary v
+
+showClause : Clause → String
+showClause []ˡ        = ""
+showClause (l ∷ˡ []ˡ) = showLiteral l
+showClause (l ∷ˡ ls)  = showLiteral l ++ˢ " : " ++ˢ showClause ls
+
+showTrie : {n m : ℕ} → Maybe (Trie n) → Vec Bool m → String
+showTrie nothing             is = ""
+showTrie (just (leaf c))     is = showBinary is ++ˢ " | " ++ˢ showClause c ++ˢ "\n"
+showTrie (just (node tˡ tʳ)) is =
+  showTrie tˡ (is ++ᵛ false ∷ᵛ []ᵛ) ++ˢ showTrie tʳ (is ++ᵛ true ∷ᵛ []ᵛ)
 
 checkRUP′ : Formula → Clause → List Index → Result ⊤ Clause
 checkRUP′ f c []ˡ       = more c
