@@ -393,35 +393,43 @@ checkRUP′ f c (i ∷ˡ is) | just cᶠ | [ eq₁ ] | []ˡ | [ eq₂ ] = done $
   eval a f ∧ false                                   ≡⟨ ∧-zeroʳ (eval a f) ⟩
   false                                              ∎
 checkRUP′ f c (i ∷ˡ is) | just cᶠ | [ eq₁ ] | l ∷ˡ []ˡ | [ eq₂ ]
-  with checkRUP′ f (flip l ∷ˡ c) is
+  with checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ) is
 ... | done p = done $ λ a → begin
-  eval a f ∧ not (evalᶜ a c)                         ≡⟨ cong (_∧ not (evalᶜ a c)) $ duplicate f i cᶠ eq₁ a ⟩
-  (eval a f ∧ evalᶜ a cᶠ) ∧ not (evalᶜ a c)          ≡⟨ ∧-assoc (eval a f) (evalᶜ a cᶠ) (not (evalᶜ a c)) ⟩
-  eval a f ∧ evalᶜ a cᶠ ∧ not (evalᶜ a c)            ≡⟨ cong (eval a f ∧_) $ andNotIntro a cᶠ c ⟩
-  eval a f ∧ evalᶜ a (andNot cᶠ c) ∧ not (evalᶜ a c) ≡⟨ cong (λ # → eval a f ∧ evalᶜ a # ∧ not (evalᶜ a c)) eq₂ ⟩
-  eval a f ∧ (evalˡ a l ∨ false) ∧ not (evalᶜ a c)   ≡⟨ cong (eval a f ∧_) $ pushUnit a l c ⟩
-  eval a f ∧ not (evalˡ a (flip l) ∨ evalᶜ a c)      ≡⟨ p a ⟩
-  false                                              ∎
+  eval a f ∧ not (evalᶜ a c)                            ≡⟨ cong (_∧ not (evalᶜ a c)) $ duplicate f i cᶠ eq₁ a ⟩
+  (eval a f ∧ evalᶜ a cᶠ) ∧ not (evalᶜ a c)             ≡⟨ ∧-assoc (eval a f) (evalᶜ a cᶠ) (not (evalᶜ a c)) ⟩
+  eval a f ∧ evalᶜ a cᶠ ∧ not (evalᶜ a c)               ≡⟨ cong (eval a f ∧_) $ andNotIntro a cᶠ c ⟩
+  eval a f ∧ evalᶜ a (andNot cᶠ c) ∧ not (evalᶜ a c)    ≡⟨ cong (λ # → eval a f ∧ evalᶜ a # ∧ not (evalᶜ a c)) eq₂ ⟩
+  eval a f ∧ (evalˡ a l ∨ false) ∧ not (evalᶜ a c)      ≡⟨ cong (eval a f ∧_) $ pushUnit a l c ⟩
+  eval a f ∧ not (evalˡ a (flip l) ∨ evalᶜ a c)         ≡⟨ cong (λ # → eval a f ∧ not #) $ ∨-comm (evalˡ a (flip l)) (evalᶜ a c) ⟩
+  eval a f ∧ not (evalᶜ a c ∨ evalˡ a (flip l))         ≡⟨ sym $ cong (λ # → eval a f ∧ not (evalᶜ a c ∨ #)) $ ∨-identityʳ (evalˡ a (flip l)) ⟩
+  eval a f ∧ not (evalᶜ a c ∨ evalˡ a (flip l) ∨ false) ≡⟨ sym $ cong (λ # → eval a f ∧ not #) $ ++⇒∨ a c (flip l ∷ˡ []ˡ) ⟩
+  eval a f ∧ not (evalᶜ a (c ++ˡ flip l ∷ˡ []ˡ))        ≡⟨ p a ⟩
+  false                                                 ∎
 ... | more (cʳ , q) = more (cʳ , aux)
   where
   aux : ∀ a → eval a f ∧ evalᶜ a cʳ ≡ eval a f ∧ evalᶜ a c
   aux a
     with evalˡ a l | inspect (evalˡ a) l
   ... | true  | [ eq₃ ] = begin
-    eval a f ∧ evalᶜ a cʳ                     ≡⟨ q a ⟩
-    eval a f ∧ (evalˡ a (flip l) ∨ evalᶜ a c) ≡⟨ cong (λ # → eval a f ∧ (# ∨ evalᶜ a c)) (flipNot a l) ⟩
-    eval a f ∧ (not (evalˡ a l) ∨ evalᶜ a c)  ≡⟨ cong (λ # → eval a f ∧ ((not #) ∨ evalᶜ a c)) eq₃ ⟩
-    eval a f ∧ evalᶜ a c                      ∎
+    eval a f ∧ evalᶜ a cʳ                             ≡⟨ q a ⟩
+    eval a f ∧ evalᶜ a (c ++ˡ flip l ∷ˡ []ˡ)          ≡⟨ cong (eval a f ∧_) $ ++⇒∨ a c (flip l ∷ˡ []ˡ) ⟩
+    eval a f ∧ (evalᶜ a c ∨ evalˡ a (flip l) ∨ false) ≡⟨ cong (λ # → eval a f ∧ (evalᶜ a c ∨ # ∨ false)) $ flipNot a l ⟩
+    eval a f ∧ (evalᶜ a c ∨ not (evalˡ a l) ∨ false)  ≡⟨ cong (λ # → eval a f ∧ (evalᶜ a c ∨ not # ∨ false)) $ eq₃ ⟩
+    eval a f ∧ (evalᶜ a c ∨ false)                    ≡⟨ cong (eval a f ∧_) $ ∨-identityʳ (evalᶜ a c) ⟩
+    eval a f ∧ evalᶜ a c                              ∎
   ... | false | [ eq₃ ] = begin
-    eval a f ∧ evalᶜ a cʳ                     ≡⟨ q a ⟩
-    eval a f ∧ (evalˡ a (flip l) ∨ evalᶜ a c) ≡⟨ cong (λ # → eval a f ∧ (# ∨ evalᶜ a c)) (flipNot a l) ⟩
-    eval a f ∧ (not (evalˡ a l) ∨ evalᶜ a c)  ≡⟨ cong (λ # → eval a f ∧ ((not #) ∨ evalᶜ a c)) eq₃ ⟩
-    eval a f ∧ true                           ≡⟨ ∧-identityʳ (eval a f) ⟩
-    eval a f                                  ≡⟨ duplicate f i cᶠ eq₁ a ⟩
-    eval a f ∧ evalᶜ a cᶠ                     ≡⟨ cong (eval a f ∧_) $ andNotRUP a cᶠ c l eq₂ eq₃ ⟩
-    eval a f ∧ evalᶜ a cᶠ ∧ evalᶜ a c         ≡⟨ sym $ ∧-assoc (eval a f) (evalᶜ a cᶠ) (evalᶜ a c) ⟩
-    (eval a f ∧ evalᶜ a cᶠ) ∧ evalᶜ a c       ≡⟨ cong (_∧ evalᶜ a c) $ sym $ duplicate f i cᶠ eq₁ a ⟩
-    eval a f ∧ evalᶜ a c                      ∎
+    eval a f ∧ evalᶜ a cʳ                             ≡⟨ q a ⟩
+    eval a f ∧ evalᶜ a (c ++ˡ flip l ∷ˡ []ˡ)          ≡⟨ cong (eval a f ∧_) $ ++⇒∨ a c (flip l ∷ˡ []ˡ) ⟩
+    eval a f ∧ (evalᶜ a c ∨ evalˡ a (flip l) ∨ false) ≡⟨ cong (λ # → eval a f ∧ (evalᶜ a c ∨ #)) $ ∨-identityʳ (evalˡ a (flip l)) ⟩
+    eval a f ∧ (evalᶜ a c ∨ evalˡ a (flip l))         ≡⟨ cong (eval a f ∧_) $ ∨-comm (evalᶜ a c) (evalˡ a (flip l)) ⟩
+    eval a f ∧ (evalˡ a (flip l) ∨ evalᶜ a c)         ≡⟨ cong (λ # → eval a f ∧ (# ∨ evalᶜ a c)) (flipNot a l) ⟩
+    eval a f ∧ (not (evalˡ a l) ∨ evalᶜ a c)          ≡⟨ cong (λ # → eval a f ∧ ((not #) ∨ evalᶜ a c)) eq₃ ⟩
+    eval a f ∧ true                                   ≡⟨ ∧-identityʳ (eval a f) ⟩
+    eval a f                                          ≡⟨ duplicate f i cᶠ eq₁ a ⟩
+    eval a f ∧ evalᶜ a cᶠ                             ≡⟨ cong (eval a f ∧_) $ andNotRUP a cᶠ c l eq₂ eq₃ ⟩
+    eval a f ∧ evalᶜ a cᶠ ∧ evalᶜ a c                 ≡⟨ sym $ ∧-assoc (eval a f) (evalᶜ a cᶠ) (evalᶜ a c) ⟩
+    (eval a f ∧ evalᶜ a cᶠ) ∧ evalᶜ a c               ≡⟨ cong (_∧ evalᶜ a c) $ sym $ duplicate f i cᶠ eq₁ a ⟩
+    eval a f ∧ evalᶜ a c                              ∎
 ... | fail          = fail
 checkRUP′ _ _ _ | _ | _ | _ | _ = fail
 

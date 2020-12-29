@@ -36,7 +36,7 @@ checkRUP′ f c (i ∷ˡ is)
 ... | just cᶠ
   with andNot cᶠ c
 checkRUP′ f c (i ∷ˡ is) | just cᶠ | []ˡ      = done tt
-checkRUP′ f c (i ∷ˡ is) | just cᶠ | l ∷ˡ []ˡ = checkRUP′ f (flip l ∷ˡ c) is
+checkRUP′ f c (i ∷ˡ is) | just cᶠ | l ∷ˡ []ˡ = checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ) is
 checkRUP′ _ _ _         | _       | _        = fail
 
 checkRUP : Formula → Clause → List Index → Result ⊤ Clause

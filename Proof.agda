@@ -90,10 +90,10 @@ checkRUP′ f c (i ∷ˡ is) x              q
 ... | []ˡ          | _ with refl ← q = refl
 ... | _ ∷ˡ _ ∷ˡ ls | _ with refl ← q = refl
 ... | l ∷ˡ []ˡ     | _
-  with C-checkRUP′ f (flip l ∷ˡ c) is | inspect (C-checkRUP′ f (flip l ∷ˡ c)) is
-... | done r | [ eq ] with refl ← q = checkRUP′ f (flip l ∷ˡ c) is (done r) eq
-... | more r | [ eq ] with refl ← q = checkRUP′ f (flip l ∷ˡ c) is (more r) eq
-... | fail   | [ eq ] with refl ← q = checkRUP′ f (flip l ∷ˡ c) is fail     eq
+  with C-checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ) is | inspect (C-checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ)) is
+... | done r | [ eq ] with refl ← q = checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ) is (done r) eq
+... | more r | [ eq ] with refl ← q = checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ) is (more r) eq
+... | fail   | [ eq ] with refl ← q = checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ) is fail     eq
 
 checkRUP : ∀ f c is x → C-checkRUP f c is ≡ x → F-checkRUP f c is ≡ faster x
 checkRUP f c is x p
