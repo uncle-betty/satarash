@@ -6,4 +6,6 @@ compile_commands.json
 *.drat
 *.lrat
 /prep
+/Checker
 /_build/*
+/MAlonzo/*
