@@ -118,14 +118,22 @@ lookup′ (suc n) (just (node _ tʳ)) (true ∷ᵛ is)  = lookup′ n tʳ is
 lookup : Formula → Index → Maybe Clause
 lookup = lookup′ bitsᶜ
 
-insert′ : (n : ℕ) → Maybe (Trie n) → Vec Bool n → Clause → Maybe (Trie n)
-insert′ zero    _                   []ᵛ           c = just (leaf c)
-insert′ (suc n) nothing             (false ∷ᵛ is) c = just (node (insert′ n nothing is c) nothing)
-insert′ (suc n) nothing             (true ∷ᵛ is)  c = just (node nothing (insert′ n nothing is c))
-insert′ (suc n) (just (node tˡ tʳ)) (false ∷ᵛ is) c = just (node (insert′ n tˡ is c) tʳ)
-insert′ (suc n) (just (node tˡ tʳ)) (true ∷ᵛ is)  c = just (node tˡ (insert′ n tʳ is c))
+insert′ : (n : ℕ) → Maybe (Trie n) → Clause → Maybe (Maybe (Trie n))
+insert′ zero    nothing             c = just $ just (leaf c)
+insert′ zero    (just (leaf _))     c = nothing
+insert′ (suc n) nothing             c
+  with insert′ n nothing c
+... | just t  = just $ just (node t nothing)
+... | nothing = nothing
+insert′ (suc n) (just (node tˡ tʳ)) c
+  with insert′ n tˡ c
+... | just t  = just $ just (node t tʳ)
+... | nothing
+  with insert′ n tʳ c
+... | just t  = just $ just (node tˡ t)
+... | nothing = nothing
 
-insert : Formula → Index → Clause → Formula
+insert : Formula → Clause → Maybe Formula
 insert = insert′ bitsᶜ
 
 remove′ : (n : ℕ) → Maybe (Trie n) → Vec Bool n → Maybe (Trie n)
@@ -448,71 +456,46 @@ checkRUP f c is
       eval a f ∧ true      ≡⟨ sym $ cong (eval a f ∧_) $ notFalse (evalᶜ a c) q ⟩
       eval a f ∧ evalᶜ a c ∎
 
-nextIndex′ : (n : ℕ) → Maybe (Trie n) → Maybe (Vec Bool n)
-nextIndex′ zero    nothing           = just []ᵛ
-nextIndex′ zero    (just _)          = nothing
-nextIndex′ (suc n) nothing
-  with nextIndex′ n nothing
-... | just isʳ = just $ false ∷ᵛ isʳ
-... | nothing  = nothing
-nextIndex′ (suc n) (just (node tˡ tʳ))
-  with nextIndex′ n tˡ
-... | just isʳ = just $ false ∷ᵛ isʳ
+insert⇒∧′ : (n : ℕ) → (t t′ : Maybe (Trie n)) → (c : Clause) → insert′ n t c ≡ just t′ →
+  ∀ a → eval′ n a t′ ≡ eval′ n a t ∧ evalᶜ a c
+insert⇒∧′ zero    nothing             (just (leaf _))     _ refl = λ _ → refl
+insert⇒∧′ zero    (just (leaf _))     (just _)            _ ()
+insert⇒∧′ zero    (just (leaf _))     nothing             _ ()
+insert⇒∧′ (suc n) nothing             nothing             c p
+  with insert′ n nothing c
+... | nothing with () ← p
+... | just _  with () ← p
+insert⇒∧′ (suc n) nothing             (just (node tˡ tʳ)) c p
+  with insert′ n nothing c | inspect (insert′ n nothing) c
+... | nothing | _      with ()   ← p
+... | just f  | [ eq ] with refl ← p = λ a → begin
+  eval′ n a f ∧ true ≡⟨ ∧-identityʳ (eval′ n a f) ⟩
+  eval′ n a f        ≡⟨ insert⇒∧′ n nothing f c eq a ⟩
+  evalᶜ a c          ∎
+insert⇒∧′ (suc n) (just (node tˡ tʳ)) nothing             c p
+  with insert′ n tˡ c
 ... | nothing
-  with nextIndex′ n tʳ
-... | just isʳ = just $ true ∷ᵛ isʳ
-... | nothing  = nothing
+  with insert′ n tʳ c
+... | nothing with () ← p
+... | just _  with () ← p
+insert⇒∧′ (suc n) (just (node l₁ r₁)) (just (node l₂ r₂)) c p
+  with insert′ n l₁ c | inspect (insert′ n l₁) c
+... | just l₁′ | [ eq₁ ] with refl ← p = λ a → begin
+  eval′ n a l₁′ ∧ eval′ n a r₁              ≡⟨ cong (_∧ eval′ n a r₁) $ insert⇒∧′ n l₁ l₁′ c eq₁ a ⟩
+  (eval′ n a l₁ ∧ evalᶜ a c) ∧ eval′ n a r₁ ≡⟨ ∧-assoc (eval′ n a l₁) (evalᶜ a c) (eval′ n a r₁) ⟩
+  eval′ n a l₁ ∧ evalᶜ a c ∧ eval′ n a r₁   ≡⟨ cong (eval′ n a l₁ ∧_) $ ∧-comm (evalᶜ a c) (eval′ n a r₁) ⟩
+  eval′ n a l₁ ∧ eval′ n a r₁ ∧ evalᶜ a c   ≡⟨ sym $ ∧-assoc (eval′ n a l₁) (eval′ n a r₁) (evalᶜ a c) ⟩
+  (eval′ n a l₁ ∧ eval′ n a r₁) ∧ evalᶜ a c ∎
+... | nothing  | [ eq₁ ]
+  with insert′ n r₁ c | inspect (insert′ n r₁) c
+... | just r₁′ | [ eq₂ ] with refl ← p = λ a → begin
+  eval′ n a l₁ ∧ eval′ n a r₁′              ≡⟨ cong (eval′ n a l₁ ∧_) $ insert⇒∧′ n r₁ r₁′ c eq₂ a ⟩
+  eval′ n a l₁ ∧ eval′ n a r₁ ∧ evalᶜ a c   ≡⟨ sym $ ∧-assoc (eval′ n a l₁) (eval′ n a r₁) (evalᶜ a c) ⟩
+  (eval′ n a l₁ ∧ eval′ n a r₁) ∧ evalᶜ a c ∎
 
-nextIndex : Formula → Maybe Index
-nextIndex f = nextIndex′ bitsᶜ f
-
-nextIndexLeft′ : (n : ℕ) → (tˡ tʳ : Maybe (Trie n)) → (is : Vec Bool n) →
-  nextIndex′ (suc n) (just (node tˡ tʳ)) ≡ just (false ∷ᵛ is) → nextIndex′ n tˡ ≡ just is
-nextIndexLeft′ n tˡ tʳ is p
-  with nextIndex′ n tˡ
-... | just isʳ = case p of λ { refl → refl }
-... | nothing
-  with nextIndex′ n tʳ
-... | just isʳ = case p of λ ()
-... | nothing  = case p of λ ()
-
-nextIndexRight′ : (n : ℕ) → (tˡ tʳ : Maybe (Trie n)) → (is : Vec Bool n) →
-  nextIndex′ (suc n) (just (node tˡ tʳ)) ≡ just (true ∷ᵛ is) → nextIndex′ n tʳ ≡ just is
-nextIndexRight′ n tˡ tʳ is p
-  with nextIndex′ n tˡ
-... | just isʳ = case p of λ ()
-... | nothing
-  with nextIndex′ n tʳ
-... | just isʳ = case p of λ { refl → refl }
-... | nothing  = case p of λ ()
-
-insertEmpty′ : (n : ℕ) → (a : Assignment) → (is : Vec Bool n) → (c : Clause) →
-  eval′ n a (insert′ n nothing is c) ≡ evalᶜ a c
-insertEmpty′ zero    _ []ᵛ           _ = refl
-insertEmpty′ (suc n) a (false ∷ᵛ is) c = begin
-  eval′ n a (insert′ n nothing is c) ∧ true ≡⟨ ∧-identityʳ (eval′ n a (insert′ n nothing is c)) ⟩
-  eval′ n a (insert′ n nothing is c)        ≡⟨ insertEmpty′ n a is c ⟩
-  evalᶜ a c                                 ∎
-insertEmpty′ (suc n) a (true ∷ᵛ is)  c = insertEmpty′ n a is c
-
-append⇒∧′ : (n : ℕ) → (t : Maybe (Trie n)) → (is : Vec Bool n) → (c : Clause) →
-  nextIndex′ n t ≡ just is → ∀ a → eval′ n a (insert′ n t is c) ≡ eval′ n a t ∧ evalᶜ a c
-append⇒∧′ zero    nothing             []ᵛ           _ _ _ = refl
-append⇒∧′ (suc n) nothing             (i ∷ᵛ is)     c _ a = insertEmpty′ (suc n) a (i ∷ᵛ is) c
-append⇒∧′ (suc n) (just (node tˡ tʳ)) (false ∷ᵛ is) c p a = begin
-  eval′ n a (insert′ n tˡ is c) ∧ eval′ n a tʳ ≡⟨ cong (_∧ eval′ n a tʳ) $ append⇒∧′ n tˡ is c (nextIndexLeft′ n tˡ tʳ is p) a ⟩
-  (eval′ n a tˡ ∧ evalᶜ a c) ∧ eval′ n a tʳ    ≡⟨ ∧-assoc (eval′ n a tˡ) (evalᶜ a c) (eval′ n a tʳ) ⟩
-  eval′ n a tˡ ∧ evalᶜ a c ∧ eval′ n a tʳ      ≡⟨ cong (eval′ n a tˡ ∧_) $ ∧-comm (evalᶜ a c) (eval′ n a tʳ) ⟩
-  eval′ n a tˡ ∧ eval′ n a tʳ ∧ evalᶜ a c      ≡⟨ sym $ ∧-assoc (eval′ n a tˡ) (eval′ n a tʳ) (evalᶜ a c) ⟩
-  (eval′ n a tˡ ∧ eval′ n a tʳ) ∧ evalᶜ a c    ∎
-append⇒∧′ (suc n) (just (node tˡ tʳ)) (true ∷ᵛ is)  c p a = begin
-  eval′ n a tˡ ∧ eval′ n a (insert′ n tʳ is c) ≡⟨ cong (eval′ n a tˡ ∧_) $ append⇒∧′ n tʳ is c (nextIndexRight′ n tˡ tʳ is p) a ⟩
-  eval′ n a tˡ ∧ eval′ n a tʳ ∧ evalᶜ a c      ≡⟨ sym $ ∧-assoc (eval′ n a tˡ) (eval′ n a tʳ) (evalᶜ a c) ⟩
-  (eval′ n a tˡ ∧ eval′ n a tʳ) ∧ evalᶜ a c    ∎
-
-append⇒∧ : (f : Formula) → (i : Index) → (c : Clause) →
-  nextIndex f ≡ just i → ∀ a → eval a (insert f i c) ≡ eval a f ∧ evalᶜ a c
-append⇒∧ = append⇒∧′ bitsᶜ
+insert⇒∧ : (f f′ : Formula) → (c : Clause) → insert f c ≡ just f′ →
+  ∀ a → eval a f′ ≡ eval a f ∧ evalᶜ a c
+insert⇒∧ = insert⇒∧′ bitsᶜ
 
 -- Not strictly a resolvent, as |l| isn't removed from |c₁|.
 resolvent : Literal → Clause → Clause → Clause
@@ -704,13 +687,13 @@ RUPStep : (f : Formula) → (c : Clause) → Proof →
   (∀ a → eval a f ≡ eval a f ∧ evalᶜ a c) → Maybe (∀ a → eval a f ≡ false)
 RUPStep f []ˡ         _  p = just $ ∀-∧-false f p
 RUPStep f (lᶜ ∷ˡ lsᶜ) ss p
-  with nextIndex f | inspect nextIndex f
+  with insert f (lᶜ ∷ˡ lsᶜ) | inspect (insert f) (lᶜ ∷ˡ lsᶜ)
 ... | nothing | _      = nothing
-... | just i  | [ eq ]
-  with checkLRAT (insert f i (lᶜ ∷ˡ lsᶜ)) ss
+... | just f′ | [ eq ]
+  with checkLRAT f′ ss
 ... | nothing = nothing
 ... | just q  =
-  let r = append⇒∧ f i (lᶜ ∷ˡ lsᶜ) eq in
+  let r = insert⇒∧ f f′ (lᶜ ∷ˡ lsᶜ) eq in
   just $ λ a → trans (trans (p a) (sym (r a))) (q a)
 
 RATStep′ : (f : Formula) → (c : Clause) → (lᶜ : Literal) → (lsᶜ : Clause) →
@@ -741,13 +724,13 @@ RATStep : (f : Formula) → (c : Clause) → (lᶜ : Literal) → (lsᶜ : Claus
     let a′ = forceTrue a lᶜ in eval a′ f ∧ evalᶜ a′ (lᶜ ∷ˡ lsᶜ) ≡ true) →
   Maybe (∀ a → eval a f ≡ false)
 RATStep f c lᶜ lsᶜ ss p q
-  with nextIndex f | inspect nextIndex f
+  with insert f c | inspect (insert f) c
 ... | nothing | _       = nothing
-... | just i  | [ eq ]
-  with checkLRAT (insert f i c) ss
+... | just f′  | [ eq ]
+  with checkLRAT f′ ss
 ... | nothing = nothing
 ... | just r =
-  let s = append⇒∧ f i c eq in
+  let s = insert⇒∧ f f′ c eq in
   let t = λ a → trans (sym $ s a) (r a) in
   just $ RATStep′ f c lᶜ lsᶜ p q t
 

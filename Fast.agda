@@ -23,7 +23,7 @@ open C bitsᵛ bitsᶜ using (
     Step ; del ; ext ; Proof ;
     Result ; done ; more ; fail ;
     literalDS ;
-    lookup ; insert ; remove ; nextIndex ;
+    lookup ; remove ; insert ;
     _≟ˡ_ ; flip ; andNot ; resolvent
   )
 
@@ -125,15 +125,15 @@ deleteStep f (i ∷ˡ is) ss = deleteStep (remove f i) is ss
 RUPStep : Formula → Clause → Proof → Bool
 RUPStep f []ˡ         _  = true
 RUPStep f (lᶜ ∷ˡ lsᶜ) ss
-  with nextIndex f
+  with insert f (lᶜ ∷ˡ lsᶜ)
 ... | nothing = false
-... | just i  = checkLRAT (insert f i (lᶜ ∷ˡ lsᶜ)) ss
+... | just f′  = checkLRAT f′ ss
 
 RATStep : Formula → Clause → Literal → Clause → Proof → Bool
 RATStep f c lᶜ lsᶜ ss
-  with nextIndex f
+  with insert f c
 ... | nothing = false
-... | just i  = checkLRAT (insert f i c) ss
+... | just f′  = checkLRAT f′ ss
 
 checkLRAT _ []ˡ                  = false
 checkLRAT f (del is ∷ˡ ss)       = deleteStep f is ss

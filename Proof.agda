@@ -32,7 +32,7 @@ open C bitsᵛ bitsᶜ using (
     Step ; del ; ext ; Proof ;
     Result ; done ; more ; fail ;
     literalDS ;
-    lookup ; insert ; remove ; nextIndex ;
+    lookup ; insert ; remove ;
     _≟ˡ_ ; flip ; andNot ; removeLiteral ; resolvent ;
     eval ; evalᶜ ; evalˡ
   ) renaming (
@@ -257,20 +257,20 @@ deleteStep f (i ∷ˡ is) ss p
 
 RUPStep : ∀ f c ss p → C-RUPStep f c ss p ≡ nothing → F-RUPStep f c ss ≡ false
 RUPStep f (lᶜ ∷ˡ lsᶜ) ss p q
-  with nextIndex f | inspect nextIndex f
+  with insert f (lᶜ ∷ˡ lsᶜ) | inspect (insert f) (lᶜ ∷ˡ lsᶜ)
 ... | nothing | _ = refl
-... | just i  | _
-  with C-checkLRAT (insert f i (lᶜ ∷ˡ lsᶜ)) ss | inspect (C-checkLRAT (insert f i (lᶜ ∷ˡ lsᶜ))) ss
-... | nothing | [ eq ] = checkLRAT (insert f i (lᶜ ∷ˡ lsᶜ)) ss eq
+... | just f′ | _
+  with C-checkLRAT f′ ss | inspect (C-checkLRAT f′) ss
+... | nothing | [ eq ] = checkLRAT f′ ss eq
 
 RATStep : ∀ f c lᶜ lsᶜ ss p q → C-RATStep f c lᶜ lsᶜ ss p q ≡ nothing →
   F-RATStep f c lᶜ lsᶜ ss ≡ false
 RATStep f c lᶜ lsᶜ ss p q r
-  with nextIndex f | inspect nextIndex f
+  with insert f c | inspect (insert f) c
 ... | nothing | _ = refl
-... | just i  | _
-  with C-checkLRAT (insert f i c) ss | inspect (C-checkLRAT (insert f i c)) ss
-... | nothing | [ eq ] = checkLRAT (insert f i c) ss eq
+... | just f′ | _
+  with C-checkLRAT f′ ss | inspect (C-checkLRAT f′) ss
+... | nothing | [ eq ] = checkLRAT f′ ss eq
 
 checkLRAT _ []ˡ                  _ = refl
 checkLRAT f (del is ∷ˡ ss)       p = deleteStep f is ss p
