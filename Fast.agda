@@ -49,23 +49,16 @@ showTrie (just (leaf c))     is = showBinary is ++ˢ " | " ++ˢ showClause c ++�
 showTrie (just (node tˡ tʳ)) is =
   showTrie tˡ (is ++ᵛ false ∷ᵛ []ᵛ) ++ˢ showTrie tʳ (is ++ᵛ true ∷ᵛ []ᵛ)
 
-checkRUP′ : Formula → Clause → List Index → Result ⊤ Clause
-checkRUP′ f c []ˡ       = more c
-checkRUP′ f c (i ∷ˡ is)
+checkRUP : Formula → Clause → List Index → Result ⊤ Clause
+checkRUP f c []ˡ       = more c
+checkRUP f c (i ∷ˡ is)
   with lookup f i
 ... | nothing = fail
 ... | just cᶠ
   with andNot cᶠ c
-checkRUP′ f c (i ∷ˡ is) | just cᶠ | []ˡ      = done tt
-checkRUP′ f c (i ∷ˡ is) | just cᶠ | l ∷ˡ []ˡ = checkRUP′ f (c ++ˡ flip l ∷ˡ []ˡ) is
-checkRUP′ _ _ _         | _       | _        = fail
-
-checkRUP : Formula → Clause → List Index → Result ⊤ Clause
-checkRUP f c is
-  with checkRUP′ f c is
-... | fail    = fail
-... | more cʳ = more cʳ
-... | done p  = done p
+checkRUP f c (i ∷ˡ is) | just cᶠ | []ˡ      = done tt
+checkRUP f c (i ∷ˡ is) | just cᶠ | l ∷ˡ []ˡ = checkRUP f (c ++ˡ flip l ∷ˡ []ˡ) is
+checkRUP _ _ _         | _       | _        = fail
 
 clauseCheck₁ : Literal → Clause → Bool
 clauseCheck₁ l c
@@ -127,13 +120,13 @@ RUPStep f []ˡ         _  = true
 RUPStep f (lᶜ ∷ˡ lsᶜ) ss
   with insert f (lᶜ ∷ˡ lsᶜ)
 ... | nothing = false
-... | just f′  = checkLRAT f′ ss
+... | just f′ = checkLRAT f′ ss
 
-RATStep : Formula → Clause → Literal → Clause → Proof → Bool
-RATStep f c lᶜ lsᶜ ss
+RATStep : Formula → Clause → Proof → Bool
+RATStep f c ss
   with insert f c
 ... | nothing = false
-... | just f′  = checkLRAT f′ ss
+... | just f′ = checkLRAT f′ ss
 
 checkLRAT _ []ˡ                  = false
 checkLRAT f (del is ∷ˡ ss)       = deleteStep f is ss
@@ -145,4 +138,4 @@ checkLRAT f (ext c is iss ∷ˡ ss)
 ... | more (lᶜ ∷ˡ lsᶜ)
   with checkRAT f lᶜ lsᶜ iss
 ... | false = false
-... | true  = RATStep f c lᶜ lsᶜ ss
+... | true  = RATStep f c ss

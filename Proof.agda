@@ -51,7 +51,6 @@ open C bitsᵛ bitsᶜ using (
 
 open F bitsᵛ bitsᶜ using (
   ) renaming (
-    checkRUP′ to F-checkRUP′ ;
     checkRUP to F-checkRUP ;
     clauseCheck₁ to F-clauseCheck₁ ;
     clauseCheck₂ to F-clauseCheck₂ ;
@@ -80,7 +79,7 @@ faster fail           = fail
 map-nothing′ : {X Y : Set} → {f : X → Y} → {x : Maybe X} → mapᵐ f x ≡ nothing → x ≡ nothing
 map-nothing′ {x = nothing} refl = refl
 
-checkRUP′ : ∀ f c is x → C-checkRUP′ f c is ≡ x → F-checkRUP′ f c is ≡ faster x
+checkRUP′ : ∀ f c is x → C-checkRUP′ f c is ≡ x → F-checkRUP f c is ≡ faster x
 checkRUP′ _ _ []ˡ       (more (_ , _)) refl = refl
 checkRUP′ f c (i ∷ˡ is) x              q
   with lookup f i | inspect (lookup f) i
@@ -264,7 +263,7 @@ RUPStep f (lᶜ ∷ˡ lsᶜ) ss p q
 ... | nothing | [ eq ] = checkLRAT f′ ss eq
 
 RATStep : ∀ f c lᶜ lsᶜ ss p q → C-RATStep f c lᶜ lsᶜ ss p q ≡ nothing →
-  F-RATStep f c lᶜ lsᶜ ss ≡ false
+  F-RATStep f c ss ≡ false
 RATStep f c lᶜ lsᶜ ss p q r
   with insert f c | inspect (insert f) c
 ... | nothing | _ = refl
