@@ -16,11 +16,14 @@
 
 // --- Types and constants -----------------------------------------------------
 
-typedef uint32_t variable_t;
+typedef uint32_t u32;
+typedef int64_t i64;
+
+typedef u32 variable_t;
 typedef enum { POSITIVE, NEGATIVE } polarity_t;
 typedef std::pair<polarity_t, variable_t> literal_t;
 
-typedef uint32_t index_t;
+typedef u32 index_t;
 typedef std::vector<literal_t> literals_t;
 typedef literals_t clause_t;
 // ordered map - traversal must be in index order
@@ -67,23 +70,23 @@ typedef min_heap_t<index_t> recycler_t;
 static variable_t g_n_vars = 0;
 static index_t g_n_clauses = 0;
 static formula_t g_f;
-static uint32_t g_n_steps = 0;
+static u32 g_n_steps = 0;
 
 static index_map_t g_index_map;
 static recycler_t g_recycler;
 
-static uint32_t g_bits_v;
-static uint32_t g_bits_c;
+static u32 g_bits_v;
+static u32 g_bits_c;
 
 // --- Helper declarations -----------------------------------------------------
 
 #if DEBUG > 0
-static void show_binary(uint32_t val, uint32_t n_bits);
+static void show_binary(u32 val, u32 n_bits);
 static void show_clause(const clause_t &c);
 static void show_formula(void);
 #endif
 
-static literal_t make_lit(int64_t val);
+static literal_t make_lit(i64 val);
 static literal_t flip_lit(const literal_t &l);
 
 static bool read_formula(const char *path);
@@ -93,11 +96,11 @@ static bool read_body(std::ifstream &ifs);
 static bool check_proof(const char *path);
 static bool read_step(step_t &s, std::ifstream &ifs);
 static bool read_delete(step_t &s, std::ifstream &ifs);
-static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs);
+static bool read_extend(step_t &s, index_t i, i64 val, std::ifstream &ifs);
 
-static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs);
-static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs);
-static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs);
+static bool read_clause(clause_t &c, i64 &val, std::ifstream &ifs);
+static bool read_rup(rups_t &rups, i64 &val, std::ifstream &ifs);
+static bool read_rat(rats_t &rats, i64 &val, std::ifstream &ifs);
 
 static bool remap_step(step_t &s);
 static bool remap_delete(delete_t &dp);
@@ -116,7 +119,7 @@ static clause_t minus(const clause_t &c1, const clause_t &c2);
 
 static bool check_rat(clause_t &c, const rats_t &rats);
 static bool needs_check(const clause_t &cf, const literal_t &not_l);
-static bool validate_rats(const rats_t &rats, uint32_t i_rat, index_t i);
+static bool validate_rats(const rats_t &rats, u32 i_rat, index_t i);
 static bool check_rat_rup(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rat_t &rat);
 static bool check_clause_1(const clause_t &cf, const clause_t &c, const literal_t &l);
 static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rups_t &rups);
@@ -125,7 +128,7 @@ static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t
 static void prepare(void);
 static bool write_formula(const char *path);
 static bool convert_proof(const char *path_out, const char *path_in);
-static bool write_parameter(std::ofstream &ofs , uint32_t val);
+static bool write_parameter(std::ofstream &ofs , u32 val);
 static bool write_step(std::ofstream &ofs, const step_t &s);
 static bool write_delete(std::ofstream &ofs, const delete_t &dp);
 static bool write_extend(std::ofstream &ofs, const extend_t &ep);
@@ -171,11 +174,11 @@ int main(int argc, char *argv[])
 // --- Helpers -----------------------------------------------------------------
 
 #if DEBUG > 0
-static void show_binary(uint32_t val, uint32_t n_bits)
+static void show_binary(u32 val, u32 n_bits)
 {
-    uint32_t mask = 1u << (n_bits - 1);
+    u32 mask = 1u << (n_bits - 1);
 
-    for (uint32_t b = 0; b < n_bits; ++b) {
+    for (u32 b = 0; b < n_bits; ++b) {
         std::cout << ((val & mask) == 0 ? "0" : "1");
         mask >>= 1;
     }
@@ -209,7 +212,7 @@ static void show_formula(void)
 }
 #endif
 
-static literal_t make_lit(int64_t val)
+static literal_t make_lit(i64 val)
 {
     literal_t l = val < 0 ?
         std::make_pair(NEGATIVE, (variable_t)-val) :
@@ -249,7 +252,7 @@ static bool read_formula(const char *path)
 static bool read_header(std::ifstream &ifs)
 {
     std::string token;
-    uint32_t dummy;
+    u32 dummy;
 
     if (!(ifs >> token) || token != "p" ||
             !(ifs >> token) || token != "cnf" ||
@@ -265,7 +268,7 @@ static bool read_body(std::ifstream &ifs)
 {
     index_t i0 = 0;
     clause_t c;
-    int64_t val;
+    i64 val;
 
     while (ifs >> val) {
         if (val == 0) {
@@ -325,7 +328,7 @@ static bool read_step(step_t &s, std::ifstream &ifs)
         return read_delete(s, ifs);
     }
 
-    int64_t val = strtoll(str.c_str(), NULL, 10);
+    i64 val = strtoll(str.c_str(), NULL, 10);
     return read_extend(s, i, val, ifs);
 }
 
@@ -347,7 +350,7 @@ static bool read_delete(step_t &s, std::ifstream &ifs)
     return false;
 }
 
-static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs)
+static bool read_extend(step_t &s, index_t i, i64 val, std::ifstream &ifs)
 {
     s.type = EXTEND;
     extend_t &ep = s.extend;
@@ -358,7 +361,7 @@ static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs)
             (val == 0 || read_rat(ep.rats, val, ifs));
 }
 
-static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs)
+static bool read_clause(clause_t &c, i64 &val, std::ifstream &ifs)
 {
     while (val != 0) {
         literal_t l = make_lit(val);
@@ -373,7 +376,7 @@ static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs)
     return true;
 }
 
-static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs)
+static bool read_rup(rups_t &rups, i64 &val, std::ifstream &ifs)
 {
     while (true) {
         if (!(ifs >> val)) {
@@ -389,7 +392,7 @@ static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs)
     }
 }
 
-static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs)
+static bool read_rat(rats_t &rats, i64 &val, std::ifstream &ifs)
 {
     index_t i = (index_t)-val;
     rups_t rups;
@@ -603,7 +606,7 @@ static bool check_rat(clause_t &c, const rats_t &rats)
 
     literal_t l = c.front();
     literal_t not_l = flip_lit(l);
-    uint32_t i_rat = 0;
+    u32 i_rat = 0;
 
     for (const auto &ic : g_f) {
         index_t i = ic.first;
@@ -634,7 +637,7 @@ static bool needs_check(const clause_t &cf, const literal_t &not_l)
     return std::find(cf.cbegin(), cf.cend(), not_l) != cf.cend();
 }
 
-static bool validate_rats(const rats_t &rats, uint32_t i_rat, index_t i)
+static bool validate_rats(const rats_t &rats, u32 i_rat, index_t i)
 {
     return i_rat < rats.size() && rats[i_rat].first == i;
 }
@@ -778,7 +781,7 @@ static bool convert_proof(const char *path_out, const char *path_in)
     return ofs.good();
 }
 
-static bool write_parameter(std::ofstream &ofs, uint32_t val)
+static bool write_parameter(std::ofstream &ofs, u32 val)
 {
     ofs << 'P';
 
@@ -834,11 +837,11 @@ static bool write_extend(std::ofstream &ofs, const extend_t &ep)
 static bool write_literals(std::ofstream &ofs, const literals_t &ls)
 {
     for (const auto &l : ls) {
-        uint32_t mask = 1u << (g_bits_v - 1);
+        u32 mask = 1u << (g_bits_v - 1);
 
         ofs << 'L' << (l.first == POSITIVE ? '+' : '-');
 
-        for (uint32_t b = 0; b < g_bits_v; ++b) {
+        for (u32 b = 0; b < g_bits_v; ++b) {
             ofs << ((l.second & mask) == 0 ? '0' : '1');
             mask >>= 1;
         }
@@ -851,11 +854,11 @@ static bool write_literals(std::ofstream &ofs, const literals_t &ls)
 static bool write_indices(std::ofstream &ofs, const indices_t &is)
 {
     for (const auto &i : is) {
-        uint32_t mask = 1u << (g_bits_c - 1);
+        u32 mask = 1u << (g_bits_c - 1);
 
         ofs << 'I';
 
-        for (uint32_t b = 0; b < g_bits_c; ++b) {
+        for (u32 b = 0; b < g_bits_c; ++b) {
             ofs << ((i & mask) == 0 ? '0' : '1');
             mask >>= 1;
         }
@@ -867,7 +870,7 @@ static bool write_indices(std::ofstream &ofs, const indices_t &is)
 
 static bool write_rats(std::ofstream &ofs, const rats_t &rats)
 {
-    for (uint32_t i_rat = 0; i_rat < rats.size(); ++i_rat) {
+    for (u32 i_rat = 0; i_rat < rats.size(); ++i_rat) {
         const rat_t &rat = rats[i_rat];
         const rups_t &rups = rat.second;
 
