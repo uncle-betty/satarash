@@ -241,8 +241,7 @@ static bool read_body(std::ifstream &ifs)
             index_t i = get_index(++i0);
             g_f.insert(std::make_pair(i, c));
             c.clear();
-        }
-        else {
+        } else {
             literal_t l = make_lit(val);
             c.push_back(l);
         }
@@ -315,10 +314,9 @@ static bool read_step(step_t &s, std::ifstream &ifs)
     if (str == "d") {
         return read_delete(s, ifs);
     }
-    else {
-        int64_t val = strtoll(str.c_str(), NULL, 10);
-        return read_extend(s, i, val, ifs);
-    }
+
+    int64_t val = strtoll(str.c_str(), NULL, 10);
+    return read_extend(s, i, val, ifs);
 }
 
 static bool read_delete(step_t &s, std::ifstream &ifs)
@@ -394,8 +392,7 @@ static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs)
 
         if (val > 0) {
             rups.push_back((index_t)val);
-        }
-        else {
+        } else {
             rats.push_back(std::make_pair(i, rups));
 
             if (val == 0) {
@@ -471,8 +468,7 @@ static index_t get_index(index_t i0)
     if (!g_recycler.empty()) {
         i = g_recycler.top();
         g_recycler.pop();
-    }
-    else {
+    } else {
         i = g_n_clauses++;
     }
 
