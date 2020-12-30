@@ -495,7 +495,7 @@ static void put_index(index_t i0, index_t i)
 
 static bool map_index(index_t &i)
 {
-    auto it = g_index_map.find(i);
+    const auto it = g_index_map.find(i);
 
     if (it == g_index_map.end()) {
         std::cerr << "failed to map index " << i << std::endl;
