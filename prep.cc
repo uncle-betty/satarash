@@ -83,12 +83,12 @@ static void show_clause(const clause_t &c);
 static void show_formula(void);
 #endif
 
+static literal_t make_lit(int64_t val);
+static literal_t flip_lit(const literal_t &l);
+
 static bool read_formula(const char *path);
 static bool read_header(std::ifstream &ifs);
 static bool read_body(std::ifstream &ifs);
-
-static literal_t make_lit(int64_t val);
-static literal_t flip_lit(const literal_t &l);
 
 static bool check_proof(const char *path);
 static bool read_step(step_t &s, std::ifstream &ifs);
@@ -209,6 +209,27 @@ static void show_formula(void)
 }
 #endif
 
+static literal_t make_lit(int64_t val)
+{
+    literal_t l = val < 0 ?
+        std::make_pair(NEGATIVE, (variable_t)-val) :
+        std::make_pair(POSITIVE, (variable_t)val);
+
+    if (l.second > g_n_vars) {
+        g_n_vars = l.second;
+    }
+
+    --l.second;
+    return l;
+}
+
+static literal_t flip_lit(const literal_t &l)
+{
+    return l.first == POSITIVE ?
+        std::make_pair(NEGATIVE, l.second) :
+        std::make_pair(POSITIVE, l.second);
+}
+
 static bool read_formula(const char *path)
 {
     std::ifstream ifs(path, std::ios::in);
@@ -263,27 +284,6 @@ static bool read_body(std::ifstream &ifs)
     }
 
     return true;
-}
-
-static literal_t make_lit(int64_t val)
-{
-    literal_t l = val < 0 ?
-        std::make_pair(NEGATIVE, (variable_t)-val) :
-        std::make_pair(POSITIVE, (variable_t)val);
-
-    if (l.second > g_n_vars) {
-        g_n_vars = l.second;
-    }
-
-    --l.second;
-    return l;
-}
-
-static literal_t flip_lit(const literal_t &l)
-{
-    return l.first == POSITIVE ?
-        std::make_pair(NEGATIVE, l.second) :
-        std::make_pair(POSITIVE, l.second);
 }
 
 static bool check_proof(const char *path)
