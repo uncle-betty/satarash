@@ -104,7 +104,7 @@ static bool run_step(const step_t &s);
 static bool run_delete(const delete_t &dp);
 static bool run_extend(const extend_t &ep);
 static result_t check_rup(clause_t &c, const rups_t &rups);
-static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2);
+static clause_t minus(const clause_t &c1, const clause_t &c2);
 static bool check_rat(clause_t &c, const rats_t &rats);
 static bool needs_check(const clause_t &cf, const literal_t &not_l);
 static bool validate_rats(const rats_t &rats, uint32_t i_rat, index_t i);
@@ -165,7 +165,7 @@ static void show_binary(uint32_t val, uint32_t n_bits)
 {
     uint32_t mask = 1u << (n_bits - 1);
 
-    for (uint32_t i = 0; i < n_bits; ++i) {
+    for (uint32_t b = 0; b < n_bits; ++b) {
         std::cout << ((val & mask) == 0 ? "0" : "1");
         mask >>= 1;
     }
@@ -173,13 +173,17 @@ static void show_binary(uint32_t val, uint32_t n_bits)
 
 static void show_clause(const clause_t &c)
 {
-    for (auto it = c.cbegin(); it != c.cend(); ++it) {
-        std::cout << (it->first == POSITIVE ? "pos " : "neg ");
-        show_binary(it->second, g_bits_v);
+    bool first = true;
 
-        if (it + 1 != c.cend()) {
+    for (const auto &l : c) {
+        if (first) {
+            first = false;
+        } else {
             std::cout << " : ";
         }
+
+        std::cout << (l.first == POSITIVE ? "pos " : "neg ");
+        show_binary(l.second, g_bits_v);
     }
 
     std::cout << std::endl;
@@ -187,13 +191,10 @@ static void show_clause(const clause_t &c)
 
 static void show_formula(void)
 {
-    for (auto it = g_f.cbegin(); it != g_f.cend(); ++it) {
-        index_t i = it->first;
-        clause_t c = it->second;
-
-        show_binary(i, g_bits_c);
+    for (const auto &ic : g_f) {
+        show_binary(ic.first, g_bits_c);
         std::cout << " | ";
-        show_clause(c);
+        show_clause(ic.second);
     }
 }
 #endif
@@ -422,14 +423,14 @@ static bool remap_step(step_t &s)
 
 static bool remap_delete(delete_t &dp)
 {
-    for (auto it = dp.indices.begin(); it != dp.indices.end(); ++it) {
-        index_t i0 = *it;
+    for (auto &i : dp.indices) {
+        index_t i0 = i;
 
-        if (!map_index(*it)) {
+        if (!map_index(i)) {
             return false;
         }
 
-        put_index(i0, *it);
+        put_index(i0, i);
     }
 
     return true;
@@ -439,21 +440,21 @@ static bool remap_extend(extend_t &ep)
 {
     ep.index = get_index(ep.index);
 
-    for (auto it = ep.rups.begin(); it != ep.rups.end(); ++it) {
-        if (!map_index(*it)) {
+    for (auto &i : ep.rups) {
+        if (!map_index(i)) {
             return false;
         }
     }
 
-    for (auto it1 = ep.rats.begin(); it1 != ep.rats.end(); ++it1) {
-        if (!map_index(it1->first)) {
+    for (auto &rat : ep.rats) {
+        if (!map_index(rat.first)) {
             return false;
         }
 
-        rups_t &rups = it1->second;
+        rups_t &rups = rat.second;
 
-        for (auto it2 = rups.begin(); it2 != rups.end(); ++it2) {
-            if (!map_index(*it2)) {
+        for (auto &i : rups) {
+            if (!map_index(i)) {
                 return false;
             }
         }
@@ -513,11 +514,9 @@ static bool run_step(const step_t &s)
 
 static bool run_delete(const delete_t &dp)
 {
-    const indices_t &indices = dp.indices;
-
-    for (auto it = indices.cbegin(); it != indices.cend(); ++it) {
-        if (g_f.erase(*it) == 0) {
-            std::cerr << "invalid delete index " << *it << std::endl;
+    for (const auto &i : dp.indices) {
+        if (g_f.erase(i) == 0) {
+            std::cerr << "invalid delete index " << i << std::endl;
             return false;
         }
     }
@@ -551,44 +550,42 @@ static bool run_extend(const extend_t &ep)
 
 static result_t check_rup(clause_t &c, const rups_t &rups)
 {
-    for (auto it1 = rups.cbegin(); it1 != rups.cend(); ++it1) {
-        const auto it2 = g_f.find(*it1);
+    for (const auto &i : rups) {
+        const auto it = g_f.find(i);
 
-        if (it2 == g_f.end()) {
-            std::cerr << "invalid RUP index " << *it1 << std::endl;
+        if (it == g_f.end()) {
+            std::cerr << "invalid RUP index " << i << std::endl;
             return FAIL;
         }
 
-        const auto &diff = minus(it2->second, c);
+        const auto &diff = minus(it->second, c);
 
-        if (diff.first == 0) {
+        if (diff.size() == 0) {
             return DONE;
         }
 
-        if (diff.first > 1) {
-            std::cerr << "non-unit clause for RUP index " << *it1 << std::endl;
+        if (diff.size() > 1) {
+            std::cerr << "non-unit clause for RUP index " << i << std::endl;
             return FAIL;
         }
 
-        c.push_back(flip_lit(diff.second.front()));
+        c.push_back(flip_lit(diff.front()));
     }
 
     return MORE;
 }
 
-static std::pair<size_t, clause_t> minus(const clause_t &c1, const clause_t &c2)
+static clause_t minus(const clause_t &c1, const clause_t &c2)
 {
     clause_t diff;
-    size_t sz = 0;
 
-    for (auto it = c1.cbegin(); it != c1.cend(); ++it) {
-        if (std::find(c2.cbegin(), c2.cend(), *it) == c2.cend()) {
-            diff.push_back(*it);
-            ++sz;
+    for (const auto &l : c1) {
+        if (std::find(c2.cbegin(), c2.cend(), l) == c2.cend()) {
+            diff.push_back(l);
         }
     }
 
-    return std::make_pair(sz, diff);
+    return diff;
 }
 
 static bool check_rat(clause_t &c, const rats_t &rats)
@@ -602,15 +599,15 @@ static bool check_rat(clause_t &c, const rats_t &rats)
     literal_t not_l = flip_lit(l);
     uint32_t i_rat = 0;
 
-    for (auto it = g_f.cbegin(); it != g_f.cend(); ++it) {
-        index_t i = it->first;
-        const clause_t &cf = it->second;
+    for (const auto &ic : g_f) {
+        index_t i = ic.first;
+        const clause_t &cf = ic.second;
 
         if (!needs_check(cf, not_l)) {
             continue;
         }
 
-        if (!validate_rats(rats, i_rat, i)) {
+        if (!validate_rats(rats, i_rat, ic.first)) {
             std::cerr << "invalid RAT hints at index " << i << std::endl;
             return false;
         }
@@ -651,9 +648,9 @@ static bool check_clause_1(const clause_t &cf, const clause_t &c,
     // it makes both clauses tautologies:
     //   - |l| is |c|'s first literal by definition
     //   - |not_l| is in |cf| as we made it past needs_check() to get here
-    for (auto it = c.cbegin(); it != c.cend(); ++it) {
-        if (*it != l &&
-                std::find(cf.cbegin(), cf.cend(), flip_lit(*it)) != cf.cend()) {
+    for (const auto &lc : c) {
+        if (lc != l &&
+                std::find(cf.cbegin(), cf.cend(), flip_lit(lc)) != cf.cend()) {
             return true;
         }
     }
@@ -681,9 +678,9 @@ static clause_t resolvent(const clause_t &c, const clause_t &cf,
 {
     clause_t cr = c;
 
-    for (auto it = cf.cbegin(); it != cf.cend(); ++it) {
-        if (*it != not_l) {
-            cr.push_back(*it);
+    for (const auto &lc : cf) {
+        if (lc != not_l) {
+            cr.push_back(lc);
         }
     }
 
@@ -724,9 +721,9 @@ static bool write_formula(const char *path)
         return false;
     }
 
-    for (auto it1 = g_f.cbegin(); it1 != g_f.cend(); ++it1) {
+    for (const auto &ic : g_f) {
         ofs << 'C';
-        write_literals(ofs, it1->second);
+        write_literals(ofs, ic.second);
         ofs << '\n';
     }
 
@@ -830,13 +827,12 @@ static bool write_extend(std::ofstream &ofs, const extend_t &ep)
 
 static bool write_literals(std::ofstream &ofs, const literals_t &ls)
 {
-    for (auto it = ls.cbegin(); it != ls.cend(); ++it) {
-        const literal_t &l = *it;
+    for (const auto &l : ls) {
         uint32_t mask = 1u << (g_bits_v - 1);
 
         ofs << 'L' << (l.first == POSITIVE ? '+' : '-');
 
-        for (uint32_t i = 0; i < g_bits_v; ++i) {
+        for (uint32_t b = 0; b < g_bits_v; ++b) {
             ofs << ((l.second & mask) == 0 ? '0' : '1');
             mask >>= 1;
         }
@@ -848,13 +844,12 @@ static bool write_literals(std::ofstream &ofs, const literals_t &ls)
 
 static bool write_indices(std::ofstream &ofs, const indices_t &is)
 {
-    for (auto it = is.cbegin(); it != is.cend(); ++it) {
-        const index_t &i = *it;
+    for (const auto &i : is) {
         uint32_t mask = 1u << (g_bits_c - 1);
 
         ofs << 'I';
 
-        for (uint32_t k = 0; k < g_bits_c; ++k) {
+        for (uint32_t b = 0; b < g_bits_c; ++b) {
             ofs << ((i & mask) == 0 ? '0' : '1');
             mask >>= 1;
         }
@@ -866,8 +861,8 @@ static bool write_indices(std::ofstream &ofs, const indices_t &is)
 
 static bool write_rats(std::ofstream &ofs, const rats_t &rats)
 {
-    for (uint32_t i = 0; i < rats.size(); ++i) {
-        const rat_t &rat = rats[i];
+    for (uint32_t i_rat = 0; i_rat < rats.size(); ++i_rat) {
+        const rat_t &rat = rats[i_rat];
         const rups_t &rups = rat.second;
 
         if (!rups.empty()) {

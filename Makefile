@@ -1,6 +1,7 @@
 CXX :=			g++
 
-FLAGS :=		-std=c++14 -Og -gdwarf-4 -fno-strict-aliasing \
+FLAGS :=		-std=c++14 -Og -gdwarf-4 -fno-omit-frame-pointer \
+				-fno-strict-aliasing -fno-rtti -fno-exceptions \
 				-Wall -Wextra -Wpedantic -Wshadow -Wcast-align -Wcast-qual \
 				-Wconversion -Wsign-conversion -Wmissing-declarations \
 				-Wredundant-decls
