@@ -82,29 +82,38 @@ static void show_binary(uint32_t val, uint32_t n_bits);
 static void show_clause(const clause_t &c);
 static void show_formula(void);
 #endif
+
 static bool read_formula(const char *path);
 static bool read_header(std::ifstream &ifs);
 static bool read_body(std::ifstream &ifs);
+
 static literal_t make_lit(int64_t val);
 static literal_t flip_lit(const literal_t &l);
+
 static bool check_proof(const char *path);
 static bool read_step(step_t &s, std::ifstream &ifs);
 static bool read_delete(step_t &s, std::ifstream &ifs);
 static bool read_extend(step_t &s, index_t i, int64_t val, std::ifstream &ifs);
+
 static bool read_clause(clause_t &c, int64_t &val, std::ifstream &ifs);
 static bool read_rup(rups_t &rups, int64_t &val, std::ifstream &ifs);
 static bool read_rat(rats_t &rats, int64_t &val, std::ifstream &ifs);
+
 static bool remap_step(step_t &s);
 static bool remap_delete(delete_t &dp);
 static bool remap_extend(extend_t &ep);
+
 static index_t get_index(index_t i0);
 static void put_index(index_t i0, index_t i);
 static bool map_index(index_t &i);
+
 static bool run_step(const step_t &s);
 static bool run_delete(const delete_t &dp);
 static bool run_extend(const extend_t &ep);
+
 static result_t check_rup(clause_t &c, const rups_t &rups);
 static clause_t minus(const clause_t &c1, const clause_t &c2);
+
 static bool check_rat(clause_t &c, const rats_t &rats);
 static bool needs_check(const clause_t &cf, const literal_t &not_l);
 static bool validate_rats(const rats_t &rats, uint32_t i_rat, index_t i);
@@ -112,6 +121,7 @@ static bool check_rat_rup(const clause_t &cf, const clause_t &c, const literal_t
 static bool check_clause_1(const clause_t &cf, const clause_t &c, const literal_t &l);
 static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rups_t &rups);
 static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t &not_l);
+
 static void prepare(void);
 static bool write_formula(const char *path);
 static bool convert_proof(const char *path_out, const char *path_in);
@@ -175,15 +185,15 @@ static void show_clause(const clause_t &c)
 {
     bool first = true;
 
-    for (const auto &l : c) {
+    for (const auto &lc : c) {
         if (first) {
             first = false;
         } else {
             std::cout << " : ";
         }
 
-        std::cout << (l.first == POSITIVE ? "pos " : "neg ");
-        show_binary(l.second, g_bits_v);
+        std::cout << (lc.first == POSITIVE ? "pos " : "neg ");
+        show_binary(lc.second, g_bits_v);
     }
 
     std::cout << std::endl;
@@ -575,9 +585,9 @@ static clause_t minus(const clause_t &c1, const clause_t &c2)
 {
     clause_t diff;
 
-    for (const auto &l : c1) {
-        if (std::find(c2.cbegin(), c2.cend(), l) == c2.cend()) {
-            diff.push_back(l);
+    for (const auto &lc1 : c1) {
+        if (std::find(c2.cbegin(), c2.cend(), lc1) == c2.cend()) {
+            diff.push_back(lc1);
         }
     }
 
@@ -674,9 +684,9 @@ static clause_t resolvent(const clause_t &c, const clause_t &cf,
 {
     clause_t cr = c;
 
-    for (const auto &lc : cf) {
-        if (lc != not_l) {
-            cr.push_back(lc);
+    for (const auto &lcf : cf) {
+        if (lcf != not_l) {
+            cr.push_back(lcf);
         }
     }
 
