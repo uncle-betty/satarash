@@ -204,10 +204,10 @@ static void show_clause(const clause_t &c)
 
 static void show_formula(void)
 {
-    for (const auto &ic : g_f) {
-        show_binary(ic.first, g_bits_c);
+    for (const auto &[i, cf] : g_f) {
+        show_binary(i, g_bits_c);
         std::cout << " | ";
-        show_clause(ic.second);
+        show_clause(cf);
     }
 }
 #endif
@@ -456,15 +456,13 @@ static bool remap_extend(extend_t &ep)
         }
     }
 
-    for (auto &rat : ep.rats) {
-        if (!map_index(rat.first)) {
+    for (auto &[i, rups] : ep.rats) {
+        if (!map_index(i)) {
             return false;
         }
 
-        rups_t &rups = rat.second;
-
-        for (auto &i : rups) {
-            if (!map_index(i)) {
+        for (auto &k : rups) {
+            if (!map_index(k)) {
                 return false;
             }
         }
@@ -608,15 +606,12 @@ static bool check_rat(clause_t &c, const rats_t &rats)
     literal_t not_l = flip_lit(l);
     u32 i_rat = 0;
 
-    for (const auto &ic : g_f) {
-        index_t i = ic.first;
-        const clause_t &cf = ic.second;
-
+    for (const auto &[i, cf] : g_f) {
         if (!needs_check(cf, not_l)) {
             continue;
         }
 
-        if (!validate_rats(rats, i_rat, ic.first)) {
+        if (!validate_rats(rats, i_rat, i)) {
             std::cerr << "invalid RAT hints at index " << i << std::endl;
             return false;
         }
@@ -730,9 +725,10 @@ static bool write_formula(const char *path)
         return false;
     }
 
-    for (const auto &ic : g_f) {
+    for (const auto &[i, cf] : g_f) {
+        (void)i;
         ofs << 'C';
-        write_literals(ofs, ic.second);
+        write_literals(ofs, cf);
         ofs << '\n';
     }
 
@@ -871,8 +867,8 @@ static bool write_indices(std::ofstream &ofs, const indices_t &is)
 static bool write_rats(std::ofstream &ofs, const rats_t &rats)
 {
     for (u32 i_rat = 0; i_rat < rats.size(); ++i_rat) {
-        const rat_t &rat = rats[i_rat];
-        const rups_t &rups = rat.second;
+        const auto &[i, rups] = rats[i_rat];
+        (void)i;
 
         if (!rups.empty()) {
             ofs << 'H';
