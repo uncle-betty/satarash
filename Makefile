@@ -1,32 +1,20 @@
 CXX :=			g++
-
 FLAGS :=		-std=c++17 -Og -gdwarf-4 -fno-omit-frame-pointer \
 				-fno-strict-aliasing -fno-rtti -fno-exceptions \
 				-Wall -Wextra -Wpedantic -Wshadow -Wcast-align -Wcast-qual \
 				-Wconversion -Wsign-conversion -Wmissing-declarations \
 				-Wredundant-decls
 
-CXXFLAGS :=		$(FLAGS)
-LDFLAGS :=		$(FLAGS)
-
-DIR :=			$(shell pwd)
-OBJS :=			prep.o
-EXE :=			prep
-
 %.o:			%.cc
-				$(CXX) $(CXXFLAGS) -c -o $@ $<
+				$(CXX) $(FLAGS) -c -o $@ $<
 
-$(EXE):			$(OBJS)
-				$(CXX) $(LDFLAGS) -o $(EXE) $(OBJS)
+prep:			prep.o
+				$(CXX) $(FLAGS) -o prep prep.o
 
-val:			$(EXE)
-				valgrind \
-					--leak-check=full --leak-resolution=high \
-					--show-leak-kinds=all --keep-stacktraces=alloc-and-free \
-					$(DIR)/$(EXE)
-
-run:			$(EXE)
-				$(DIR)/$(EXE)
+Checker:		Checker.agda Parser.agda Fast.agda Correct.agda
+				agda --ghc Checker.agda
 
 clean:
-				rm -f $(EXE) $(OBJS)
+				rm -f prep prep.o
+				rm -f Checker
+				rm -rf _build MAlonzo

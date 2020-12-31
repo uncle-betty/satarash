@@ -148,7 +148,7 @@ static void write_rats(std::ofstream &ofs, const rats_t &rats);
 int main(int argc, char *argv[])
 {
     if (argc < 3 || argc > 5) {
-        fail << "usage: rewrite formula proof [proof' [formula']]" << std::endl;
+        fail << "usage: prep formula proof [proof' [formula']]" << std::endl;
     }
 
     read_formula(argv[1]);
