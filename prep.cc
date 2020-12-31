@@ -9,6 +9,7 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -54,13 +55,20 @@ typedef struct {
     extend_t extend;
 } step_t;
 
-typedef enum { DONE, MORE, FAIL } result_t;
-
 typedef std::unordered_map<index_t, index_t> index_map_t;
 template <class T> using min_heap_t =
         std::priority_queue<T, std::vector<T>, std::greater<T>>;
 typedef min_heap_t<index_t> recycler_t;
 
+class fail_ : public std::ostringstream {
+public:
+    [[noreturn]] ~fail_() {
+        std::cerr << str();
+        ::exit(1);
+    }
+};
+
+#define fail fail_{}
 #define DEBUG 0
 
 // --- Macros and inline functions ---------------------------------------------
@@ -89,85 +97,75 @@ static void show_formula(void);
 static literal_t make_lit(i64 val);
 static literal_t flip_lit(const literal_t &l);
 
-static bool read_formula(const char *path);
-static bool read_header(std::ifstream &ifs);
-static bool read_body(std::ifstream &ifs);
+static void read_formula(const char *path);
+static void read_header(std::ifstream &ifs);
+static void read_body(std::ifstream &ifs);
 
-static bool check_proof(const char *path);
-static bool read_step(step_t &s, std::ifstream &ifs);
-static bool read_delete(step_t &s, std::ifstream &ifs);
-static bool read_extend(step_t &s, index_t i, i64 val, std::ifstream &ifs);
+static void check_proof(const char *path);
+static void read_step(step_t &s, std::ifstream &ifs);
+static void read_delete(step_t &s, std::ifstream &ifs);
+static void read_extend(step_t &s, index_t i, i64 val, std::ifstream &ifs);
 
-static bool read_clause(clause_t &c, i64 &val, std::ifstream &ifs);
-static bool read_rup(rups_t &rups, i64 &val, std::ifstream &ifs);
-static bool read_rat(rats_t &rats, i64 &val, std::ifstream &ifs);
+static void read_clause(clause_t &c, i64 &val, std::ifstream &ifs);
+static void read_rup(rups_t &rups, i64 &val, std::ifstream &ifs);
+static void read_rat(rats_t &rats, i64 &val, std::ifstream &ifs);
 
-static bool remap_step(step_t &s);
-static bool remap_delete(delete_t &dp);
-static bool remap_extend(extend_t &ep);
+static void remap_step(step_t &s);
+static void remap_delete(delete_t &dp);
+static void remap_extend(extend_t &ep);
 
 static index_t get_index(index_t i0);
 static void put_index(index_t i0, index_t i);
-static bool map_index(index_t &i);
+static void map_index(index_t &i);
 
-static bool run_step(const step_t &s);
-static bool run_delete(const delete_t &dp);
-static bool run_extend(const extend_t &ep);
+static void run_step(const step_t &s);
+static void run_delete(const delete_t &dp);
+static void run_extend(const extend_t &ep);
 
-static result_t check_rup(clause_t &c, const rups_t &rups);
+static bool run_rup(clause_t &c, const rups_t &rups);
 static clause_t minus(const clause_t &c1, const clause_t &c2);
 
-static bool check_rat(clause_t &c, const rats_t &rats);
+static void run_rat(clause_t &c, const rats_t &rats);
 static bool needs_check(const clause_t &cf, const literal_t &not_l);
-static bool validate_rats(const rats_t &rats, u32 i_rat, index_t i);
-static bool check_rat_rup(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rat_t &rat);
-static bool check_clause_1(const clause_t &cf, const clause_t &c, const literal_t &l);
-static bool check_clause_2(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rups_t &rups);
+static void check_rat_rup(const clause_t &cf, const clause_t &c, const literal_t &l, const literal_t &not_l, const rats_t &rats, index_t i, u32 i_rat);
+static void check_complement(const clause_t &cf, const clause_t &c, const literal_t &l);
+static void check_resolvent(const clause_t &cf, const clause_t &c, const literal_t &not_l, const rups_t &rups);
 static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t &not_l);
 
 static void prepare(void);
-static bool write_formula(const char *path);
-static bool convert_proof(const char *path_out, const char *path_in);
-static bool write_parameter(std::ofstream &ofs , u32 val);
-static bool write_step(std::ofstream &ofs, const step_t &s);
-static bool write_delete(std::ofstream &ofs, const delete_t &dp);
-static bool write_extend(std::ofstream &ofs, const extend_t &ep);
-static bool write_literals(std::ofstream &ofs, const clause_t &c);
-static bool write_indices(std::ofstream &ofs, const indices_t &is);
-static bool write_rats(std::ofstream &ofs, const rats_t &rats);
+static void write_formula(const char *path);
+static void convert_proof(const char *path_out, const char *path_in);
+static void write_parameter(std::ofstream &ofs , u32 val);
+static void write_step(std::ofstream &ofs, const step_t &s);
+static void write_delete(std::ofstream &ofs, const delete_t &dp);
+static void write_extend(std::ofstream &ofs, const extend_t &ep);
+static void write_literals(std::ofstream &ofs, const clause_t &c);
+static void write_indices(std::ofstream &ofs, const indices_t &is);
+static void write_rats(std::ofstream &ofs, const rats_t &rats);
 
 // --- API ---------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {
     if (argc < 3 || argc > 5) {
-        std::cerr << "usage: rewrite formula proof [proof' [formula']]" <<
-                std::endl;
-        return 1;
+        fail << "usage: rewrite formula proof [proof' [formula']]" << std::endl;
     }
 
-    if (!read_formula(argv[1]) || !check_proof(argv[2])) {
-        return 1;
-    }
+    read_formula(argv[1]);
+    check_proof(argv[2]);
 
     if (argc == 3) {
         return 0;
     }
 
     prepare();
+    read_formula(argv[1]);
 
-    if (!read_formula(argv[1])) {
-        return 1;
+    if (argc == 5) {
+        write_formula(argv[4]);
     }
 
-    if (argc == 5 && !write_formula(argv[4])) {
-        return 1;
-    }
-
-    if (!convert_proof(argv[3], argv[2])) {
-        return 1;
-    }
-
+    convert_proof(argv[3], argv[2]);
     return 0;
 }
 
@@ -233,38 +231,30 @@ static literal_t flip_lit(const literal_t &l)
         std::make_pair(POSITIVE, l.second);
 }
 
-static bool read_formula(const char *path)
+static void read_formula(const char *path)
 {
     std::ifstream ifs(path, std::ios::in);
 
     if (!ifs.is_open()) {
-        std::cerr << "failed to open formula file " << path << std::endl;
-        return false;
+        fail << "failed to open formula file " << path << std::endl;
     }
 
-    if (!read_header(ifs) || !read_body(ifs)) {
-        return false;
-    }
-
-    return true;
+    read_header(ifs);
+    read_body(ifs);
 }
 
-static bool read_header(std::ifstream &ifs)
+static void read_header(std::ifstream &ifs)
 {
     std::string token;
     u32 dummy;
 
-    if (!(ifs >> token) || token != "p" ||
-            !(ifs >> token) || token != "cnf" ||
+    if (!(ifs >> token) || token != "p" || !(ifs >> token) || token != "cnf" ||
             !(ifs >> dummy) || !(ifs >> dummy)) {
-        std::cerr << "invalid header" << std::endl;
-        return false;
+        fail << "invalid header" << std::endl;
     }
-
-    return true;
 }
 
-static bool read_body(std::ifstream &ifs)
+static void read_body(std::ifstream &ifs)
 {
     index_t i0 = 0;
     clause_t c;
@@ -282,57 +272,50 @@ static bool read_body(std::ifstream &ifs)
     }
 
     if (!ifs.eof() || val != 0) {
-        std::cerr << "invalid body" << std::endl;
-        return false;
+        fail << "invalid body" << std::endl;
     }
-
-    return true;
 }
 
-static bool check_proof(const char *path)
+static void check_proof(const char *path)
 {
     std::ifstream ifs(path, std::ios::in);
 
     if (!ifs.is_open()) {
-        std::cerr << "failed to open proof file " << path << std::endl;
-        return false;
+        fail << "failed to open proof file " << path << std::endl;
     }
 
     while (true) {
-        ++g_n_steps;
         step_t s;
 
-        if (!read_step(s, ifs) || !remap_step(s) || !run_step(s)) {
-            return false;
-        }
+        ++g_n_steps;
+        read_step(s, ifs);
+        remap_step(s);
+        run_step(s);
 
         if (s.type == EXTEND && s.extend.clause.empty()) {
             break;
         }
     }
-
-    return true;
 }
 
-static bool read_step(step_t &s, std::ifstream &ifs)
+static void read_step(step_t &s, std::ifstream &ifs)
 {
     index_t i;
     std::string str;
 
     if (!(ifs >> i) || !(ifs >> str)) {
-        std::cerr << "invalid step" << std::endl;
-        return false;
+        fail << "invalid step" << std::endl;
     }
 
     if (str == "d") {
-        return read_delete(s, ifs);
+        read_delete(s, ifs);
+    } else {
+        i64 val = strtoll(str.c_str(), NULL, 10);
+        read_extend(s, i, val, ifs);
     }
-
-    i64 val = strtoll(str.c_str(), NULL, 10);
-    return read_extend(s, i, val, ifs);
 }
 
-static bool read_delete(step_t &s, std::ifstream &ifs)
+static void read_delete(step_t &s, std::ifstream &ifs)
 {
     s.type = DELETE;
     delete_t &dp = s.delete_;
@@ -340,67 +323,64 @@ static bool read_delete(step_t &s, std::ifstream &ifs)
 
     while (ifs >> i) {
         if (i == 0) {
-            return true;
+            return;
         }
 
         dp.indices.push_back(i);
     }
 
-    std::cerr << "invalid delete step" << std::endl;
-    return false;
+    fail << "invalid delete step" << std::endl;
 }
 
-static bool read_extend(step_t &s, index_t i, i64 val, std::ifstream &ifs)
+static void read_extend(step_t &s, index_t i, i64 val, std::ifstream &ifs)
 {
     s.type = EXTEND;
     extend_t &ep = s.extend;
     ep.index = i;
 
-    return read_clause(ep.clause, val, ifs) &&
-            read_rup(ep.rups, val, ifs) &&
-            (val == 0 || read_rat(ep.rats, val, ifs));
+    read_clause(ep.clause, val, ifs);
+    read_rup(ep.rups, val, ifs);
+
+    if (val != 0) {
+        read_rat(ep.rats, val, ifs);
+    }
 }
 
-static bool read_clause(clause_t &c, i64 &val, std::ifstream &ifs)
+static void read_clause(clause_t &c, i64 &val, std::ifstream &ifs)
 {
     while (val != 0) {
         literal_t l = make_lit(val);
         c.push_back(l);
 
         if (!(ifs >> val)) {
-            std::cerr << "invalid clause" << std::endl;
-            return false;
+            fail << "invalid clause" << std::endl;
         }
     }
-
-    return true;
 }
 
-static bool read_rup(rups_t &rups, i64 &val, std::ifstream &ifs)
+static void read_rup(rups_t &rups, i64 &val, std::ifstream &ifs)
 {
     while (true) {
         if (!(ifs >> val)) {
-            std::cerr << "invalid RUP hints" << std::endl;
-            return false;
+            fail << "invalid RUP hints" << std::endl;
         }
 
         if (val <= 0) {
-            return true;
+            return;
         }
 
         rups.push_back((index_t)val);
     }
 }
 
-static bool read_rat(rats_t &rats, i64 &val, std::ifstream &ifs)
+static void read_rat(rats_t &rats, i64 &val, std::ifstream &ifs)
 {
     index_t i = (index_t)-val;
     rups_t rups;
 
     while (true) {
         if (!(ifs >> val)) {
-            std::cerr << "invalid RAT hints" << std::endl;
-            return false;
+            fail << "invalid RAT hints" << std::endl;
         }
 
         if (val > 0) {
@@ -409,7 +389,7 @@ static bool read_rat(rats_t &rats, i64 &val, std::ifstream &ifs)
             rats.push_back(std::make_pair(i, rups));
 
             if (val == 0) {
-                return true;
+                return;
             }
 
             i = (index_t)-val;
@@ -418,58 +398,41 @@ static bool read_rat(rats_t &rats, i64 &val, std::ifstream &ifs)
     }
 }
 
-static bool remap_step(step_t &s)
+static void remap_step(step_t &s)
 {
-    bool ok = s.type == DELETE ?
-            remap_delete(s.delete_) : remap_extend(s.extend);
-
-    if (!ok) {
-        std::cerr << "failed to remap step " << g_n_steps << std::endl;
-        return false;
+    if (s.type == DELETE) {
+        remap_delete(s.delete_);
+    } else {
+        remap_extend(s.extend);
     }
-
-    return true;
 }
 
-static bool remap_delete(delete_t &dp)
+static void remap_delete(delete_t &dp)
 {
     for (auto &i : dp.indices) {
         index_t i0 = i;
-
-        if (!map_index(i)) {
-            return false;
-        }
-
+        map_index(i);
         put_index(i0, i);
     }
-
-    return true;
 }
 
-static bool remap_extend(extend_t &ep)
+static void remap_extend(extend_t &ep)
 {
     ep.index = get_index(ep.index);
 
     for (auto &i : ep.rups) {
-        if (!map_index(i)) {
-            return false;
-        }
+        map_index(i);
     }
 
     for (auto &[i, rups] : ep.rats) {
-        if (!map_index(i)) {
-            return false;
-        }
+        map_index(i);
 
         for (auto &k : rups) {
-            if (!map_index(k)) {
-                return false;
-            }
+            map_index(k);
         }
     }
 
     std::sort(ep.rats.begin(), ep.rats.end()); // indices must remain in order
-    return true;
 }
 
 static index_t get_index(index_t i0)
@@ -494,92 +457,73 @@ static void put_index(index_t i0, index_t i)
     g_recycler.push(i);
 }
 
-static bool map_index(index_t &i)
+static void map_index(index_t &i)
 {
     const auto it = g_index_map.find(i);
 
     if (it == g_index_map.end()) {
-        std::cerr << "failed to map index " << i << std::endl;
-        return false;
+        fail << "failed to map index " << i << " in step " << g_n_steps <<
+                std::endl;
     }
 
     i = it->second;
-    return true;
 }
 
-static bool run_step(const step_t &s)
+static void run_step(const step_t &s)
 {
-    bool ok = s.type == DELETE ? run_delete(s.delete_) : run_extend(s.extend);
-
-    if (!ok) {
-        std::cerr << "step " << g_n_steps << " failed" << std::endl;
-        return false;
+    if (s.type == DELETE) {
+        run_delete(s.delete_);
+    } else {
+        run_extend(s.extend);
     }
-
-    return true;
 }
 
-static bool run_delete(const delete_t &dp)
+static void run_delete(const delete_t &dp)
 {
     for (const auto &i : dp.indices) {
         if (g_f.erase(i) == 0) {
-            std::cerr << "invalid delete index " << i << std::endl;
-            return false;
+            fail << "invalid delete index " << i << " in step " << g_n_steps <<
+                    std::endl;
         }
     }
-
-    return true;
 }
 
-static bool run_extend(const extend_t &ep)
+static void run_extend(const extend_t &ep)
 {
     clause_t c = ep.clause;
 
-    switch (check_rup(c, ep.rups)) {
-    case DONE:
-        g_f.insert(std::make_pair(ep.index, ep.clause));
-        return true;
-
-    case FAIL:
-        return false;
-
-    case MORE:
-        break;
+    if (!run_rup(c, ep.rups)) {
+        run_rat(c, ep.rats);
     }
 
-    if (check_rat(c, ep.rats)) {
-        g_f.insert(std::make_pair(ep.index, ep.clause));
-        return true;
-    }
-
-    return false;
+    g_f.insert(std::make_pair(ep.index, ep.clause));
 }
 
-static result_t check_rup(clause_t &c, const rups_t &rups)
+static bool run_rup(clause_t &c, const rups_t &rups)
 {
     for (const auto &i : rups) {
         const auto it = g_f.find(i);
 
         if (it == g_f.end()) {
-            std::cerr << "invalid RUP index " << i << std::endl;
-            return FAIL;
+            fail << "invalid RUP index " << i << " in step " << g_n_steps <<
+                    std::endl;
         }
 
         const auto &diff = minus(it->second, c);
 
         if (diff.size() == 0) {
-            return DONE;
+            return true;
         }
 
         if (diff.size() > 1) {
-            std::cerr << "non-unit clause for RUP index " << i << std::endl;
-            return FAIL;
+            fail << "non-unit clause for RUP index " << i << " in step " <<
+                    g_n_steps << std::endl;
         }
 
         c.push_back(flip_lit(diff.front()));
     }
 
-    return MORE;
+    return false;
 }
 
 static clause_t minus(const clause_t &c1, const clause_t &c2)
@@ -595,11 +539,11 @@ static clause_t minus(const clause_t &c1, const clause_t &c2)
     return diff;
 }
 
-static bool check_rat(clause_t &c, const rats_t &rats)
+static void run_rat(clause_t &c, const rats_t &rats)
 {
     if (c.empty()) {
-        std::cerr << "RAT check with empty clause" << std::endl;
-        return false;
+        fail << "RAT check with empty clause in step " << g_n_steps <<
+                std::endl;
     }
 
     literal_t l = c.front();
@@ -607,24 +551,11 @@ static bool check_rat(clause_t &c, const rats_t &rats)
     u32 i_rat = 0;
 
     for (const auto &[i, cf] : g_f) {
-        if (!needs_check(cf, not_l)) {
-            continue;
+        if (needs_check(cf, not_l)) {
+            check_rat_rup(cf, c, l, not_l, rats, i, i_rat);
+            ++i_rat;
         }
-
-        if (!validate_rats(rats, i_rat, i)) {
-            std::cerr << "invalid RAT hints at index " << i << std::endl;
-            return false;
-        }
-
-        if (!check_rat_rup(cf, c, l, not_l, rats[i_rat])) {
-            std::cerr << "RAT clause check failed at index " << i << std::endl;
-            return false;
-        }
-
-        ++i_rat;
     }
-
-    return true;
 }
 
 static bool needs_check(const clause_t &cf, const literal_t &not_l)
@@ -632,49 +563,44 @@ static bool needs_check(const clause_t &cf, const literal_t &not_l)
     return std::find(cf.cbegin(), cf.cend(), not_l) != cf.cend();
 }
 
-static bool validate_rats(const rats_t &rats, u32 i_rat, index_t i)
+static void check_rat_rup(const clause_t &cf, const clause_t &c,
+        const literal_t &l, const literal_t &not_l, const rats_t &rats,
+        index_t i, u32 i_rat)
 {
-    return i_rat < rats.size() && rats[i_rat].first == i;
+    if (i_rat >= rats.size() || rats[i_rat].first != i) {
+        fail << "invalid RAT hints in step " << g_n_steps << std::endl;
+    }
+
+    const rups_t &rups = rats[i_rat].second;
+
+    if (rups.empty()) {
+        check_complement(cf, c, l);
+    } else {
+        check_resolvent(cf, c, not_l, rups);
+    }
 }
 
-static bool check_rat_rup(const clause_t &cf, const clause_t &c,
-        const literal_t &l, const literal_t &not_l, const rat_t &rat)
-{
-    const rups_t &rups = rat.second;
-    return rups.empty() ?
-            check_clause_1(cf, c, l) : check_clause_2(cf, c, l, not_l, rups);
-}
-
-static bool check_clause_1(const clause_t &cf, const clause_t &c,
+static void check_complement(const clause_t &cf, const clause_t &c,
         const literal_t &l)
 {
-    // it's ok for |c| and |cf| to contain |not_l| and |l|, respectively, as
-    // it makes both clauses tautologies:
-    //   - |l| is |c|'s first literal by definition
-    //   - |not_l| is in |cf| as we made it past needs_check() to get here
     for (const auto &lc : c) {
         if (lc != l &&
                 std::find(cf.cbegin(), cf.cend(), flip_lit(lc)) != cf.cend()) {
-            return true;
+            return;
         }
     }
 
-    return false;
+    fail << "complement check failed in step " << g_n_steps << std::endl;
 }
 
-static bool check_clause_2(const clause_t &cf, const clause_t &c,
-        const literal_t &l, const literal_t &not_l, const rups_t &rups)
+static void check_resolvent(const clause_t &cf, const clause_t &c,
+        const literal_t &not_l, const rups_t &rups)
 {
-    // make sure that dropping empty hints in write_rats() doesn't confuse
-    // the Agda checker, which always runs check #1 and proceeds to check #2,
-    // if that failed
-    if (check_clause_1(cf, c, l)) {
-        std::cerr << "non-empty hints need check #1 to fail" << std::endl;
-        return false;
-    }
-
     clause_t &&cr = resolvent(c, cf, not_l);
-    return check_rup(cr, rups) == DONE;
+
+    if (!run_rup(cr, rups)) {
+        fail << "resolvent check failed in step " << g_n_steps << std::endl;
+    }
 }
 
 static clause_t resolvent(const clause_t &c, const clause_t &cf,
@@ -716,13 +642,12 @@ static void prepare(void)
     g_n_steps = 0;
 }
 
-static bool write_formula(const char *path)
+static void write_formula(const char *path)
 {
     std::ofstream ofs(path, std::ios::out | std::ios::binary | std::ios::trunc);
 
     if (!ofs.is_open()) {
-        std::cerr << "failed to create formula file " << path << std::endl;
-        return false;
+        fail << "failed to create formula file " << path << std::endl;
     }
 
     for (const auto &[i, cf] : g_f) {
@@ -732,52 +657,48 @@ static bool write_formula(const char *path)
         ofs << '\n';
     }
 
-    return ofs.good();
+    if (!ofs.good()) {
+        fail << "failed to write formula" << std::endl;
+    }
 }
 
-static bool convert_proof(const char *path_out, const char *path_in)
+static void convert_proof(const char *path_out, const char *path_in)
 {
     std::ifstream ifs(path_in, std::ios::in);
 
     if (!ifs.is_open()) {
-        std::cerr << "failed to open proof file " << path_in << std::endl;
-        return false;
+        fail << "failed to open proof file " << path_in << std::endl;
     }
 
     std::ofstream ofs(path_out,
             std::ios::out | std::ios::binary | std::ios::trunc);
 
     if (!ofs.is_open()) {
-        std::cerr << "failed to create proof file " << path_out << std::endl;
-        return false;
+        fail << "failed to create proof file " << path_out << std::endl;
     }
 
-    if (!write_parameter(ofs, g_bits_v) || !write_parameter(ofs, g_bits_c)) {
-        return false;
-    }
+    write_parameter(ofs, g_bits_v);
+    write_parameter(ofs, g_bits_c);
 
     while (true) {
-        ++g_n_steps;
         step_t s;
 
-        if (!read_step(s, ifs) || !remap_step(s) || !write_step(ofs, s)) {
-            return false;
-        }
-
-#if DEBUG > 0
-        std::cout << g_n_steps << std::endl;
-        show_formula();
-#endif
+        ++g_n_steps;
+        read_step(s, ifs);
+        remap_step(s);
+        write_step(ofs, s);
 
         if (s.type == EXTEND && s.extend.clause.empty()) {
             break;
         }
     }
 
-    return ofs.good();
+    if (!ofs.good()) {
+        fail << "failed to write proof" << std::endl;
+    }
 }
 
-static bool write_parameter(std::ofstream &ofs, u32 val)
+static void write_parameter(std::ofstream &ofs, u32 val)
 {
     ofs << 'P';
 
@@ -787,54 +708,37 @@ static bool write_parameter(std::ofstream &ofs, u32 val)
 
     ofs << '.';
     ofs << '\n';
-
-    return ofs.good();
 }
 
-static bool write_step(std::ofstream &ofs, const step_t &s)
+static void write_step(std::ofstream &ofs, const step_t &s)
 {
-    bool ok = s.type == DELETE ?
-            write_delete(ofs, s.delete_) : write_extend(ofs, s.extend);
-
-    if (!ok) {
-        std::cerr << "step " << g_n_steps << " failed" << std::endl;
-        return false;
+    if (s.type == DELETE) {
+        write_delete(ofs, s.delete_);
+    } else {
+        write_extend(ofs, s.extend);
     }
-
-    return true;
 }
 
-static bool write_delete(std::ofstream &ofs, const delete_t &dp)
+static void write_delete(std::ofstream &ofs, const delete_t &dp)
 {
     ofs << 'D';
-
-    if (!write_indices(ofs, dp.indices)) {
-        return false;
-    }
-
+    write_indices(ofs, dp.indices);
     ofs << '\n';
-    return ofs.good();
 }
 
-static bool write_extend(std::ofstream &ofs, const extend_t &ep)
+static void write_extend(std::ofstream &ofs, const extend_t &ep)
 {
     ofs << 'E';
-
-    if (!write_literals(ofs, ep.clause) ||
-            !write_indices(ofs, ep.rups) ||
-            !write_rats(ofs, ep.rats)) {
-        return false;
-    }
-
+    write_literals(ofs, ep.clause);
+    write_indices(ofs, ep.rups);
+    write_rats(ofs, ep.rats);
     ofs << '\n';
-    return ofs.good();
 }
 
-static bool write_literals(std::ofstream &ofs, const literals_t &ls)
+static void write_literals(std::ofstream &ofs, const literals_t &ls)
 {
     for (const auto &l : ls) {
         u32 mask = 1u << (g_bits_v - 1);
-
         ofs << 'L' << (l.first == POSITIVE ? '+' : '-');
 
         for (u32 b = 0; b < g_bits_v; ++b) {
@@ -844,14 +748,12 @@ static bool write_literals(std::ofstream &ofs, const literals_t &ls)
     }
 
     ofs << '.';
-    return ofs.good();
 }
 
-static bool write_indices(std::ofstream &ofs, const indices_t &is)
+static void write_indices(std::ofstream &ofs, const indices_t &is)
 {
     for (const auto &i : is) {
         u32 mask = 1u << (g_bits_c - 1);
-
         ofs << 'I';
 
         for (u32 b = 0; b < g_bits_c; ++b) {
@@ -861,10 +763,9 @@ static bool write_indices(std::ofstream &ofs, const indices_t &is)
     }
 
     ofs << '.';
-    return ofs.good();
 }
 
-static bool write_rats(std::ofstream &ofs, const rats_t &rats)
+static void write_rats(std::ofstream &ofs, const rats_t &rats)
 {
     for (u32 i_rat = 0; i_rat < rats.size(); ++i_rat) {
         const auto &[i, rups] = rats[i_rat];
@@ -872,13 +773,9 @@ static bool write_rats(std::ofstream &ofs, const rats_t &rats)
 
         if (!rups.empty()) {
             ofs << 'H';
-
-            if (!write_indices(ofs, rups)) {
-                return false;
-            }
+            write_indices(ofs, rups);
         }
     }
 
     ofs << '.';
-    return ofs.good();
 }
