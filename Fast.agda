@@ -13,7 +13,7 @@ open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Unit using (⊤ ; tt)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_ ; _++_ to _++ᵛ_)
 open import Function using (_$_ ; _∘_ ; id ; case_of_)
-open import Relation.Nullary using (_because_ ; ofʸ ; ofⁿ)
+open import Relation.Nullary using (yes ; no)
 
 import Correct as C
 
@@ -63,18 +63,18 @@ checkRUP _ _ _         | _       | _        = fail
 clauseCheck₁ : Literal → Clause → Bool
 clauseCheck₁ l c
   with flip l ∈? c
-... | false because ofⁿ _ = true
-... | true  because ofʸ _ = false
+... | no  _ = true
+... | yes _ = false
 
 clauseCheck₂ : Clause → Clause → Literal → Bool
 clauseCheck₂ []ˡ         _  _ = false
 clauseCheck₂ (l₁ ∷ˡ ls₁) c₂ l
   with l ≟ˡ l₁
-... | true  because ofʸ _ = clauseCheck₂ ls₁ c₂ l
-... | false because ofⁿ _
+... | yes _ = clauseCheck₂ ls₁ c₂ l
+... | no  _
   with flip l₁ ∈? c₂
-... | false because ofⁿ _ = clauseCheck₂ ls₁ c₂ l
-... | true  because ofʸ _ = true
+... | no  _ = clauseCheck₂ ls₁ c₂ l
+... | yes _ = true
 
 clauseCheck₃ : Formula → Literal → Clause → Clause → List (List Index) → List (List Index) × Bool
 clauseCheck₃ _ _ _  _ []ˡ           = []ˡ , false

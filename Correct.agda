@@ -26,7 +26,7 @@ open import Relation.Binary using (DecSetoid)
 open import Relation.Binary.PropositionalEquality
   using (_≡_ ; _≢_ ; refl ; sym ; ≢-sym ; inspect ; [_] ; cong ; subst ; trans ; decSetoid ;
     module ≡-Reasoning)
-open import Relation.Nullary using (Dec ; _because_ ; ofʸ ; ofⁿ)
+open import Relation.Nullary using (Dec ; _because_ ; ofʸ ; ofⁿ ; yes ; no)
 open import Relation.Nullary.Negation using (contradiction)
 
 open import Algebra.Properties.BooleanAlgebra ∨-∧-booleanAlgebra using (deMorgan₁ ; deMorgan₂)
@@ -266,19 +266,19 @@ allFlippedTrue a (lᶜ ∷ˡ lsᶜ) p
 removeLiteral : (c : Clause) → (l : Literal) → Clause
 removeLiteral []ˡ         _ = []ˡ
 removeLiteral (lᶜ ∷ˡ lsᶜ) l with lᶜ ≟ˡ l
-... | true  because ofʸ _ = removeLiteral lsᶜ l
-... | false because ofⁿ _ = lᶜ ∷ˡ removeLiteral lsᶜ l
+... | yes _ = removeLiteral lsᶜ l
+... | no  _ = lᶜ ∷ˡ removeLiteral lsᶜ l
 
 removeLiteral-∧-not : (a : Assignment) → (c : Clause) →  (l : Literal) →
   evalᶜ a c ∧ not (evalˡ a l) ≡ evalᶜ a (removeLiteral c l) ∧ not (evalˡ a l)
 removeLiteral-∧-not a []ˡ         _ = refl
 removeLiteral-∧-not a (lᶜ ∷ˡ lsᶜ) l with lᶜ ≟ˡ l
-... | true because ofʸ refl = begin
+... | yes refl = begin
   (evalˡ a lᶜ ∨ evalᶜ a lsᶜ) ∧ not (evalˡ a lᶜ)                  ≡⟨ ∧-distribʳ-∨ (not (evalˡ a lᶜ)) (evalˡ a lᶜ) (evalᶜ a lsᶜ) ⟩
   evalˡ a lᶜ ∧ not (evalˡ a lᶜ) ∨ evalᶜ a lsᶜ ∧ not (evalˡ a lᶜ) ≡⟨ cong (_∨ evalᶜ a lsᶜ ∧ not (evalˡ a lᶜ)) $ ∧-inverseʳ (evalˡ a lᶜ) ⟩
   evalᶜ a lsᶜ ∧ not (evalˡ a lᶜ)                                 ≡⟨ removeLiteral-∧-not a lsᶜ l  ⟩
   evalᶜ a (removeLiteral lsᶜ lᶜ) ∧ not (evalˡ a lᶜ)              ∎
-... | false because ofⁿ _ = begin
+... | no  _    = begin
   (evalˡ a lᶜ ∨ evalᶜ a lsᶜ) ∧ not (evalˡ a l)                                   ≡⟨ ∧-distribʳ-∨ (not (evalˡ a l)) (evalˡ a lᶜ) (evalᶜ a lsᶜ) ⟩
   evalˡ a lᶜ ∧ not (evalˡ a l) ∨ evalᶜ a lsᶜ ∧ not (evalˡ a l)                   ≡⟨ cong (evalˡ a lᶜ ∧ not (evalˡ a l) ∨_) $ removeLiteral-∧-not a lsᶜ l ⟩
   evalˡ a lᶜ ∧ not (evalˡ a l) ∨ evalᶜ a (removeLiteral lsᶜ l) ∧ not (evalˡ a l) ≡⟨ sym $ ∧-distribʳ-∨ (not (evalˡ a l)) (evalˡ a lᶜ) (evalᶜ a (removeLiteral lsᶜ l)) ⟩
@@ -288,11 +288,11 @@ removeLiteralTrue : (a : Assignment) → (c : Clause) → (l : Literal) →
   evalᶜ a (removeLiteral c l) ≡ true → evalᶜ a c ≡ true
 removeLiteralTrue a (lᶜ ∷ˡ lsᶜ) l p
   with lᶜ ≟ˡ l
-... | true  because ofʸ _ = begin
+... | yes _ = begin
   evalˡ a lᶜ ∨ evalᶜ a lsᶜ ≡⟨ cong (evalˡ a lᶜ ∨_) $ removeLiteralTrue a lsᶜ l p ⟩
   evalˡ a lᶜ ∨ true        ≡⟨ ∨-zeroʳ (evalˡ a lᶜ) ⟩
   true                     ∎
-... | false because ofⁿ q
+... | no  q
   with ∨-splitTrue (evalˡ a lᶜ) (evalᶜ a (removeLiteral lsᶜ l)) p
 ... | inj₁ r = begin
   evalˡ a lᶜ ∨ evalᶜ a lsᶜ ≡⟨ cong (_∨ evalᶜ a lsᶜ) $ r ⟩
@@ -306,8 +306,8 @@ removeLiteral-∉ : (l : Literal) → (c : Clause) → l ∉ removeLiteral c l
 removeLiteral-∉ _ []ˡ         = λ ()
 removeLiteral-∉ l (lᶜ ∷ˡ lsᶜ)
   with lᶜ ≟ˡ l
-... | true  because ofʸ _ = removeLiteral-∉ l lsᶜ
-... | false because ofⁿ p = λ where
+... | yes _ = removeLiteral-∉ l lsᶜ
+... | no  p = λ where
   (here q)  → contradiction (sym q) p
   (there q) → contradiction q (removeLiteral-∉ l lsᶜ)
 
