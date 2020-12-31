@@ -2,7 +2,7 @@ import Data.Nat
 
 module Parser where
 
-open Data.Nat using (ℕ ; zero ; suc)
+open Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
 
 open import Category.Monad using (RawMonad)
 open import Data.Bool using (Bool ; true ; false)
@@ -19,7 +19,7 @@ open import Level using (0ℓ)
 open RawMonad (monad {0ℓ})
 
 module _ (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
-  open import Correct bitsᵛ bitsᶜ using (
+  open import Correct bitsᶜ using (
       Proof ; Step ; del ; ext ;
       Clause ; Literal ; pos ; neg ;
       Formula ; Trie ; node ; leaf ; Index
@@ -36,6 +36,14 @@ module _ (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
     return $ true ∷ᵛ is , cs′
   parseBinary _           (suc n) = nothing
 
+  parseVariable : List Char → Maybe (ℕ × List Char)
+  parseVariable cs = map (map₁ vec⇒ℕ) $ parseBinary cs bitsᵛ
+    where
+    vec⇒ℕ : {n : ℕ} → Vec Bool n → ℕ
+    vec⇒ℕ {zero}  []ᵛ = zero
+    vec⇒ℕ {suc n} (true ∷ᵛ cs)  = vec⇒ℕ cs * 2 + 1
+    vec⇒ℕ {suc n} (false ∷ᵛ cs) = vec⇒ℕ cs * 2
+
   {-# TERMINATING #-}
   parseIndices : List Char → Maybe (List Index × List Char)
   parseIndices []ˡ         = nothing
@@ -49,10 +57,10 @@ module _ (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
   parseLiteral : List Char → Maybe (Literal × List Char)
   parseLiteral []ˡ         = nothing
   parseLiteral ('+' ∷ˡ cs) = do
-    (v , cs₁) ← parseBinary cs bitsᵛ
+    (v , cs₁) ← parseVariable cs
     return $ pos v , cs₁
   parseLiteral ('-' ∷ˡ cs) = do
-    (v , cs₁) ← parseBinary cs bitsᵛ
+    (v , cs₁) ← parseVariable cs
     return $ neg v , cs₁
   parseLiteral _           = nothing
 

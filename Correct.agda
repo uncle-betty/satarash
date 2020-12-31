@@ -1,6 +1,6 @@
 import Data.Nat
 
-module Correct (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
+module Correct (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc)
 
@@ -11,15 +11,14 @@ open import Data.Bool.Properties
       ∧-idem ; ∧-distribʳ-∨ ; ∧-distribˡ-∨ ; ∨-distribˡ-∧ ; ∧-inverseʳ ; ∨-∧-booleanAlgebra ;
       not-¬ ; ¬-not
     )
-  renaming (_≟_ to _≟ᵇ_)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++_ to _++ˡ_)
 open import Data.List.Relation.Unary.All using (All) renaming ([] to []ᵃ ; _∷_ to _∷ᵃ_)
 open import Data.List.Relation.Unary.Any using (Any ; here ; there)
 open import Data.Maybe using (Maybe ; just ; nothing) renaming (map to mapᵐ)
+open import Data.Nat.Properties using () renaming (_≟_ to _≟ⁿ_)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂ ; ∃)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
-open import Data.Vec.Properties using () renaming (≡-dec to ≡-decᵛ)
 open import Function using (_$_ ; _∘_ ; id ; case_of_)
 open import Level using (0ℓ)
 open import Relation.Binary using (DecSetoid)
@@ -33,7 +32,7 @@ open import Algebra.Properties.BooleanAlgebra ∨-∧-booleanAlgebra using (deMo
 open ≡-Reasoning
 
 Variable : Set
-Variable = Vec Bool bitsᵛ
+Variable = ℕ
 
 Assignment : Set
 Assignment = Variable → Bool
@@ -67,24 +66,21 @@ data Result (S T : Set) : Set where
   more : T → Result S T
   fail : Result S T
 
-posInjective : (v₁ v₂ : Vec Bool bitsᵛ) → pos v₁ ≡ pos v₂ → v₁ ≡ v₂
+posInjective : (v₁ v₂ : Variable) → pos v₁ ≡ pos v₂ → v₁ ≡ v₂
 posInjective v₁ v₂ refl = refl
 
-negInjective : (v₁ v₂ : Vec Bool bitsᵛ) → neg v₁ ≡ neg v₂ → v₁ ≡ v₂
+negInjective : (v₁ v₂ : Variable) → neg v₁ ≡ neg v₂ → v₁ ≡ v₂
 negInjective v₁ v₂ refl = refl
 
-infix 4 _≟ᵛ_ _≟ˡ_
-
-_≟ᵛ_ : (v₁ v₂ : Vec Bool bitsᵛ) → Dec (v₁ ≡ v₂)
-_≟ᵛ_ = ≡-decᵛ _≟ᵇ_
+infix 4 _≟ˡ_
 
 _≟ˡ_ : (l₁ l₂ : Literal) → Dec (l₁ ≡ l₂)
-pos v₁ ≟ˡ pos v₂ with v₁ ≟ᵛ v₂
+pos v₁ ≟ˡ pos v₂ with v₁ ≟ⁿ v₂
 ... | true  because ofʸ refl = true because ofʸ refl
 ... | false because ofⁿ p = false because ofⁿ (p ∘ posInjective v₁ v₂)
 pos _  ≟ˡ neg _  = false because ofⁿ λ ()
 neg _  ≟ˡ pos _  = false because ofⁿ λ ()
-neg v₁ ≟ˡ neg v₂ with v₁ ≟ᵛ v₂
+neg v₁ ≟ˡ neg v₂ with v₁ ≟ⁿ v₂
 ... | true  because ofʸ refl = true because ofʸ refl
 ... | false because ofⁿ p = false because ofⁿ (p ∘ negInjective v₁ v₂)
 
@@ -513,19 +509,19 @@ resolventTrue a l (lᶜ ∷ˡ lsᶜ) c₂ p₁ p₂
 
 adjust : Assignment → Variable → Bool → Assignment
 adjust a vᵃ b v
-  with v ≟ᵛ vᵃ
+  with v ≟ⁿ vᵃ
 ... | true  because ofʸ _ = b
 ... | false because ofⁿ _ = a v
 
 adjustSame : (a : Assignment) → (vᵃ : Variable) → (b : Bool) → (adjust a vᵃ b) vᵃ ≡ b
 adjustSame a vᵃ b
-  with vᵃ ≟ᵛ vᵃ
+  with vᵃ ≟ⁿ vᵃ
 ... | true  because ofʸ _ = refl
 ... | false because ofⁿ q = contradiction refl q
 
 adjustOther : (a : Assignment) → (vᵃ v : Variable) → (b : Bool) → vᵃ ≢ v → (adjust a vᵃ b) v ≡ a v
 adjustOther a vᵃ v b p
-  with v ≟ᵛ vᵃ
+  with v ≟ⁿ vᵃ
 ... | true  because ofʸ q = contradiction (sym q) p
 ... | false because ofⁿ _ = refl
 
@@ -540,7 +536,7 @@ forceTrueSame a (neg v) = cong not $ adjustSame a v false
 forceTrueOther : (l₁ l₂ : Literal) → (a : Assignment) → flip l₁ ≢ l₂ → evalˡ a l₂ ≡ true →
   evalˡ (forceTrue a l₁) l₂ ≡ true
 forceTrueOther (pos v₁) (pos v₂) a p₁ p₂
-  with v₂ ≟ᵛ v₁
+  with v₂ ≟ⁿ v₁
 ... | true  because ofʸ _ = refl
 ... | false because ofⁿ _ = p₂
 forceTrueOther (pos v₁) (neg v₂) a p₁ p₂ = begin
@@ -552,7 +548,7 @@ forceTrueOther (neg v₁) (pos v₂) a p₁ p₂ = begin
   a v₂                 ≡⟨ p₂ ⟩
   true                 ∎
 forceTrueOther (neg v₁) (neg v₂) a p₁ p₂
-  with v₂ ≟ᵛ v₁
+  with v₂ ≟ⁿ v₁
 ... | true  because ofʸ _ = refl
 ... | false because ofⁿ _ = p₂
 

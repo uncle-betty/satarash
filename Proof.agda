@@ -1,6 +1,6 @@
 import Data.Nat
 
-module Proof (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
+module Proof (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc)
 
@@ -26,7 +26,7 @@ open ≡-Reasoning
 import Correct as C
 import Fast as F
 
-open C bitsᵛ bitsᶜ using (
+open C bitsᶜ using (
     Variable ; Literal ; pos ; neg ; Clause ; Formula ;
     Trie ; leaf ; node ; Index ;
     Step ; del ; ext ; Proof ;
@@ -49,7 +49,7 @@ open C bitsᵛ bitsᶜ using (
     checkLRAT to C-checkLRAT
   )
 
-open F bitsᵛ bitsᶜ using (
+open F bitsᶜ using (
   ) renaming (
     checkRUP to F-checkRUP ;
     clauseCheck₁ to F-clauseCheck₁ ;

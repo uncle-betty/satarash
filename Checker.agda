@@ -21,7 +21,7 @@ runCheck fStr pStr = do
   (bitsᵛ , bitsᶜ , pStr′) ← parseParameters pStr
   proof ← parseProof bitsᵛ bitsᶜ pStr′
   formula ← parseFormula bitsᵛ bitsᶜ fStr
-  just $ checkLRAT bitsᵛ bitsᶜ formula proof
+  just $ checkLRAT bitsᶜ formula proof
   where
   open Data.Maybe using (_>>=_)
 

@@ -1,12 +1,13 @@
 import Data.Nat
 
-module Fast (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
+module Fast (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc)
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then_else_)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++_ to _++ˡ_)
 open import Data.Maybe using (Maybe ; just ; nothing)
+open import Data.Nat.Show using () renaming (show to showⁿ)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂)
 open import Data.String using (String) renaming (_++_ to _++ˢ_)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
@@ -17,7 +18,7 @@ open import Relation.Nullary using (yes ; no)
 
 import Correct as C
 
-open C bitsᵛ bitsᶜ using (
+open C bitsᶜ using (
     Variable ; Literal ; pos ; neg ; Clause ; Formula ;
     Trie ; leaf ; node ; Index ;
     Step ; del ; ext ; Proof ;
@@ -35,8 +36,8 @@ showBinary (true ∷ᵛ bs)  = "1" ++ˢ showBinary bs
 showBinary (false ∷ᵛ bs) = "0" ++ˢ showBinary bs
 
 showLiteral : Literal → String
-showLiteral (pos v) = "pos " ++ˢ showBinary v
-showLiteral (neg v) = "neg " ++ˢ showBinary v
+showLiteral (pos v) = "pos " ++ˢ showⁿ v
+showLiteral (neg v) = "neg " ++ˢ showⁿ v
 
 showClause : Clause → String
 showClause []ˡ        = ""
