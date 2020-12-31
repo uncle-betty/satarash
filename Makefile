@@ -11,7 +11,7 @@ FLAGS :=		-std=c++17 -Og -gdwarf-4 -fno-omit-frame-pointer \
 prep:			prep.o
 				$(CXX) $(FLAGS) -o prep prep.o
 
-Checker:		Checker.agda Parser.agda Fast.agda Correct.agda
+Checker:		Checker.agda Parser.agda Verifier.agda
 				agda --ghc Checker.agda
 
 clean:

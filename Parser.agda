@@ -19,7 +19,7 @@ open import Level using (0ℓ)
 open RawMonad (monad {0ℓ})
 
 module _ (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
-  open import Correct bitsᶜ using (
+  open import Verifier bitsᶜ using (
       Proof ; Step ; del ; ext ;
       Clause ; Literal ; pos ; neg ;
       Formula ; Trie ; node ; leaf ; Index

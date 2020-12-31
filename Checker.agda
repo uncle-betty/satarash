@@ -13,15 +13,16 @@ open import IO.Primitive using (IO ; readFiniteFile ; putStrLn)
 open import Level using (0ℓ ; Lift ; lift)
 
 open import Parser using (parseParameters ; parseProof ; parseFormula)
-open import Correct using (Formula ; Proof)
-open import Fast using (checkLRAT)
+open import Verifier using (Formula ; Proof ; checkLRAT)
 
 runCheck : String → String → Maybe Bool
 runCheck fStr pStr = do
   (bitsᵛ , bitsᶜ , pStr′) ← parseParameters pStr
   proof ← parseProof bitsᵛ bitsᶜ pStr′
   formula ← parseFormula bitsᵛ bitsᶜ fStr
-  just $ checkLRAT bitsᶜ formula proof
+  just $ case checkLRAT bitsᶜ formula proof of λ where
+    (just _) → true
+    nothing  → false
   where
   open Data.Maybe using (_>>=_)
 

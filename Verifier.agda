@@ -1,6 +1,6 @@
 import Data.Nat
 
-module Correct (bitsᶜ : Data.Nat.ℕ) where
+module Verifier (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc)
 
