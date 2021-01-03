@@ -37,7 +37,7 @@ runCheck fStr pStr = do
 main : IO ⊤
 main = do
   fPath ∷ pPath ∷ [] ← getArgs
-    where _ → putStrLn $ toCostring "usage: foobar.cnf foobar.lrat"
+    where _ → putStrLn $ toCostring "usage: Checker foobar.cnf foobar.lrat"
   fStr ← readFiniteFile fPath
   pStr ← readFiniteFile pPath
   case runCheck fStr pStr of λ where
