@@ -2,7 +2,7 @@ import Data.Nat
 
 module Verifier (bitsᶜ : Data.Nat.ℕ) where
 
-open Data.Nat using (ℕ ; zero ; suc)
+open Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then_else_)
 open import Data.Bool.Properties
@@ -16,9 +16,12 @@ open import Data.List.Relation.Unary.All using (All) renaming ([] to []ᵃ ; _�
 open import Data.List.Relation.Unary.Any using (Any ; here ; there)
 open import Data.Maybe using (Maybe ; just ; nothing) renaming (map to mapᵐ)
 open import Data.Nat.Properties using () renaming (_≟_ to _≟ⁿ_)
+open import Data.Nat.Show using () renaming (show to showⁿ)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂ ; ∃)
+open import Data.String using (String) renaming (_++_ to _++ˢ_)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
-open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
+open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_ ; _++_ to _++ᵛ_)
+open import Debug.Trace using (trace)
 open import Function using (_$_ ; _∘_ ; id ; case_of_)
 open import Level using (0ℓ)
 open import Relation.Binary using (DecSetoid)
@@ -65,6 +68,38 @@ data Result (S T : Set) : Set where
   done : S → Result S T
   more : T → Result S T
   fail : Result S T
+
+showBinary : {n : ℕ} → Vec Bool n → String
+showBinary bs = showⁿ (to-ℕ bs 0)
+  where
+  to-ℕ : {n : ℕ} → Vec Bool n → ℕ → ℕ
+  to-ℕ []ᵛ           a = a
+  to-ℕ (true ∷ᵛ bs)  a = to-ℕ bs (2 * a + 1)
+  to-ℕ (false ∷ᵛ bs) a = to-ℕ bs (2 * a)
+
+showLiteral : Literal → String
+showLiteral (pos v) = "pos " ++ˢ showⁿ v
+showLiteral (neg v) = "neg " ++ˢ showⁿ v
+
+showIndexList : List Index → String
+showIndexList []ˡ        = ""
+showIndexList (i ∷ˡ []ˡ) = showBinary i
+showIndexList (i ∷ˡ is)  = showBinary i ++ˢ " : " ++ˢ showIndexList is
+
+showIndexLists : List (List Index) → String
+showIndexLists []ˡ         = ""
+showIndexLists (is ∷ˡ iss) = showIndexList is ++ˢ "\n" ++ˢ showIndexLists iss
+
+showClause : Clause → String
+showClause []ˡ        = ""
+showClause (l ∷ˡ []ˡ) = showLiteral l
+showClause (l ∷ˡ ls)  = showLiteral l ++ˢ " : " ++ˢ showClause ls
+
+showTrie : {n m : ℕ} → Maybe (Trie n) → Vec Bool m → String
+showTrie nothing             is = ""
+showTrie (just (leaf c))     is = showBinary is ++ˢ " | " ++ˢ showClause c ++ˢ "\n"
+showTrie (just (node tˡ tʳ)) is =
+  showTrie tˡ (is ++ᵛ false ∷ᵛ []ᵛ) ++ˢ showTrie tʳ (is ++ᵛ true ∷ᵛ []ᵛ)
 
 posInjective : (v₁ v₂ : Variable) → pos v₁ ≡ pos v₂ → v₁ ≡ v₂
 posInjective v₁ v₂ refl = refl

@@ -2,145 +2,212 @@ import Data.Nat
 
 module Parser where
 
-open Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
-
 open import Category.Monad using (RawMonad)
 open import Data.Bool using (Bool ; true ; false)
-open import Data.Char using (Char)
-open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_)
-open import Data.Maybe using (Maybe ; nothing ; just ; map)
+open import Data.Char using (Char) renaming (_≟_ to _≟ᶜ_)
+open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ)
+open import Data.Maybe using (Maybe ; nothing ; just)
 open import Data.Maybe.Categorical using (monad)
+open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
+open import Data.Nat.DivMod using (_/_ ; _%_)
+open import Data.Nat.Properties using (<-strictTotalOrder ; +-comm)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
 open import Data.String using (String ; toList ; fromList)
-open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
-open import Function using (_$_)
+open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_ ; _++_ to _++ᵛ_)
+open import Debug.Trace using (trace)
+open import Function using (_$_ ; case_of_)
 open import Level using (0ℓ)
+open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; subst)
+open import Relation.Nullary using (yes ; no)
 
 open RawMonad (monad {0ℓ})
 
-module _ (bitsᵛ : Data.Nat.ℕ) (bitsᶜ : Data.Nat.ℕ) where
-  open import Verifier bitsᶜ using (
+open import Data.Tree.AVL.Sets <-strictTotalOrder using (
+    ⟨Set⟩
+  ) renaming (
+    empty to emptyˢ ; insert to insertˢ ; headTail to headTailˢ
+  )
+open import Data.Tree.AVL.Map <-strictTotalOrder using (
+    Map
+  ) renaming (
+    empty to emptyᵐ ; insert to insertᵐ ; lookup to lookupᵐ ; delete to deleteᵐ ;
+    initLast to initLastᵐ ; toList to toListᵐ
+  )
+
+digit : Char → Maybe ℕ
+digit '0' = just 0
+digit '1' = just 1
+digit '2' = just 2
+digit '3' = just 3
+digit '4' = just 4
+digit '5' = just 5
+digit '6' = just 6
+digit '7' = just 7
+digit '8' = just 8
+digit '9' = just 9
+digit _   = nothing
+
+known : List Char → List Char → Maybe (List Char)
+known []ˡ          _   = nothing
+known (' ' ∷ˡ cs)  []ˡ = just cs
+known ('\n' ∷ˡ cs) []ˡ = just cs
+known (_ ∷ˡ _)     []ˡ = nothing
+known (c ∷ˡ cs) (e ∷ˡ es)
+  with c ≟ᶜ e
+... | yes _ = known cs es
+... | no  _ = nothing
+
+natural : List Char → ℕ → Maybe (ℕ × List Char)
+natural []ˡ          _   = nothing
+natural (' ' ∷ˡ cs)  acc = just $ acc , cs
+natural ('\n' ∷ˡ cs) acc = just $ acc , cs
+natural (c ∷ˡ cs)    acc = do
+  d ← digit c
+  natural cs (10 * acc + d)
+
+integer : List Char → Maybe (Bool × ℕ × List Char)
+integer []ˡ         = nothing
+integer ('-' ∷ˡ cs) = do
+  n ← natural cs 0
+  return $ true , n
+integer (c ∷ˡ cs)   = do
+  d ← digit c
+  n ← natural cs d
+  return $ false , n
+
+module _ (bitsᶜ : Data.Nat.ℕ) where
+  open import Verifier bitsᶜ as V using (
       Proof ; Step ; del ; ext ;
       Clause ; Literal ; pos ; neg ;
       Formula ; Trie ; node ; leaf ; Index
     )
 
-  parseBinary : List Char → (n : ℕ) → Maybe (Vec Bool n × List Char)
-  parseBinary cs          zero    = just $ []ᵛ , cs
-  parseBinary []ˡ         (suc n) = nothing
-  parseBinary ('0' ∷ˡ cs) (suc n) = do
-    (is , cs′) ← parseBinary cs n
-    return $ false ∷ᵛ is , cs′
-  parseBinary ('1' ∷ˡ cs) (suc n) = do
-    (is , cs′) ← parseBinary cs n
-    return $ true ∷ᵛ is , cs′
-  parseBinary _           (suc n) = nothing
+  Translator : Set
+  Translator = Map ℕ
 
-  parseVariable : List Char → Maybe (ℕ × List Char)
-  parseVariable cs = map (map₁ vec⇒ℕ) $ parseBinary cs bitsᵛ
-    where
-    vec⇒ℕ : {n : ℕ} → Vec Bool n → ℕ
-    vec⇒ℕ {zero}  []ᵛ = zero
-    vec⇒ℕ {suc n} (true ∷ᵛ cs)  = vec⇒ℕ cs * 2 + 1
-    vec⇒ℕ {suc n} (false ∷ᵛ cs) = vec⇒ℕ cs * 2
+  Recycler : Set
+  Recycler = ⟨Set⟩
 
   {-# TERMINATING #-}
-  parseIndices : List Char → Maybe (List Index × List Char)
-  parseIndices []ˡ         = nothing
-  parseIndices ('I' ∷ˡ cs) = do
-    (i , cs₁) ← parseBinary cs bitsᶜ
-    (is , cs₂) ← parseIndices cs₁
-    return $ i ∷ˡ is , cs₂
-  parseIndices ('.' ∷ˡ cs) = just $ []ˡ , cs
-  parseIndices _           = nothing
-
-  parseLiteral : List Char → Maybe (Literal × List Char)
-  parseLiteral []ˡ         = nothing
-  parseLiteral ('+' ∷ˡ cs) = do
-    (v , cs₁) ← parseVariable cs
-    return $ pos v , cs₁
-  parseLiteral ('-' ∷ˡ cs) = do
-    (v , cs₁) ← parseVariable cs
-    return $ neg v , cs₁
-  parseLiteral _           = nothing
+  klause : List Char → Maybe (Clause × List Char)
+  klause cs = integer cs >>= λ where
+    (_     , zero  , cs) → just $ []ˡ , cs
+    (false , suc v , cs) → do
+      k , cs ← klause cs
+      return $ pos v ∷ˡ k , cs
+    (true ,  suc v , cs) → do
+      k , cs ← klause cs
+      return $ neg v ∷ˡ k , cs
 
   {-# TERMINATING #-}
-  parseLiterals : List Char → Maybe (List Literal × List Char)
-  parseLiterals []ˡ         = nothing
-  parseLiterals ('L' ∷ˡ cs) = do
-    (l , cs₁) ← parseLiteral cs
-    (ls , cs₂) ← parseLiterals cs₁
-    return $ l ∷ˡ ls , cs₂
-  parseLiterals ('.' ∷ˡ cs) = just $ []ˡ , cs
-  parseLiterals _           = nothing
+  formula′ : List Char → Formula → ℕ → Translator → Maybe (Formula × Translator)
+  formula′ []ˡ         f n t = return $ f , t
+  formula′ cs@(_ ∷ˡ _) f n t = do
+    k , cs ← klause cs
+    f ← V.insert f k
+    let t = insertᵐ (suc n) n t
+    formula′ cs f (suc n) t
+
+  formula : List Char → Maybe (Formula × Translator)
+  formula cs = do
+    cs ← known cs (toList "p")
+    cs ← known cs (toList "cnf")
+    _ , cs ← natural cs 0
+    _ , cs ← natural cs 0
+    formula′ cs nothing zero emptyᵐ
+
+  lsb : ℕ → Bool
+  lsb x = case x % 2 of λ where
+    zero    → false
+    (suc _) → true
+
+  shr : ℕ → ℕ
+  shr x = x / 2
+
+  bin : (n : ℕ) → ℕ → Vec Bool n
+  bin zero    _ = []ᵛ
+  bin (suc n) x = subst (Vec Bool) (+-comm n 1) (bin n (shr x) ++ᵛ lsb x ∷ᵛ []ᵛ)
 
   {-# TERMINATING #-}
-  parseHints : List Char → Maybe (List (List Index) × List Char)
-  parseHints []ˡ         = nothing
-  parseHints ('H' ∷ˡ cs) = do
-    (is , cs₁) ← parseIndices cs
-    (iss , cs₂) ← parseHints cs₁
-    return $ is ∷ˡ iss , cs₂
-  parseHints ('.' ∷ˡ cs) = just $ []ˡ , cs
-  parseHints _           = nothing
+  delete : List Char → Translator → Recycler →
+    Maybe (List Index × List Char × Translator × Recycler)
+  delete cs t r = natural cs 0 >>= λ where
+    (zero , cs)       → return $ []ˡ , cs , t , r
+    (x₀@(suc _) , cs) → do
+      x ← lookupᵐ x₀ t
+      let t = deleteᵐ x₀ t
+      let r = insertˢ x r
+      is , cs , t , r ← delete cs t r
+      return $ bin bitsᶜ x ∷ˡ is , cs , t , r
 
   {-# TERMINATING #-}
-  parseProof′ : List Char → Maybe (List Step × List Char)
-  parseProof′ []ˡ          = just $ []ˡ , []ˡ
-  parseProof′ ('D' ∷ˡ cs)  = do
-    (is , cs₁) ← parseIndices cs
-    (ss , cs₂) ← parseProof′ cs₁
-    return $ del is ∷ˡ ss , cs₂
-  parseProof′ ('E' ∷ˡ cs)  = do
-    (ls , cs₁) ← parseLiterals cs
-    (is , cs₂) ← parseIndices cs₁
-    (hs , cs₃) ← parseHints cs₂
-    (ss , cs₄) ← parseProof′ cs₃
-    return $ ext ls is hs ∷ˡ ss , cs₄
-  parseProof′ ('\n' ∷ˡ cs) = parseProof′ cs
-  parseProof′ _            = nothing
+  indexList : List Char → Translator → Maybe (List Index × ℕ × List Char)
+  indexList cs t = integer cs >>= λ where
+    (_     , zero , cs) → return $ []ˡ , zero , cs
+    (true  , x₀   , cs) → return $ []ˡ , x₀   , cs
+    (false , x₀   , cs) → do
+      x ← lookupᵐ x₀ t
+      is , x₀ , cs ← indexList cs t
+      return $ bin bitsᶜ x ∷ˡ is , x₀ , cs
 
-  parseProof : String → Maybe Proof
-  parseProof s = parseProof′ (toList s) >>= λ where
-    (p , []ˡ) → just p
-    _         → nothing
+  -- the |Map| keeps the |is|s ordered by mapped indices; also: we drop empty |is|s
+  {-# TERMINATING #-}
+  indexLists : List Char → ℕ → Translator → Maybe (Map (List Index) × List Char)
+  indexLists cs x t = indexList cs t >>= λ where
+    ([]ˡ , zero       , cs) → return $ emptyᵐ , cs
+    (is  , zero       , cs) → return $ insertᵐ x is emptyᵐ , cs
+    ([]ˡ , x₀@(suc _) , cs) → do
+      x ← lookupᵐ x₀ t
+      indexLists cs x t
+    (is  , x₀@(suc _) , cs) → do
+      let insert = insertᵐ x is
+      x ← lookupᵐ x₀ t
+      mis , cs ← indexLists cs x t
+      return $ insert mis , cs
 
-  parseFormula′ : (n : ℕ) → List Char → Maybe (Maybe (Trie n) × List Char)
-  parseFormula′ zero    []ˡ          = just $ nothing , []ˡ
-  parseFormula′ zero    ('C' ∷ˡ cs)  = do
-    (ls , cs′) ← parseLiterals cs
-    return $ just (leaf ls) , cs′
-  parseFormula′ zero    ('\n' ∷ˡ cs) = parseFormula′ zero cs
-  parseFormula′ zero    _            = nothing
-  parseFormula′ (suc n) cs           = do
-    (tˡ , cs₁) ← parseFormula′ n cs
-    (tʳ , cs₂) ← parseFormula′ n cs₁
-    return $ just (node tˡ tʳ) , cs₂
+  extend : List Char → ℕ → Translator → Recycler → ℕ →
+    Maybe (Clause × List Index × List (List Index) × List Char × Translator × Recycler × ℕ)
+  extend cs x₀ t r m = do
+    let x , r , m = case headTailˢ r of λ {(just (x , r)) → x , r , m ; nothing → suc m , r , suc m}
+    let t = insertᵐ x₀ x t
+    k , cs ← klause cs
+    is , x₀ , cs ← indexList cs t
+    case x₀ of λ where
+      zero    → return $ k , is , []ˡ , cs , t , r , m
+      (suc _) → do
+        x ← lookupᵐ x₀ t
+        mis , cs ← indexLists cs x t
+        let iss = mapˡ proj₂ $ toListᵐ mis
+        return $ k , is , iss , cs , t , r , m
 
-  parseFormula : String → Maybe Formula
-  parseFormula s = parseFormula′ bitsᶜ (toList s) >>= λ where
-    (f , []ˡ) → just f
-    _         → nothing
+  proof′ : List Char → Translator → Recycler → ℕ → Maybe (Proof × Translator × Recycler × ℕ)
 
-parseUnary : List Char → Maybe (ℕ × List Char)
-parseUnary []ˡ       = nothing
-parseUnary ('+' ∷ˡ cs) = do
-  (n , cs′) ← parseUnary cs
-  return $ (suc n , cs′)
-parseUnary ('.' ∷ˡ cs) = return $ zero , cs
-parseUnary _           = nothing
+  {-# TERMINATING #-}
+  proof″ : List Char → ℕ → Translator → Recycler → ℕ → Maybe (Proof × Translator × Recycler × ℕ)
+  proof″ []ˡ         x₀ t r m = nothing
+  proof″ ('d' ∷ˡ cs) x₀ t r m = do
+    cs ← known cs []ˡ
+    is , cs , t , r ← delete cs t r
+    p , t , r ,  m ← proof′ cs t r m
+    return $ del is ∷ˡ p , t , r , m
+  proof″ cs@(_ ∷ˡ _) x₀ t r m = do
+    k , is , iss , cs , t , r , m ← extend cs x₀ t r m
+    p , t , r , m ← proof′ cs t r m
+    return $ ext k is iss ∷ˡ p , t , r , m
 
-parseParameter : List Char → Maybe (ℕ × List Char)
-parseParameter []ˡ          = nothing
-parseParameter ('P' ∷ˡ cs)  = parseUnary cs
-parseParameter ('\n' ∷ˡ cs) = parseParameter cs
-parseParameter _            = nothing
+  proof′ []ˡ         t r m = return $ []ˡ , t , r , m
+  proof′ cs@(_ ∷ˡ _) t r m = do
+    x₀ , cs ← natural cs 0
+    proof″ cs x₀ t r m
 
-parseParameters′ : List Char → Maybe (ℕ × ℕ × List Char)
-parseParameters′ cs = do
-  (bitsᵛ , cs₁) ← parseParameter cs
-  (bitsᶜ , cs₂) ← parseParameter cs₁
-  return $ bitsᵛ , bitsᶜ , cs₂
+  proof : List Char → Translator → Maybe Proof
+  proof cs t = do
+    _ , _ , m ← initLastᵐ t
+    p , _ , _ , _ ← proof′ cs t emptyˢ m
+    return p
 
-parseParameters : String → Maybe (ℕ × ℕ × String)
-parseParameters s = map (map₂ (map₂ fromList)) $ parseParameters′ (toList s)
+  parse : String → String → Maybe (Formula × Proof)
+  parse f p = do
+    f , t ← formula (toList f)
+    p ← proof (toList p) t
+    return $ f , p
