@@ -69,7 +69,6 @@ public:
 };
 
 #define fail fail_{}
-#define DEBUG 0
 
 // --- Macros and inline functions ---------------------------------------------
 
@@ -83,16 +82,7 @@ static u32 g_n_steps = 0;
 static index_map_t g_index_map;
 static recycler_t g_recycler;
 
-static u32 g_bits_v;
-static u32 g_bits_c;
-
 // --- Helper declarations -----------------------------------------------------
-
-#if DEBUG > 0
-static void show_binary(u32 val, u32 n_bits);
-static void show_clause(const clause_t &c);
-static void show_formula(void);
-#endif
 
 static literal_t make_lit(i64 val);
 static literal_t flip_lit(const literal_t &l);
@@ -132,83 +122,21 @@ static void check_complement(const clause_t &cf, const clause_t &c, const litera
 static void check_resolvent(const clause_t &cf, const clause_t &c, const literal_t &not_l, const rups_t &rups);
 static clause_t resolvent(const clause_t &c, const clause_t &cf, const literal_t &not_l);
 
-static void prepare(void);
-static void write_formula(const char *path);
-static void convert_proof(const char *path_out, const char *path_in);
-static void write_parameter(std::ofstream &ofs , u32 val);
-static void write_step(std::ofstream &ofs, const step_t &s);
-static void write_delete(std::ofstream &ofs, const delete_t &dp);
-static void write_extend(std::ofstream &ofs, const extend_t &ep);
-static void write_literals(std::ofstream &ofs, const clause_t &c);
-static void write_indices(std::ofstream &ofs, const indices_t &is);
-static void write_rats(std::ofstream &ofs, const rats_t &rats);
-
 // --- API ---------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3 || argc > 5) {
-        fail << "usage: prep formula proof [proof' [formula']]" << std::endl;
+    if (argc != 3) {
+        fail << "usage: checker foobar.cnf foobar.lrat" << std::endl;
     }
 
     read_formula(argv[1]);
     check_proof(argv[2]);
 
-    if (argc == 3) {
-        return 0;
-    }
-
-    prepare();
-    read_formula(argv[1]);
-
-    if (argc == 5) {
-        write_formula(argv[4]);
-    }
-
-    convert_proof(argv[3], argv[2]);
     return 0;
 }
 
 // --- Helpers -----------------------------------------------------------------
-
-#if DEBUG > 0
-static void show_binary(u32 val, u32 n_bits)
-{
-    u32 mask = 1u << (n_bits - 1);
-
-    for (u32 b = 0; b < n_bits; ++b) {
-        std::cout << ((val & mask) == 0 ? "0" : "1");
-        mask >>= 1;
-    }
-}
-
-static void show_clause(const clause_t &c)
-{
-    bool first = true;
-
-    for (const auto &lc : c) {
-        if (first) {
-            first = false;
-        } else {
-            std::cout << " : ";
-        }
-
-        std::cout << (lc.first == POSITIVE ? "pos " : "neg ");
-        show_binary(lc.second, g_bits_v);
-    }
-
-    std::cout << std::endl;
-}
-
-static void show_formula(void)
-{
-    for (const auto &[i, cf] : g_f) {
-        show_binary(i, g_bits_c);
-        std::cout << " | ";
-        show_clause(cf);
-    }
-}
-#endif
 
 static literal_t make_lit(i64 val)
 {
@@ -615,167 +543,4 @@ static clause_t resolvent(const clause_t &c, const clause_t &cf,
     }
 
     return cr;
-}
-
-static void prepare(void)
-{
-    --g_n_vars;
-    --g_n_clauses;
-
-    while (g_n_vars != 0) {
-        ++g_bits_v;
-        g_n_vars >>= 1;
-    }
-
-    while (g_n_clauses != 0) {
-        ++g_bits_c;
-        g_n_clauses >>= 1;
-    }
-
-    g_f.clear();
-    g_index_map.clear();
-
-    while (!g_recycler.empty()) {
-        g_recycler.pop();
-    }
-
-    g_n_steps = 0;
-}
-
-static void write_formula(const char *path)
-{
-    std::ofstream ofs(path, std::ios::out | std::ios::binary | std::ios::trunc);
-
-    if (!ofs.is_open()) {
-        fail << "failed to create formula file " << path << std::endl;
-    }
-
-    for (const auto &[i, cf] : g_f) {
-        (void)i;
-        ofs << 'C';
-        write_literals(ofs, cf);
-        ofs << '\n';
-    }
-
-    if (!ofs.good()) {
-        fail << "failed to write formula" << std::endl;
-    }
-}
-
-static void convert_proof(const char *path_out, const char *path_in)
-{
-    std::ifstream ifs(path_in, std::ios::in);
-
-    if (!ifs.is_open()) {
-        fail << "failed to open proof file " << path_in << std::endl;
-    }
-
-    std::ofstream ofs(path_out,
-            std::ios::out | std::ios::binary | std::ios::trunc);
-
-    if (!ofs.is_open()) {
-        fail << "failed to create proof file " << path_out << std::endl;
-    }
-
-    write_parameter(ofs, g_bits_v);
-    write_parameter(ofs, g_bits_c);
-
-    while (true) {
-        step_t s;
-
-        ++g_n_steps;
-        read_step(s, ifs);
-        remap_step(s);
-        write_step(ofs, s);
-
-        if (s.type == EXTEND && s.extend.clause.empty()) {
-            break;
-        }
-    }
-
-    if (!ofs.good()) {
-        fail << "failed to write proof" << std::endl;
-    }
-}
-
-static void write_parameter(std::ofstream &ofs, u32 val)
-{
-    ofs << 'P';
-
-    while (val-- > 0) {
-        ofs << '+';
-    }
-
-    ofs << '.';
-    ofs << '\n';
-}
-
-static void write_step(std::ofstream &ofs, const step_t &s)
-{
-    if (s.type == DELETE) {
-        write_delete(ofs, s.delete_);
-    } else {
-        write_extend(ofs, s.extend);
-    }
-}
-
-static void write_delete(std::ofstream &ofs, const delete_t &dp)
-{
-    ofs << 'D';
-    write_indices(ofs, dp.indices);
-    ofs << '\n';
-}
-
-static void write_extend(std::ofstream &ofs, const extend_t &ep)
-{
-    ofs << 'E';
-    write_literals(ofs, ep.clause);
-    write_indices(ofs, ep.rups);
-    write_rats(ofs, ep.rats);
-    ofs << '\n';
-}
-
-static void write_literals(std::ofstream &ofs, const literals_t &ls)
-{
-    for (const auto &l : ls) {
-        u32 mask = 1u << (g_bits_v - 1);
-        ofs << 'L' << (l.first == POSITIVE ? '+' : '-');
-
-        for (u32 b = 0; b < g_bits_v; ++b) {
-            ofs << ((l.second & mask) == 0 ? '0' : '1');
-            mask >>= 1;
-        }
-    }
-
-    ofs << '.';
-}
-
-static void write_indices(std::ofstream &ofs, const indices_t &is)
-{
-    for (const auto &i : is) {
-        u32 mask = 1u << (g_bits_c - 1);
-        ofs << 'I';
-
-        for (u32 b = 0; b < g_bits_c; ++b) {
-            ofs << ((i & mask) == 0 ? '0' : '1');
-            mask >>= 1;
-        }
-    }
-
-    ofs << '.';
-}
-
-static void write_rats(std::ofstream &ofs, const rats_t &rats)
-{
-    for (u32 i_rat = 0; i_rat < rats.size(); ++i_rat) {
-        const auto &[i, rups] = rats[i_rat];
-        (void)i;
-
-        if (!rups.empty()) {
-            ofs << 'H';
-            write_indices(ofs, rups);
-        }
-    }
-
-    ofs << '.';
 }

@@ -8,13 +8,13 @@ FLAGS :=		-std=c++17 -Og -gdwarf-4 -fno-omit-frame-pointer \
 %.o:			%.cc
 				$(CXX) $(FLAGS) -c -o $@ $<
 
-prep:			prep.o
-				$(CXX) $(FLAGS) -o prep prep.o
+checker:		checker.o
+				$(CXX) $(FLAGS) -o checker checker.o
 
 Checker:		Checker.agda Parser.agda Verifier.agda
 				agda --ghc Checker.agda
 
 clean:
-				rm -f prep prep.o
+				rm -f checker checker.o
 				rm -f Checker
 				rm -rf _build MAlonzo
