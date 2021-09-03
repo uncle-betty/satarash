@@ -1,10 +1,6 @@
-compile_commands.json
-*.swp
-*.o
-*.blif
-*.cnf
-*.drat
-*.lrat
+/compile_commands.json
+/*.swp
+/*.o
 /checker
 /Checker
 /_build/*
