@@ -21,7 +21,6 @@ open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂
 open import Data.String using (String) renaming (_++_ to _++ˢ_)
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_ ; _++_ to _++ᵛ_)
-open import Debug.Trace using (trace)
 open import Function using (_$_ ; _∘_ ; id ; case_of_)
 open import Level using (0ℓ)
 open import Relation.Binary using (DecSetoid)
