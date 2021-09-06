@@ -46,6 +46,24 @@ that for all assignments `a` to the variables in `f`, `f` evaluates to *false*.
 In other words, bugs in Sataraš may make it reject a valid LRAT proof, but
 won't ever make it accept an invalid LRAT proof.
 
+In LRAT proofs, the clauses of a formula are identified by unbounded numeric
+indices. Sataraš represents these indices as fixed-length bit vectors, i.e., in
+binary form, and keeps the clauses in a trie. The length of the bit vectors is
+given by `bitsᶜ` in `Checker.agda`. By default, `bitsᶜ` is 24, which is good
+for proofs with up to ~16.8 million clauses. If necessary, it can be increased.
+
+When a proof step deletes a clause from the CNF, Sataraš records its index, so
+that it can be reused when subsequent proof steps add new clauses to the CNF.
+So, when the LRAT proof simply assigns a new index to an added clause, Sataraš
+reuses an old index, if available. This leads to a discrepancy in indices
+between the LRAT proof and Sataraš's internal representation and we need a
+mapping to bridge this discrepancy. This mapping is a `Translator` (in
+`Parser.agda`). Indices of deleted clauses are collected for future reuse in a
+`Recycler` (also in `Parser.agda`). The idea is to be economic about indices as
+they aren't unbounded in Sataraš. This allows for a lower `bitsᶜ` and thus for
+quicker trie lookups. This tweak is the only major deviation from the
+verification algorithm in the above paper.
+
 Let's take a look at the `mul_com.v` example in the `test` subdirectory to see
 how things fit together. The file contains the Verilog description of a
 combinational circuit (= a Boolean formula) that outputs (= evaluates to)
