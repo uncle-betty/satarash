@@ -30,7 +30,8 @@ open import Relation.Binary.PropositionalEquality
 open import Relation.Nullary using (Dec ; _because_ ; ofʸ ; ofⁿ ; yes ; no)
 open import Relation.Nullary.Negation using (contradiction)
 
-open import Algebra.Properties.BooleanAlgebra ∨-∧-booleanAlgebra using (deMorgan₁ ; deMorgan₂)
+open import Algebra.Lattice.Properties.BooleanAlgebra ∨-∧-booleanAlgebra
+  using (deMorgan₁ ; deMorgan₂)
 open ≡-Reasoning
 
 Variable : Set
