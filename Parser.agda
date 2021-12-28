@@ -21,17 +21,109 @@ open import Relation.Nullary using (yes ; no)
 
 open RawMonad (monad {0ℓ})
 
-open import Data.Tree.AVL.Sets <-strictTotalOrder using (
-    ⟨Set⟩
-  ) renaming (
-    empty to emptyˢ ; insert to insertˢ ; headTail to headTailˢ
-  )
-open import Data.Tree.AVL.Map <-strictTotalOrder using (
-    Map
-  ) renaming (
-    empty to emptyᵐ ; insert to insertᵐ ; lookup to lookupᵐ ; delete to deleteᵐ ;
-    initLast to initLastᵐ ; toList to toListᵐ
-  )
+module AgdaSetMap where
+  open import Data.Tree.AVL.Sets <-strictTotalOrder using (
+      ⟨Set⟩
+    ) renaming (
+      empty to emptyˢ ; insert to insertˢ ; headTail to headTailˢ
+    ) public
+
+  open import Data.Tree.AVL.Map <-strictTotalOrder using (
+      Map
+    ) renaming (
+      empty to emptyᵐ ; insert to insertᵐ ; lookup to lookupᵐ ; delete to deleteᵐ ;
+      initLast to initLastᵐ ; toList to toListᵐ
+    ) public
+
+module HaskellSetMap where
+  {-# FOREIGN GHC
+    import qualified Data.List
+    import qualified Data.Map
+    import qualified Data.Set
+
+    data HeadTail = HeadTail Integer (Data.Set.Set Integer)
+    data InitLast a = InitLast (Data.Map.Map Integer a) Integer a
+    data KeyValue a = KeyValue Integer a
+
+    headTailAux :: Data.Set.Set Integer -> Maybe HeadTail
+    headTailAux s =
+      if (Data.Set.null s) then
+        Nothing
+      else
+        let (n, s') = Data.Set.deleteFindMin s in
+        Just (HeadTail n s')
+
+    initLastAux :: Data.Map.Map Integer a -> Maybe (InitLast a)
+    initLastAux m =
+      if (Data.Map.null m) then
+        Nothing
+      else
+        let ((k, v), m') = Data.Map.deleteFindMax m in
+        Just (InitLast m' k v)
+
+    toListAux :: Data.Map.Map Integer a -> [KeyValue a]
+    toListAux m = Data.List.map (uncurry KeyValue) (Data.Map.toList m)
+  #-}
+
+  postulate ⟨Set⟩′ : (S : Set) → Set
+
+  ⟨Set⟩ : Set
+  ⟨Set⟩ = ⟨Set⟩′ ℕ
+
+  data HeadTail : Set where
+    headTail : ℕ → ⟨Set⟩ → HeadTail
+
+  {-# COMPILE GHC ⟨Set⟩′ = type Data.Set.Set #-}
+  {-# COMPILE GHC HeadTail = data HeadTail (HeadTail) #-}
+
+  postulate emptyˢ : ⟨Set⟩
+  postulate insertˢ : ℕ → ⟨Set⟩ → ⟨Set⟩
+  postulate headTailAux : ⟨Set⟩ → Maybe HeadTail
+
+  {-# COMPILE GHC emptyˢ = Data.Set.empty #-}
+  {-# COMPILE GHC insertˢ = Data.Set.insert #-}
+  {-# COMPILE GHC headTailAux = headTailAux #-}
+
+  headTailˢ : ⟨Set⟩ → Maybe (ℕ × ⟨Set⟩)
+  headTailˢ r = mapᵐ (λ { (headTail n r′) → n , r′ }) (headTailAux r)
+
+  postulate Map′ : (S T : Set) → Set
+
+  Map : (S : Set) → Set
+  Map = Map′ ℕ
+
+  data InitLast (S : Set) : Set where
+    initLast : Map S → ℕ → S → InitLast S
+
+  data KeyValue (S : Set) : Set where
+    keyValue : ℕ → S → KeyValue S
+
+  {-# COMPILE GHC Map′ = type Data.Map.Map #-}
+  {-# COMPILE GHC InitLast = data InitLast (InitLast) #-}
+  {-# COMPILE GHC KeyValue = data KeyValue (KeyValue) #-}
+
+  postulate emptyᵐ : {S : Set} → Map S
+  postulate insertᵐ : {S : Set} → ℕ → S → Map S → Map S
+  postulate lookupᵐ : {S : Set} → ℕ → Map S → Maybe S
+  postulate deleteᵐ : {S : Set} → ℕ → Map S → Map S
+  postulate initLastAux : {S : Set} → Map S → Maybe (InitLast S)
+  postulate toListAux : {S : Set} → Map S → List (KeyValue S)
+
+  {-# COMPILE GHC emptyᵐ = \_ -> Data.Map.empty #-}
+  {-# COMPILE GHC insertᵐ = \_ -> Data.Map.insert #-}
+  {-# COMPILE GHC lookupᵐ = \_ -> Data.Map.lookup #-}
+  {-# COMPILE GHC deleteᵐ = \_ -> Data.Map.delete #-}
+  {-# COMPILE GHC initLastAux = \_ -> initLastAux #-}
+  {-# COMPILE GHC toListAux = \_ -> toListAux #-}
+
+  initLastᵐ : {S : Set} → Map S → Maybe (Map S × (ℕ × S))
+  initLastᵐ t = mapᵐ (λ { (initLast t′ k v) → t′ , (k , v) }) (initLastAux t)
+
+  toListᵐ : {S : Set} → Map S → List (ℕ × S)
+  toListᵐ t = mapˡ (λ { (keyValue k v) → k , v }) (toListAux t)
+
+-- open AgdaSetMap instead for slower implementation in Agda
+open HaskellSetMap
 
 digit : Char → Maybe ℕ
 digit '0' = just 0
