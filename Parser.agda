@@ -6,14 +6,14 @@ open import Category.Monad using (RawMonad)
 open import Data.Bool using (Bool ; true ; false)
 open import Data.Char using (Char) renaming (_≟_ to _≟ᶜ_)
 open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ)
-open import Data.Maybe using (Maybe ; nothing ; just)
+open import Data.Maybe using (Maybe ; nothing ; just) renaming (map to mapᵐ)
 open import Data.Maybe.Categorical using (monad)
 open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
 open import Data.Nat.DivMod using (_/_ ; _%_)
 open import Data.Nat.Properties using (<-strictTotalOrder ; +-comm)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
 open import Data.String using (String ; toList ; fromList)
-open import Data.Vec using (Vec) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_ ; _++_ to _++ᵛ_)
+open import Data.Vec using (Vec ; reverse) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
 open import Function using (_$_ ; case_of_)
 open import Level using (0ℓ)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; subst)
@@ -46,10 +46,21 @@ digit '8' = just 8
 digit '9' = just 9
 digit _   = nothing
 
+space : List Char → Maybe (List Char)
+space []ˡ          = just []ˡ
+space (' ' ∷ˡ cs)  = space cs
+space ('\n' ∷ˡ cs) = space cs
+space cs@(_ ∷ˡ _)  = just cs
+
+line : List Char → Maybe (List Char)
+line []ˡ          = just []ˡ
+line ('\n' ∷ˡ cs) = space cs
+line (_ ∷ˡ cs)    = line cs
+
 known : List Char → List Char → Maybe (List Char)
 known []ˡ          _   = nothing
-known (' ' ∷ˡ cs)  []ˡ = just cs
-known ('\n' ∷ˡ cs) []ˡ = just cs
+known (' ' ∷ˡ cs)  []ˡ = space cs
+known ('\n' ∷ˡ cs) []ˡ = space cs
 known (_ ∷ˡ _)     []ˡ = nothing
 known (c ∷ˡ cs) (e ∷ˡ es)
   with c ≟ᶜ e
@@ -58,8 +69,8 @@ known (c ∷ˡ cs) (e ∷ˡ es)
 
 natural : List Char → ℕ → Maybe (ℕ × List Char)
 natural []ˡ          _   = nothing
-natural (' ' ∷ˡ cs)  acc = just $ acc , cs
-natural ('\n' ∷ˡ cs) acc = just $ acc , cs
+natural (' ' ∷ˡ cs)  acc = mapᵐ (acc ,_) (space cs)
+natural ('\n' ∷ˡ cs) acc = mapᵐ (acc ,_) (space cs)
 natural (c ∷ˡ cs)    acc = do
   d ← digit c
   natural cs (10 * acc + d)
@@ -69,9 +80,8 @@ integer []ˡ         = nothing
 integer ('-' ∷ˡ cs) = do
   n ← natural cs 0
   return $ true , n
-integer (c ∷ˡ cs)   = do
-  d ← digit c
-  n ← natural cs d
+integer cs@(_ ∷ˡ _) = do
+  n ← natural cs 0
   return $ false , n
 
 module _ (bitsᶜ : Data.Nat.ℕ) where
@@ -98,21 +108,33 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
       k , cs ← klause cs
       return $ neg v ∷ˡ k , cs
 
+  intro : List Char → Maybe (List Char)
+  intro cs = do
+    cs ← known cs (toList "p")
+    cs ← known cs (toList "cnf")
+    _ , cs ← natural cs 0
+    _ , cs ← natural cs 0
+    return cs
+
   {-# TERMINATING #-}
   formula′ : List Char → Formula → ℕ → Translator → Maybe (Formula × Translator)
   formula′ []ˡ         f n t = return $ f , t
+  formula′ ('c' ∷ˡ cs) f n t = do
+    cs ← line cs
+    formula′ cs f n t
   formula′ cs@(_ ∷ˡ _) f n t = do
     k , cs ← klause cs
     f ← V.insert f k
     let t = insertᵐ (suc n) n t
     formula′ cs f (suc n) t
 
+  {-# TERMINATING #-}
   formula : List Char → Maybe (Formula × Translator)
-  formula cs = do
-    cs ← known cs (toList "p")
-    cs ← known cs (toList "cnf")
-    _ , cs ← natural cs 0
-    _ , cs ← natural cs 0
+  formula ('c' ∷ˡ cs) = do
+    cs ← line cs
+    formula cs
+  formula cs          = do
+    cs ← intro cs
     formula′ cs nothing zero emptyᵐ
 
   lsb : ℕ → Bool
@@ -123,9 +145,12 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   shr : ℕ → ℕ
   shr x = x / 2
 
+  bin′ : (n : ℕ) → ℕ → Vec Bool n
+  bin′ zero    _ = []ᵛ
+  bin′ (suc n) x = lsb x ∷ᵛ bin′ n (shr x)
+
   bin : (n : ℕ) → ℕ → Vec Bool n
-  bin zero    _ = []ᵛ
-  bin (suc n) x = subst (Vec Bool) (+-comm n 1) (bin n (shr x) ++ᵛ lsb x ∷ᵛ []ᵛ)
+  bin n x = reverse $ bin′ n x
 
   {-# TERMINATING #-}
   delete : List Char → Translator → Recycler →
@@ -185,7 +210,7 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   proof″ : List Char → ℕ → Translator → Recycler → ℕ → Maybe (Proof × Translator × Recycler × ℕ)
   proof″ []ˡ         x₀ t r m = nothing
   proof″ ('d' ∷ˡ cs) x₀ t r m = do
-    cs ← known cs []ˡ
+    cs ← space cs
     is , cs , t , r ← delete cs t r
     p , t , r ,  m ← proof′ cs t r m
     return $ del is ∷ˡ p , t , r , m
