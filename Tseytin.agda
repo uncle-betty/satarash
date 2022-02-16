@@ -1,7 +1,7 @@
 module Tseytin where
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_ ; _≟_)
-open import Data.Bool.Properties using (∧-identityʳ ; ∨-zeroʳ)
+open import Data.Bool.Properties using (∧-identityʳ ; ∧-idem)
 open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
@@ -18,15 +18,7 @@ open import Relation.Nullary using (Dec ; yes ; no ; _because_ ; ofʸ ; ofⁿ)
 open import Relation.Nullary.Negation using (contradiction)
 open import Tactic.Cong using (cong!)
 
-x∧x≡x : ∀ x → x ∧ x ≡ x
-x∧x≡x false = refl
-x∧x≡x true  = refl
-
-¬¬x≡x : ∀ x → not (not x) ≡ x
-¬¬x≡x false = refl
-¬¬x≡x true  = refl
-
-infix 4 _↔_ _↮_
+infix 4 _↔_
 
 _↔_ : (x y : Bool) → Bool
 false ↔ false = true
@@ -34,54 +26,47 @@ false ↔ true  = false
 true  ↔ false = false
 true  ↔ true  = true
 
-_↮_ : (x y : Bool) → Bool
-x ↮ y = not (x ↔ y)
-
-↔⇒≡ : ∀ {x y} → (x ↔ y) ≡ true → x ≡ y
-↔⇒≡ {false} {false} _ = refl
-↔⇒≡ {true}  {true}  _ = refl
-
 x↔x : ∀ x → (x ↔ x) ≡ true
 x↔x false = refl
 x↔x true  = refl
 
-↮-unsat⇒≡ : ∀ {x y} → (x ↮ y) ≡ false → x ≡ y
-↮-unsat⇒≡ {x} {y} p = ↔⇒≡ (trans (sym (¬¬x≡x (x ↔ y))) (cong not p))
+x↔t≡x : ∀ x → (x ↔ true) ≡ x
+x↔t≡x false = refl
+x↔t≡x true  = refl
 
-t↔x≡x : ∀ x → (true ↔ x) ≡ x
-t↔x≡x false = refl
-t↔x≡x true  = refl
+x↔f≡¬x : ∀ x → (x ↔ false) ≡ not x
+x↔f≡¬x false = refl
+x↔f≡¬x true  = refl
 
-f↔x≡¬x : ∀ x → (false ↔ x) ≡ not x
-f↔x≡¬x false = refl
-f↔x≡¬x true  = refl
+∧-sub-✓ : ∀ x y r → (r ↔ x ∧ y) ≡ (not x ∨ not y ∨ r) ∧ (x ∨ not r) ∧ (y ∨ not r)
+∧-sub-✓ false false r = trans (x↔f≡¬x r) (sym (∧-idem (not r)))
+∧-sub-✓ false true  r = trans (x↔f≡¬x r) (sym (∧-identityʳ (not r)))
+∧-sub-✓ true false  r = x↔f≡¬x r
+∧-sub-✓ true true   r = trans (x↔t≡x r) (sym (∧-identityʳ r))
 
-∧-↔ : ∀ x y → x ∧ (y ↔ y) ≡ x
-∧-↔ x false = ∧-identityʳ x
-∧-↔ x true  = ∧-identityʳ x
+∨-sub-✓ : ∀ x y r → (r ↔ x ∨ y) ≡ (x ∨ y ∨ not r) ∧ (not x ∨ r) ∧ (not y ∨ r)
+∨-sub-✓ false false r = trans (x↔f≡¬x r) (sym (∧-identityʳ (not r)))
+∨-sub-✓ false true  r = x↔t≡x r
+∨-sub-✓ true  false r = trans (x↔t≡x r) (sym (∧-identityʳ r))
+∨-sub-✓ true  true  r = trans (x↔t≡x r) (sym (∧-idem r))
 
-∧-exp-✓ : ∀ x y r → (x ∧ y ↔ r) ≡ (not x ∨ not y ∨ r) ∧ (x ∨ not r) ∧ (y ∨ not r)
-∧-exp-✓ false y    false = sym (∨-zeroʳ y)
-∧-exp-✓ false y    true  = refl
-∧-exp-✓ true false r     = f↔x≡¬x r
-∧-exp-✓ true true  r     = trans (t↔x≡x r) (sym (∧-identityʳ r))
+not-sub-✓ : ∀ x r → (r ↔ not x) ≡ (not x ∨ not r) ∧ (x ∨ r)
+not-sub-✓ false r = x↔t≡x r
+not-sub-✓ true  r = trans (x↔f≡¬x r) (sym (∧-identityʳ (not r)))
 
-∨-exp-✓ : ∀ x y r → (x ∨ y ↔ r) ≡ (x ∨ y ∨ not r) ∧ (not x ∨ r) ∧ (not y ∨ r)
-∨-exp-✓ false false r = trans (f↔x≡¬x r) (sym (∧-identityʳ (not r)))
-∨-exp-✓ false true  r = t↔x≡x r
-∨-exp-✓ true  false r = trans (t↔x≡x r) (sym (∧-identityʳ r))
-∨-exp-✓ true  true  r = trans (t↔x≡x r) (sym (x∧x≡x r))
+xor-sub-✓ : ∀ x y r →
+  (r ↔ x xor y) ≡ (not x ∨ not y ∨ not r) ∧ (x ∨ y ∨ not r) ∧ (x ∨ not y ∨ r) ∧ (not x ∨ y ∨ r)
+xor-sub-✓ false false r = trans (x↔f≡¬x r) (sym (∧-identityʳ (not r)))
+xor-sub-✓ false true  r = trans (x↔t≡x r) (sym (∧-identityʳ r))
+xor-sub-✓ true  false r = x↔t≡x r
+xor-sub-✓ true  true  r = trans (x↔f≡¬x r) (sym (∧-identityʳ (not r)))
 
-not-exp-✓ : ∀ x r → (not x ↔ r) ≡ (not x ∨ not r) ∧ (x ∨ r)
-not-exp-✓ false r = t↔x≡x r
-not-exp-✓ true  r = trans (f↔x≡¬x r) (sym (∧-identityʳ (not r)))
-
-xor-exp-✓ : ∀ x y r →
-  (x xor y ↔ r) ≡ (not x ∨ not y ∨ not r) ∧ (x ∨ y ∨ not r) ∧ (x ∨ not y ∨ r) ∧ (not x ∨ y ∨ r)
-xor-exp-✓ false false r = trans (f↔x≡¬x r) (sym (∧-identityʳ (not r)))
-xor-exp-✓ false true  r = trans (t↔x≡x r) (sym (∧-identityʳ r))
-xor-exp-✓ true  false r = t↔x≡x r
-xor-exp-✓ true  true  r = trans (f↔x≡¬x r) (sym (∧-identityʳ (not r)))
+↔-sub-✓ : ∀ x y r →
+  (r ↔ (x ↔ y)) ≡ (x ∨ y ∨ r) ∧ (not x ∨ not y ∨ r) ∧ (not x ∨ y ∨ not r) ∧ (x ∨ not y ∨ not r)
+↔-sub-✓ false false r = trans (x↔t≡x r) (sym (∧-identityʳ r))
+↔-sub-✓ false true  r = x↔f≡¬x r
+↔-sub-✓ true  false r = trans (x↔f≡¬x r) (sym (∧-identityʳ (not r)))
+↔-sub-✓ true  true  r = trans (x↔t≡x r) (sym (∧-identityʳ r))
 
 Address : Set
 Address = List Bool
