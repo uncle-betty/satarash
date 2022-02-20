@@ -8,8 +8,7 @@ open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
 open import Data.Maybe using (Maybe ; nothing ; just)
-open import Data.Nat
-  using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; NonZero ; nonZero ; _+_ ; _∸_ ; _⊔_)
+open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; _+_ ; _∸_ ; _⊔_)
   renaming (_≟_ to _≟ⁿ_ ; _<?_ to _<?ⁿ_)
 open import Data.Nat.Properties using (
     ≤-refl ; <-irrefl ; <-trans ; <-transˡ ; n<1+n ; m≤m+n ; m⊔n≤o⇒m≤o ; m⊔n≤o⇒n≤o ;
@@ -63,7 +62,7 @@ data Formula₁ : ℕ → Set where
   var₁ : ℕ → Formula₁ 3
   tmp₁ : List Bool → Formula₁ 3
   and₁ : {m n : ℕ} → Formula₁ m → Formula₁ n → Formula₁ 0
-  or₁  : {m n : ℕ} → Formula₁ m → Formula₁ n → ⦃ NonZero m ⦄ → ⦃ NonZero n ⦄ → Formula₁ 1
+  or₁  : {m n : ℕ} → Formula₁ (suc m) → Formula₁ (suc n) → Formula₁ 1
   not₁ : Formula₁ 3 → Formula₁ 2
 
 eval₁ : {l : ℕ} → (ℕ → Bool) → (List Bool → Bool) → Formula₁ l → Bool
@@ -78,7 +77,7 @@ data Formula₂ : ℕ → Set where
   var₂ : ℕ → Formula₂ 3
   tmp₂ : ℕ → Formula₂ 3
   and₂ : {m n : ℕ} → Formula₂ m → Formula₂ n → Formula₂ 0
-  or₂  : {m n : ℕ} → Formula₂ m → Formula₂ n → ⦃ NonZero m ⦄ → ⦃ NonZero n ⦄ → Formula₂ 1
+  or₂  : {m n : ℕ} → Formula₂ (suc m) → Formula₂ (suc n) → Formula₂ 1
   not₂ : Formula₂ 3 → Formula₂ 2
 
 eval₂ : {l : ℕ} → (ℕ → Bool) → (ℕ → Bool) → Formula₂ l → Bool
@@ -92,7 +91,7 @@ eval₂ v t (not₂ x)   = not (eval₂ v t x)
 data Formula₃ : ℕ → Set where
   var₃ : ℕ → Formula₃ 3
   and₃ : {m n : ℕ} → Formula₃ m → Formula₃ n → Formula₃ 0
-  or₃  : {m n : ℕ} → Formula₃ m → Formula₃ n → ⦃ NonZero m ⦄ → ⦃ NonZero n ⦄ → Formula₃ 1
+  or₃  : {m n : ℕ} → Formula₃ (suc m) → Formula₃ (suc n) → Formula₃ 1
   not₃ : Formula₃ 3 → Formula₃ 2
 
 eval₃ : {l : ℕ} → (ℕ → Bool) → Formula₃ l → Bool
@@ -685,16 +684,16 @@ transform₃-✓ v f
   rewrite sym (transform₂-✓ v f)
   = refl
 
-toCNF-∨ : {l : ℕ} → (f : Formula₃ l) → NonZero l → List V.Literal
-toCNF-∨ (var₃ x)        l = [ V.pos x ]
-toCNF-∨ (not₃ (var₃ x)) l = [ V.neg x ]
-toCNF-∨ (or₃ {suc m} {suc n} x y) l = toCNF-∨ x nonZero ++ toCNF-∨ y nonZero
+toCNF-∨ : {l : ℕ} → (f : Formula₃ (suc l)) → List V.Literal
+toCNF-∨ (var₃ x)        = [ V.pos x ]
+toCNF-∨ (not₃ (var₃ x)) = [ V.neg x ]
+toCNF-∨ (or₃ x y)       = toCNF-∨ x ++ toCNF-∨ y
 
 toCNF-∧ : (f : Formula₃ 0) → List V.Clause
 toCNF-∧ (and₃ {zero}  {zero} x y)  = toCNF-∧ x ++ toCNF-∧ y
-toCNF-∧ (and₃ {zero}  {suc n} x y) = toCNF-∧ x ++ [ toCNF-∨ y nonZero ]
-toCNF-∧ (and₃ {suc m} {zero} x y)  = [ toCNF-∨ x nonZero ] ++ toCNF-∧ y
-toCNF-∧ (and₃ {suc m} {suc n} x y) = [ toCNF-∨ x nonZero ] ++ [ toCNF-∨ y nonZero ]
+toCNF-∧ (and₃ {zero}  {suc n} x y) = toCNF-∧ x ++ [ toCNF-∨ y ]
+toCNF-∧ (and₃ {suc m} {zero} x y)  = [ toCNF-∨ x ] ++ toCNF-∧ y
+toCNF-∧ (and₃ {suc m} {suc n} x y) = [ toCNF-∨ x ] ++ [ toCNF-∨ y ]
 
 ++⇒∧ : ∀ v x y → eval₄ v (x ++ y) ≡ eval₄ v x ∧ eval₄ v y
 ++⇒∧ v []       y = refl
@@ -702,15 +701,14 @@ toCNF-∧ (and₃ {suc m} {suc n} x y) = [ toCNF-∨ x nonZero ] ++ [ toCNF-∨ 
   rewrite ++⇒∧ v xs y
   = sym (∧-assoc (V.evalᶜ v x) (eval₄ v xs) (eval₄ v y))
 
-toCNF-∨-✓ : ∀ {l} v f p → eval₄ v [ toCNF-∨ {l} f p ] ≡ eval₃ v f
-toCNF-∨-✓ v (var₃ x)        _  = trans (∧-identityʳ (v x ∨ false)) (∨-identityʳ (v x))
-toCNF-∨-✓ v (not₃ (var₃ x)) _  = trans (∧-identityʳ ((not (v x)) ∨ false)) (∨-identityʳ (not (v x)))
-toCNF-∨-✓ v (and₃ x y)      ()
-toCNF-∨-✓ v (or₃ {suc m} {suc n} x y) p
-  rewrite V.++⇒∨ v (toCNF-∨ x nonZero) (toCNF-∨ y nonZero)
-  rewrite sym (toCNF-∨-✓ v x nonZero)
-  rewrite sym (toCNF-∨-✓ v y nonZero)
-  = ∧-distribʳ-∨ true (V.evalᶜ v (toCNF-∨ x nonZero)) (V.evalᶜ v (toCNF-∨ y nonZero))
+toCNF-∨-✓ : ∀ {l} v f → eval₄ v [ toCNF-∨ {l} f ] ≡ eval₃ v f
+toCNF-∨-✓ v (var₃ x)        = trans (∧-identityʳ (v x ∨ false)) (∨-identityʳ (v x))
+toCNF-∨-✓ v (not₃ (var₃ x)) = trans (∧-identityʳ ((not (v x)) ∨ false)) (∨-identityʳ (not (v x)))
+toCNF-∨-✓ v (or₃ x y)
+  rewrite V.++⇒∨ v (toCNF-∨ x) (toCNF-∨ y)
+  rewrite sym (toCNF-∨-✓ v x)
+  rewrite sym (toCNF-∨-✓ v y)
+  = ∧-distribʳ-∨ true (V.evalᶜ v (toCNF-∨ x)) (V.evalᶜ v (toCNF-∨ y))
 
 toCNF-∧-✓ : ∀ v f → eval₄ v (toCNF-∧ f) ≡ eval₃ v f
 toCNF-∧-✓ v (and₃ {zero}  {zero}  x y)
@@ -719,19 +717,19 @@ toCNF-∧-✓ v (and₃ {zero}  {zero}  x y)
   rewrite toCNF-∧-✓ v y
   = refl
 toCNF-∧-✓ v (and₃ {zero}  {suc n} x y)
-  rewrite ++⇒∧ v (toCNF-∧ x) [ toCNF-∨ y nonZero ]
+  rewrite ++⇒∧ v (toCNF-∧ x) [ toCNF-∨ y ]
   rewrite toCNF-∧-✓ v x
-  rewrite toCNF-∨-✓ v y nonZero
+  rewrite toCNF-∨-✓ v y
   = refl
 toCNF-∧-✓ v (and₃ {suc m} {zero}  x y)
-  rewrite ++⇒∧ v [ toCNF-∨ x nonZero ] (toCNF-∧ y)
-  rewrite toCNF-∨-✓ v x nonZero
+  rewrite ++⇒∧ v [ toCNF-∨ x ] (toCNF-∧ y)
+  rewrite toCNF-∨-✓ v x
   rewrite toCNF-∧-✓ v y
   = refl
 toCNF-∧-✓ v (and₃ {suc m} {suc n} x y)
-  rewrite sym (toCNF-∨-✓ v x nonZero)
-  rewrite sym (toCNF-∨-✓ v y nonZero)
-  rewrite ∧-identityʳ (V.evalᶜ v (toCNF-∨ x nonZero))
+  rewrite sym (toCNF-∨-✓ v x)
+  rewrite sym (toCNF-∨-✓ v y)
+  rewrite ∧-identityʳ (V.evalᶜ v (toCNF-∨ x))
   = refl
 
 transform₄ : Formula₀ → Formula₄
