@@ -7,6 +7,7 @@ open import Data.Bool.Properties using (∧-identityʳ ; ∧-idem)
 open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
+open import Data.Maybe using (Maybe ; nothing ; just)
 open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; _+_ ; _∸_ ; _⊔_)
   renaming (_≟_ to _≟ⁿ_ ; _<?_ to _<?ⁿ_)
 open import Data.Nat.Properties using (
@@ -25,6 +26,10 @@ open import Relation.Nullary using (¬_ ; Dec ; yes ; no ; _because_ ; ofʸ ; of
 open import Relation.Nullary.Decidable using (dec-yes-irr ; dec-no)
 open import Relation.Nullary.Negation using (contradiction)
 open import Tactic.Cong using (cong!)
+
+open import Verifier
+  using (Variable ; Literal ; pos ; neg ; Clause ; Trie ; leaf ; node ; evalˡ ; evalᶜ)
+  renaming (eval to eval₄)
 
 infix 4 _↔_
 
@@ -636,35 +641,35 @@ remap₂ b (and₂ x y) = and₃ (remap₂ b x) (remap₂ b y)
 remap₂ b (or₂ x y)  = or₃ (remap₂ b x) (remap₂ b y)
 remap₂ b (not₂ x)   = not₃ (remap₂ b x)
 
-foo : ∀ {b} v t f → nextVar f ≤ b → eval₃ (merge b v t) (remap₂ b f) ≡ eval₂ v t f
-foo {b} v t (var₂ x)   p
+mergeRemap : ∀ {b} v t f → nextVar f ≤ b → eval₃ (merge b v t) (remap₂ b f) ≡ eval₂ v t f
+mergeRemap {b} v t (var₂ x)   p
   rewrite <⇒<? p
   = refl
-foo {b} v t (tmp₂ x)   p
+mergeRemap {b} v t (tmp₂ x)   p
   rewrite (proj₂ ∘ ≮⇒<? ∘ ≤⇒≯) (m≤m+n b x)
   rewrite m+n∸m≡n b x
   = refl
-foo {b} v t (and₂ x y) p
-  rewrite foo v t x (m⊔n≤o⇒m≤o (nextVar x) (nextVar y) p)
-  rewrite foo v t y (m⊔n≤o⇒n≤o (nextVar x) (nextVar y) p)
+mergeRemap {b} v t (and₂ x y) p
+  rewrite mergeRemap v t x (m⊔n≤o⇒m≤o (nextVar x) (nextVar y) p)
+  rewrite mergeRemap v t y (m⊔n≤o⇒n≤o (nextVar x) (nextVar y) p)
   = refl
-foo {b} v t (or₂ x y)  p
-  rewrite foo v t x (m⊔n≤o⇒m≤o (nextVar x) (nextVar y) p)
-  rewrite foo v t y (m⊔n≤o⇒n≤o (nextVar x) (nextVar y) p)
+mergeRemap {b} v t (or₂ x y)  p
+  rewrite mergeRemap v t x (m⊔n≤o⇒m≤o (nextVar x) (nextVar y) p)
+  rewrite mergeRemap v t y (m⊔n≤o⇒n≤o (nextVar x) (nextVar y) p)
   = refl
-foo {b} v t (not₂ x)   p
-  rewrite foo v t x p
+mergeRemap {b} v t (not₂ x)   p
+  rewrite mergeRemap v t x p
   = refl
 
 makeTrue₃ : (ℕ → Bool) → Formula₀ → (ℕ → Bool)
 makeTrue₃ v f = merge (nextVar (transform₂ f)) v (makeTrue₂ v f)
 
 transform₃ : Formula₀ → Formula₃
--- XXX - more efficient than "let", right?
+-- XXX - more efficient than "let"?
 transform₃ f = (λ f₂ → remap₂ (nextVar f₂) f₂) (transform₂ f)
 
 transform₃-✓ : ∀ v f → eval₃ (makeTrue₃ v f) (transform₃ f) ≡ eval₀ v f
 transform₃-✓ v f
-  rewrite foo v (makeTrue₂ v f) (transform₂ f) ≤-refl
+  rewrite mergeRemap v (makeTrue₂ v f) (transform₂ f) ≤-refl
   rewrite sym (transform₂-✓ v f)
   = refl
