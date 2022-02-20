@@ -1,4 +1,4 @@
--- FIXME - duplication in rewrite-based proofs (e.g., makeTrue-✓₁ or roundtrip)
+-- XXX - duplication in rewrite-based proofs (e.g., makeTrue-✓₁ or roundtrip)
 
 module Tseytin where
 
@@ -7,11 +7,12 @@ open import Data.Bool.Properties using (∧-identityʳ ; ∧-idem)
 open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
-open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_)
+open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; _+_ ; _∸_ ; _⊔_)
   renaming (_≟_ to _≟ⁿ_ ; _<?_ to _<?ⁿ_)
 open import Data.Nat.Properties using (
-    ≤-refl ; <-irrefl ; <-trans ; <-transˡ ;
-    <⇒≢ ; <⇒≯ ; <⇒≤ ; ≤⇒≯ ; <-irrelevant ; module ≤-Reasoning
+    ≤-refl ; <-irrefl ; <-trans ; <-transˡ ; n<1+n ; m≤m+n ; m⊔n≤o⇒m≤o ; m⊔n≤o⇒n≤o ;
+    <⇒≢ ; <⇒≯ ; <⇒≤ ; ≤⇒≯ ; <-irrelevant ; module ≤-Reasoning ;
+    m+n∸m≡n
   )
 open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂)
 open import Data.Unit using (⊤ ; tt)
@@ -188,30 +189,34 @@ flatten n (not₀ x)   = flatten₁ n not-pat x
 flatten n (xor₀ x y) = flatten₂ n xor-pat x y
 flatten n (iff₀ x y) = flatten₂ n ↔-pat x y
 
-makeTrue : (ℕ → Bool) → Formula₀ → (List Bool → Bool)
+module _ where
+  makeTrue₁ : (ℕ → Bool) → Formula₀ → (List Bool → Bool)
 
-makeTrue₁ : (ℕ → Bool) → (Bool → Bool) → Formula₀ → (List Bool → Bool)
-makeTrue₁ v op x =
-  let t′ = makeTrue v x in
-    λ where
-      []      → op (t′ [])
-      (_ ∷ n) → t′ n
+  module ⟨makeTrue₁⟩ where
+    aux₁ : (ℕ → Bool) → (Bool → Bool) → Formula₀ → (List Bool → Bool)
+    aux₁ v op x =
+      let t′ = makeTrue₁ v x in
+        λ where
+          []      → op (t′ [])
+          (_ ∷ n) → t′ n
 
-makeTrue₂ : (ℕ → Bool) → (Bool → Bool → Bool) → Formula₀ → Formula₀ → (List Bool → Bool)
-makeTrue₂ v op x y =
-  let tˡ = makeTrue v x in
-  let tʳ = makeTrue v y in
-    λ where
-      []          → op (tˡ []) (tʳ [])
-      (false ∷ n) → tˡ n
-      (true ∷ n)  → tʳ n
+    aux₂ : (ℕ → Bool) → (Bool → Bool → Bool) → Formula₀ → Formula₀ → (List Bool → Bool)
+    aux₂ v op x y =
+      let tˡ = makeTrue₁ v x in
+      let tʳ = makeTrue₁ v y in
+        λ where
+          []          → op (tˡ []) (tʳ [])
+          (false ∷ n) → tˡ n
+          (true ∷ n)  → tʳ n
 
-makeTrue v (var₀ x)   = λ _ → v x
-makeTrue v (and₀ x y) = makeTrue₂ v _∧_ x y
-makeTrue v (or₀ x y)  = makeTrue₂ v _∨_ x y
-makeTrue v (not₀ x)   = makeTrue₁ v not x
-makeTrue v (xor₀ x y) = makeTrue₂ v _xor_ x y
-makeTrue v (iff₀ x y) = makeTrue₂ v _↔_ x y
+  open ⟨makeTrue₁⟩
+
+  makeTrue₁ v (var₀ x)   = λ _ → v x
+  makeTrue₁ v (and₀ x y) = aux₂ v _∧_ x y
+  makeTrue₁ v (or₀ x y)  = aux₂ v _∨_ x y
+  makeTrue₁ v (not₀ x)   = aux₁ v not x
+  makeTrue₁ v (xor₀ x y) = aux₂ v _xor_ x y
+  makeTrue₁ v (iff₀ x y) = aux₂ v _↔_ x y
 
 evalCons : ∀ m n v t f → eval₁ v t (flatten (m ∷ n) f) ≡ eval₁ v (t ∘ (m ∷_)) (flatten n f)
 evalCons m n v t (var₀ x) = refl
@@ -235,68 +240,68 @@ evalCons m n v t (iff₀ x y)
   rewrite sym (evalCons m (n ++ [ true ]) v t y)
   = refl
 
-makeTrue-✓₁ : ∀ v f → eval₁ v (makeTrue v f) (flatten [] f) ≡ true
-makeTrue-✓₁ v (var₀ x)
+makeTrue₁-✓₁ : ∀ v f → eval₁ v (makeTrue₁ v f) (flatten [] f) ≡ true
+makeTrue₁-✓₁ v (var₀ x)
   rewrite sym (var-pat-✓ (v x) (v x))
   = x↔x (v x)
-makeTrue-✓₁ v (and₀ x y)
-  rewrite sym (∧-pat-✓ (makeTrue v (and₀ x y) [ false ]) (makeTrue v (and₀ x y) [ true ])
-    (makeTrue v (and₀ x y) []))
-  rewrite evalCons false [] v (makeTrue v (and₀ x y)) x
-  rewrite evalCons true [] v (makeTrue v (and₀ x y)) y
-  rewrite makeTrue-✓₁ v x
-  rewrite makeTrue-✓₁ v y
-  rewrite x↔x (makeTrue v x [] ∧ makeTrue v y [])
+makeTrue₁-✓₁ v (and₀ x y)
+  rewrite sym (∧-pat-✓ (makeTrue₁ v (and₀ x y) [ false ]) (makeTrue₁ v (and₀ x y) [ true ])
+    (makeTrue₁ v (and₀ x y) []))
+  rewrite evalCons false [] v (makeTrue₁ v (and₀ x y)) x
+  rewrite evalCons true [] v (makeTrue₁ v (and₀ x y)) y
+  rewrite makeTrue₁-✓₁ v x
+  rewrite makeTrue₁-✓₁ v y
+  rewrite x↔x (makeTrue₁ v x [] ∧ makeTrue₁ v y [])
   = refl
-makeTrue-✓₁ v (or₀ x y)
-  rewrite sym (∨-pat-✓ (makeTrue v (or₀ x y) [ false ]) (makeTrue v (or₀ x y) [ true ])
-    (makeTrue v (or₀ x y) []))
-  rewrite evalCons false [] v (makeTrue v (or₀ x y)) x
-  rewrite evalCons true [] v (makeTrue v (or₀ x y)) y
-  rewrite makeTrue-✓₁ v x
-  rewrite makeTrue-✓₁ v y
-  rewrite x↔x (makeTrue v x [] ∨ makeTrue v y [])
+makeTrue₁-✓₁ v (or₀ x y)
+  rewrite sym (∨-pat-✓ (makeTrue₁ v (or₀ x y) [ false ]) (makeTrue₁ v (or₀ x y) [ true ])
+    (makeTrue₁ v (or₀ x y) []))
+  rewrite evalCons false [] v (makeTrue₁ v (or₀ x y)) x
+  rewrite evalCons true [] v (makeTrue₁ v (or₀ x y)) y
+  rewrite makeTrue₁-✓₁ v x
+  rewrite makeTrue₁-✓₁ v y
+  rewrite x↔x (makeTrue₁ v x [] ∨ makeTrue₁ v y [])
   = refl
-makeTrue-✓₁ v (not₀ x)
-  rewrite sym (not-pat-✓ (makeTrue v (not₀ x) [ false ]) (makeTrue v (not₀ x) []))
-  rewrite evalCons false [] v (makeTrue v (not₀ x)) x
-  rewrite makeTrue-✓₁ v x
-  rewrite x↔x (not (makeTrue v x []))
+makeTrue₁-✓₁ v (not₀ x)
+  rewrite sym (not-pat-✓ (makeTrue₁ v (not₀ x) [ false ]) (makeTrue₁ v (not₀ x) []))
+  rewrite evalCons false [] v (makeTrue₁ v (not₀ x)) x
+  rewrite makeTrue₁-✓₁ v x
+  rewrite x↔x (not (makeTrue₁ v x []))
   = refl
-makeTrue-✓₁ v (xor₀ x y)
-  rewrite sym (xor-pat-✓ (makeTrue v (xor₀ x y) [ false ]) (makeTrue v (xor₀ x y) [ true ])
-    (makeTrue v (xor₀ x y) []))
-  rewrite evalCons false [] v (makeTrue v (xor₀ x y)) x
-  rewrite evalCons true [] v (makeTrue v (xor₀ x y)) y
-  rewrite makeTrue-✓₁ v x
-  rewrite makeTrue-✓₁ v y
-  rewrite x↔x (makeTrue v x [] xor makeTrue v y [])
+makeTrue₁-✓₁ v (xor₀ x y)
+  rewrite sym (xor-pat-✓ (makeTrue₁ v (xor₀ x y) [ false ]) (makeTrue₁ v (xor₀ x y) [ true ])
+    (makeTrue₁ v (xor₀ x y) []))
+  rewrite evalCons false [] v (makeTrue₁ v (xor₀ x y)) x
+  rewrite evalCons true [] v (makeTrue₁ v (xor₀ x y)) y
+  rewrite makeTrue₁-✓₁ v x
+  rewrite makeTrue₁-✓₁ v y
+  rewrite x↔x (makeTrue₁ v x [] xor makeTrue₁ v y [])
   = refl
-makeTrue-✓₁ v (iff₀ x y)
-  rewrite sym (↔-pat-✓ (makeTrue v (iff₀ x y) [ false ]) (makeTrue v (iff₀ x y) [ true ])
-    (makeTrue v (iff₀ x y) []))
-  rewrite evalCons false [] v (makeTrue v (iff₀ x y)) x
-  rewrite evalCons true [] v (makeTrue v (iff₀ x y)) y
-  rewrite makeTrue-✓₁ v x
-  rewrite makeTrue-✓₁ v y
-  rewrite x↔x (makeTrue v x [] ↔ makeTrue v y [])
+makeTrue₁-✓₁ v (iff₀ x y)
+  rewrite sym (↔-pat-✓ (makeTrue₁ v (iff₀ x y) [ false ]) (makeTrue₁ v (iff₀ x y) [ true ])
+    (makeTrue₁ v (iff₀ x y) []))
+  rewrite evalCons false [] v (makeTrue₁ v (iff₀ x y)) x
+  rewrite evalCons true [] v (makeTrue₁ v (iff₀ x y)) y
+  rewrite makeTrue₁-✓₁ v x
+  rewrite makeTrue₁-✓₁ v y
+  rewrite x↔x (makeTrue₁ v x [] ↔ makeTrue₁ v y [])
   = refl
 
-makeTrue-✓₂ : ∀ v f → makeTrue v f [] ≡ eval₀ v f
-makeTrue-✓₂ v (var₀ x)   = refl
-makeTrue-✓₂ v (and₀ x y) rewrite makeTrue-✓₂ v x | makeTrue-✓₂ v y = refl
-makeTrue-✓₂ v (or₀ x y)  rewrite makeTrue-✓₂ v x | makeTrue-✓₂ v y = refl
-makeTrue-✓₂ v (not₀ x)   rewrite makeTrue-✓₂ v x = refl
-makeTrue-✓₂ v (xor₀ x y) rewrite makeTrue-✓₂ v x | makeTrue-✓₂ v y = refl
-makeTrue-✓₂ v (iff₀ x y) rewrite makeTrue-✓₂ v x | makeTrue-✓₂ v y = refl
+makeTrue₁-✓₂ : ∀ v f → makeTrue₁ v f [] ≡ eval₀ v f
+makeTrue₁-✓₂ v (var₀ x)   = refl
+makeTrue₁-✓₂ v (and₀ x y) rewrite makeTrue₁-✓₂ v x | makeTrue₁-✓₂ v y = refl
+makeTrue₁-✓₂ v (or₀ x y)  rewrite makeTrue₁-✓₂ v x | makeTrue₁-✓₂ v y = refl
+makeTrue₁-✓₂ v (not₀ x)   rewrite makeTrue₁-✓₂ v x = refl
+makeTrue₁-✓₂ v (xor₀ x y) rewrite makeTrue₁-✓₂ v x | makeTrue₁-✓₂ v y = refl
+makeTrue₁-✓₂ v (iff₀ x y) rewrite makeTrue₁-✓₂ v x | makeTrue₁-✓₂ v y = refl
 
 transform₁ : Formula₀ → Formula₁
 transform₁ f = and₁ (tmp₁ []) (flatten [] f)
 
-transform₁-✓ : ∀ v f → eval₁ v (makeTrue v f) (transform₁ f) ≡ eval₀ v f
+transform₁-✓ : ∀ v f → eval₁ v (makeTrue₁ v f) (transform₁ f) ≡ eval₀ v f
 transform₁-✓ v f
-  rewrite makeTrue-✓₁ v f
-  rewrite makeTrue-✓₂ v f
+  rewrite makeTrue₁-✓₁ v f
+  rewrite makeTrue₁-✓₂ v f
   = ∧-identityʳ (eval₀ v f)
 
 ≡⇒≡? : ∀ {x y} → (p : x ≡ y) → x ≡? y ≡ yes p
@@ -321,15 +326,15 @@ module _ where
   bin→ℕ : ℕ → (f : Formula₀) → ℕ × (List Bool → ℕ)
 
   module ⟨bin→ℕ⟩ where
-    bin→ℕ₁ : ℕ → (x : Formula₀) → ℕ × (List Bool → ℕ)
-    bin→ℕ₁ n x =
+    aux₁ : ℕ → (x : Formula₀) → ℕ × (List Bool → ℕ)
+    aux₁ n x =
       let n′ , m = bin→ℕ n x in
       suc n′ , λ where
         []      → n′
         (_ ∷ a) → m a
 
-    bin→ℕ₂ : ℕ → (x y : Formula₀) → ℕ × (List Bool → ℕ)
-    bin→ℕ₂ n x y =
+    aux₂ : ℕ → (x y : Formula₀) → ℕ × (List Bool → ℕ)
+    aux₂ n x y =
       let nˡ , mˡ = bin→ℕ n x in
       let nʳ , mʳ = bin→ℕ nˡ y in
       suc nʳ , λ where
@@ -340,26 +345,26 @@ module _ where
   open ⟨bin→ℕ⟩
 
   bin→ℕ n (var₀ x)   = suc n , λ _ → n
-  bin→ℕ n (and₀ x y) = bin→ℕ₂ n x y
-  bin→ℕ n (or₀ x y)  = bin→ℕ₂ n x y
-  bin→ℕ n (not₀ x)   = bin→ℕ₁ n x
-  bin→ℕ n (xor₀ x y) = bin→ℕ₂ n x y
-  bin→ℕ n (iff₀ x y) = bin→ℕ₂ n x y
+  bin→ℕ n (and₀ x y) = aux₂ n x y
+  bin→ℕ n (or₀ x y)  = aux₂ n x y
+  bin→ℕ n (not₀ x)   = aux₁ n x
+  bin→ℕ n (xor₀ x y) = aux₂ n x y
+  bin→ℕ n (iff₀ x y) = aux₂ n x y
 
 module _ where
   ℕ→bin : ℕ → (f : Formula₀) → ℕ × (ℕ → List Bool)
 
   module ⟨ℕ→bin⟩ where
-    ℕ→bin₁ : ℕ → (x : Formula₀) → ℕ × (ℕ → List Bool)
-    ℕ→bin₁ n x =
+    aux₁ : ℕ → (x : Formula₀) → ℕ × (ℕ → List Bool)
+    aux₁ n x =
       let n′ , m = ℕ→bin n x in
       suc n′ , λ a →
         case a ≟ⁿ n′ of λ where
           (yes _) → []
           (no  _) → false ∷ m a
 
-    ℕ→bin₂ : ℕ → (x y : Formula₀) → ℕ × (ℕ → List Bool)
-    ℕ→bin₂ n x y =
+    aux₂ : ℕ → (x y : Formula₀) → ℕ × (ℕ → List Bool)
+    aux₂ n x y =
       let nˡ , mˡ = ℕ→bin n x in
       let nʳ , mʳ = ℕ→bin nˡ y in
       suc nʳ , λ a →
@@ -373,11 +378,11 @@ module _ where
   open ⟨ℕ→bin⟩
 
   ℕ→bin n (var₀ x)   = suc n , λ _ → []
-  ℕ→bin n (and₀ x y) = ℕ→bin₂ n x y
-  ℕ→bin n (or₀ x y)  = ℕ→bin₂ n x y
-  ℕ→bin n (not₀ x)   = ℕ→bin₁ n x
-  ℕ→bin n (xor₀ x y) = ℕ→bin₂ n x y
-  ℕ→bin n (iff₀ x y) = ℕ→bin₂ n x y
+  ℕ→bin n (and₀ x y) = aux₂ n x y
+  ℕ→bin n (or₀ x y)  = aux₂ n x y
+  ℕ→bin n (not₀ x)   = aux₁ n x
+  ℕ→bin n (xor₀ x y) = aux₂ n x y
+  ℕ→bin n (iff₀ x y) = aux₂ n x y
 
 module _ where
   n<fw₁ : ∀ n f → n < proj₁ (bin→ℕ n f)
@@ -504,7 +509,7 @@ fw₂fw₁<bw₁bw₁ n x y a = begin-strict
   where open ≤-Reasoning
 
 roundtrip : ∀ n v f a →
-  (makeTrue v f ∘ proj₂ (ℕ→bin n f)) (proj₂ (bin→ℕ n f) a) ≡ makeTrue v f a
+  (makeTrue₁ v f ∘ proj₂ (ℕ→bin n f)) (proj₂ (bin→ℕ n f) a) ≡ makeTrue₁ v f a
 roundtrip n v (var₀ x)   a = refl
 roundtrip n v (and₀ x y) []
   rewrite (proj₂ ∘ ≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
@@ -561,33 +566,33 @@ roundtrip n v (iff₀ x y) (true ∷ as)
   rewrite sym (fw₁≡bw₁ n x)
   = roundtrip (proj₁ (bin→ℕ n x)) v y as
 
-remap : (List Bool → ℕ) → Formula₁ → Formula₂
-remap r (var₁ x)   = var₂ x
-remap r (tmp₁ x)   = tmp₂ (r x)
-remap r (and₁ x y) = and₂ (remap r x) (remap r y)
-remap r (or₁ x y)  = or₂ (remap r x) (remap r y)
-remap r (not₁ x)   = not₂ (remap r x)
+remap₁ : (List Bool → ℕ) → Formula₁ → Formula₂
+remap₁ r (var₁ x)   = var₂ x
+remap₁ r (tmp₁ x)   = tmp₂ (r x)
+remap₁ r (and₁ x y) = and₂ (remap₁ r x) (remap₁ r y)
+remap₁ r (or₁ x y)  = or₂ (remap₁ r x) (remap₁ r y)
+remap₁ r (not₁ x)   = not₂ (remap₁ r x)
 
-evalRemap : ∀ n v t r f → eval₂ v t (remap r (flatten n f)) ≡ eval₁ v (t ∘ r) (flatten n f)
-evalRemap n v t r (var₀ x)   = refl
-evalRemap n v t r (and₀ x y)
-  rewrite sym (evalRemap (n ++ [ false ]) v t r x)
-  rewrite sym (evalRemap (n ++ [ true ]) v t r y)
+evalRemap₁ : ∀ n v t r f → eval₂ v t (remap₁ r (flatten n f)) ≡ eval₁ v (t ∘ r) (flatten n f)
+evalRemap₁ n v t r (var₀ x)   = refl
+evalRemap₁ n v t r (and₀ x y)
+  rewrite sym (evalRemap₁ (n ++ [ false ]) v t r x)
+  rewrite sym (evalRemap₁ (n ++ [ true ]) v t r y)
   = refl
-evalRemap n v t r (or₀ x y)
-  rewrite sym (evalRemap (n ++ [ false ]) v t r x)
-  rewrite sym (evalRemap (n ++ [ true ]) v t r y)
+evalRemap₁ n v t r (or₀ x y)
+  rewrite sym (evalRemap₁ (n ++ [ false ]) v t r x)
+  rewrite sym (evalRemap₁ (n ++ [ true ]) v t r y)
   = refl
-evalRemap n v t r (not₀ x)
-  rewrite sym (evalRemap (n ++ [ false ]) v t r x)
+evalRemap₁ n v t r (not₀ x)
+  rewrite sym (evalRemap₁ (n ++ [ false ]) v t r x)
   = refl
-evalRemap n v t r (xor₀ x y)
-  rewrite sym (evalRemap (n ++ [ false ]) v t r x)
-  rewrite sym (evalRemap (n ++ [ true ]) v t r y)
+evalRemap₁ n v t r (xor₀ x y)
+  rewrite sym (evalRemap₁ (n ++ [ false ]) v t r x)
+  rewrite sym (evalRemap₁ (n ++ [ true ]) v t r y)
   = refl
-evalRemap n v t r (iff₀ x y)
-  rewrite sym (evalRemap (n ++ [ false ]) v t r x)
-  rewrite sym (evalRemap (n ++ [ true ]) v t r y)
+evalRemap₁ n v t r (iff₀ x y)
+  rewrite sym (evalRemap₁ (n ++ [ false ]) v t r x)
+  rewrite sym (evalRemap₁ (n ++ [ true ]) v t r y)
   = refl
 
 assign-≡ : ∀ {t₁ t₂} v → (f : Formula₁) → (∀ a → t₁ a ≡ t₂ a) → eval₁ v t₁ f ≡ eval₁ v t₂ f
@@ -597,16 +602,69 @@ assign-≡ {t₁} {t₂} v (and₁ x y) p = cong₂ _∧_ (assign-≡ v x p) (as
 assign-≡ {t₁} {t₂} v (or₁ x y)  p = cong₂ _∨_ (assign-≡ v x p) (assign-≡ v y p)
 assign-≡ {t₁} {t₂} v (not₁ x)   p = cong not (assign-≡ v x p)
 
-makeTrue-ℕ : (ℕ → Bool) → Formula₀ → (ℕ → Bool)
-makeTrue-ℕ v f = makeTrue v f ∘ proj₂ (ℕ→bin 0 f)
+makeTrue₂ : (ℕ → Bool) → Formula₀ → (ℕ → Bool)
+makeTrue₂ v f = makeTrue₁ v f ∘ proj₂ (ℕ→bin 0 f)
 
 transform₂ : Formula₀ → Formula₂
-transform₂ f = remap (proj₂ (bin→ℕ 0 f)) (transform₁ f)
+transform₂ f = remap₁ (proj₂ (bin→ℕ 0 f)) (transform₁ f)
 
-transform₂-✓ : ∀ v f → eval₂ v (makeTrue-ℕ v f) (transform₂ f) ≡ eval₀ v f
+transform₂-✓ : ∀ v f → eval₂ v (makeTrue₂ v f) (transform₂ f) ≡ eval₀ v f
 transform₂-✓ v f
   rewrite roundtrip 0 v f []
-  rewrite evalRemap [] v (makeTrue v f ∘ proj₂ (ℕ→bin 0 f)) (proj₂ (bin→ℕ 0 f)) f
+  rewrite evalRemap₁ [] v (makeTrue₁ v f ∘ proj₂ (ℕ→bin 0 f)) (proj₂ (bin→ℕ 0 f)) f
   rewrite assign-≡ v (flatten [] f) (roundtrip 0 v f)
   rewrite sym (transform₁-✓ v f)
+  = refl
+
+nextVar : Formula₂ → ℕ
+nextVar (var₂ x)   = suc x
+nextVar (tmp₂ x)   = 0
+nextVar (and₂ x y) = nextVar x ⊔ nextVar y
+nextVar (or₂ x y)  = nextVar x ⊔ nextVar y
+nextVar (not₂ x)   = nextVar x
+
+merge : ℕ → (ℕ → Bool) → (ℕ → Bool) → (ℕ → Bool)
+merge b v t a =
+  case a <?ⁿ b of λ where
+    (yes _) → v a
+    (no  _) → t (a ∸ b)
+
+remap₂ : ℕ → Formula₂ → Formula₃
+remap₂ b (var₂ x)   = var₃ x
+remap₂ b (tmp₂ x)   = var₃ (b + x)
+remap₂ b (and₂ x y) = and₃ (remap₂ b x) (remap₂ b y)
+remap₂ b (or₂ x y)  = or₃ (remap₂ b x) (remap₂ b y)
+remap₂ b (not₂ x)   = not₃ (remap₂ b x)
+
+foo : ∀ {b} v t f → nextVar f ≤ b → eval₃ (merge b v t) (remap₂ b f) ≡ eval₂ v t f
+foo {b} v t (var₂ x)   p
+  rewrite <⇒<? p
+  = refl
+foo {b} v t (tmp₂ x)   p
+  rewrite (proj₂ ∘ ≮⇒<? ∘ ≤⇒≯) (m≤m+n b x)
+  rewrite m+n∸m≡n b x
+  = refl
+foo {b} v t (and₂ x y) p
+  rewrite foo v t x (m⊔n≤o⇒m≤o (nextVar x) (nextVar y) p)
+  rewrite foo v t y (m⊔n≤o⇒n≤o (nextVar x) (nextVar y) p)
+  = refl
+foo {b} v t (or₂ x y)  p
+  rewrite foo v t x (m⊔n≤o⇒m≤o (nextVar x) (nextVar y) p)
+  rewrite foo v t y (m⊔n≤o⇒n≤o (nextVar x) (nextVar y) p)
+  = refl
+foo {b} v t (not₂ x)   p
+  rewrite foo v t x p
+  = refl
+
+makeTrue₃ : (ℕ → Bool) → Formula₀ → (ℕ → Bool)
+makeTrue₃ v f = merge (nextVar (transform₂ f)) v (makeTrue₂ v f)
+
+transform₃ : Formula₀ → Formula₃
+-- XXX - more efficient than "let", right?
+transform₃ f = (λ f₂ → remap₂ (nextVar f₂) f₂) (transform₂ f)
+
+transform₃-✓ : ∀ v f → eval₃ (makeTrue₃ v f) (transform₃ f) ≡ eval₀ v f
+transform₃-✓ v f
+  rewrite foo v (makeTrue₂ v f) (transform₂ f) ≤-refl
+  rewrite sym (transform₂-✓ v f)
   = refl
