@@ -3,11 +3,12 @@
 module Tseytin where
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_ ; _≟_)
-open import Data.Bool.Properties using (∧-identityʳ ; ∧-idem ; ∨-identityʳ ; ∧-assoc ; ∧-distribʳ-∨)
+open import Data.Bool.Properties
+  using (∧-identityʳ ; ∧-idem ; ∨-identityʳ ; ∧-assoc ; ∧-distribʳ-∨ ; ∧-comm)
 open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
-open import Data.Maybe using (Maybe ; nothing ; just)
+open import Data.Maybe using (Maybe ; nothing ; just ; _>>=_)
 open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; _+_ ; _∸_ ; _⊔_)
   renaming (_≟_ to _≟ⁿ_ ; _<?_ to _<?ⁿ_)
 open import Data.Nat.Properties using (
@@ -17,7 +18,7 @@ open import Data.Nat.Properties using (
   )
 open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂)
 open import Data.Unit using (⊤ ; tt)
-open import Function using (_∘_ ; case_of_)
+open import Function using (_∘_ ; case_of_ ; flip)
 open import Relation.Binary.PropositionalEquality using (
     _≡_ ; refl ; sym ; cong ; cong₂ ; trans ; _≢_ ; ≢-sym ;
     ≡-≟-identity ; ≢-≟-identity ; module ≡-Reasoning
@@ -107,6 +108,13 @@ Formula₄ = List V.Clause
 eval₄ : (ℕ → Bool) → Formula₄ → Bool
 eval₄ v []       = true
 eval₄ v (c ∷ cs) = V.evalᶜ v c ∧ eval₄ v cs
+
+-- verifier's representation
+Formula₅ : Set
+Formula₅ = V.Formula
+
+eval₅ : (ℕ → Bool) → Formula₅ → Bool
+eval₅ = V.eval
 
 x↔x : ∀ x → (x ↔ x) ≡ true
 x↔x false = refl
@@ -740,3 +748,32 @@ transform₄-✓ v f
  rewrite toCNF-∧-✓ (makeTrue₃ v f) (transform₃ f)
  rewrite sym (transform₃-✓ v f)
  = refl
+
+unsat₄-✓ : ∀ f → (∀ v → eval₄ v (transform₄ f) ≡ false) → (∀ v → eval₀ v f ≡ false)
+unsat₄-✓ f p v = sym (trans (sym (p (makeTrue₃ v f))) (transform₄-✓ v f))
+
+toTrie : Formula₄ → Maybe Formula₅
+toTrie []       = just nothing
+toTrie (c ∷ cs) = toTrie cs >>= flip V.insert c
+
+toTrie-✓ : ∀ v f₄ f₅ → toTrie f₄ ≡ just f₅ → eval₅ v f₅ ≡ eval₄ v f₄
+toTrie-✓ v []       f₅ refl = refl
+toTrie-✓ v (c ∷ cs) f₅ p
+  with toTrie cs in eq
+... | just f₅′
+  rewrite V.insert⇒∧ f₅′ f₅ c p v
+  rewrite toTrie-✓ v cs f₅′ eq
+  = ∧-comm (eval₄ v cs) (V.evalᶜ v c)
+
+transform₅ : Formula₀ → Maybe Formula₅
+transform₅ f = toTrie (transform₄ f)
+
+transform₅-✓ : ∀ v f₀ f₅ → transform₅ f₀ ≡ just f₅ → eval₅ (makeTrue₃ v f₀) f₅ ≡ eval₀ v f₀
+transform₅-✓ v f₀ f₅ p
+  rewrite toTrie-✓ (makeTrue₃ v f₀) (transform₄ f₀) f₅ p
+  rewrite sym (transform₄-✓ v f₀)
+  = refl
+
+unsat₅-✓ : ∀ f₀ f₅ → transform₅ f₀ ≡ just f₅ → (∀ v → eval₅ v f₅ ≡ false) →
+  (∀ v → eval₀ v f₀ ≡ false)
+unsat₅-✓ f₀ f₅ p₁ p₂ v = sym (trans (sym (p₂ (makeTrue₃ v f₀))) (transform₅-✓ v f₀ f₅ p₁))
