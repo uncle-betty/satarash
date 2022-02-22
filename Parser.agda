@@ -5,17 +5,22 @@ module Parser where
 open import Category.Monad using (RawMonad)
 open import Data.Bool using (Bool ; true ; false)
 open import Data.Char using (Char) renaming (_≟_ to _≟ᶜ_)
-open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ)
+open import Data.List using (List ; length) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ)
 open import Data.Maybe using (Maybe ; nothing ; just) renaming (map to mapᵐ)
 open import Data.Maybe.Categorical using (monad)
-open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
+open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_ ; _≤_ ; z≤n ; s≤s ; _<_)
 open import Data.Nat.DivMod using (_/_ ; _%_)
-open import Data.Nat.Properties using (<-strictTotalOrder ; +-comm)
-open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
+open import Data.Nat.Induction using (<-wellFounded)
+open import Data.Nat.Properties using (
+    <-strictTotalOrder ; +-comm ; ≤-refl ; ≤-trans ; n≤1+n ; <-trans ; n<1+n ; module ≤-Reasoning
+  )
+open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
 open import Data.String using (String ; toList ; fromList)
 open import Data.Vec using (Vec ; reverse) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
 open import Function using (_$_ ; case_of_)
+open import Induction.WellFounded using (Acc ; acc)
 open import Level using (0ℓ)
+open import Relation.Binary.Construct.On using (wellFounded)
 open import Relation.Binary.PropositionalEquality using (_≡_ ; refl ; subst)
 open import Relation.Nullary using (yes ; no)
 
@@ -125,56 +130,133 @@ module HaskellSetMap where
 -- open AgdaSetMap instead for slower implementation in Agda
 open HaskellSetMap
 
-digit : Char → Maybe ℕ
-digit '0' = just 0
-digit '1' = just 1
-digit '2' = just 2
-digit '3' = just 3
-digit '4' = just 4
-digit '5' = just 5
-digit '6' = just 6
-digit '7' = just 7
-digit '8' = just 8
-digit '9' = just 9
-digit _   = nothing
+≤-suc : ∀ {m n} → m ≤ n → m ≤ suc n
+≤-suc {m} {n} m≤n = ≤-trans m≤n (n≤1+n n)
+
+<-suc : ∀ {m n} → m < n → m < suc n
+<-suc {m} {n} m<n = <-trans m<n (n<1+n n)
+
+≤⇒<-suc : ∀ {m n} → m ≤ n → m < suc n
+≤⇒<-suc {m} {n} m≤n = s≤s m≤n
+
+data Token : Set where
+  isSpace   : Token
+  isNewLine : Token
+  isDigit   : (n : ℕ) → Token
+  isMinus   : Token
+  isOther   : Token
+
+token : (c : Char) → Token
+token ' '  = isSpace
+token '\n' = isNewLine
+token '0'  = isDigit 0
+token '1'  = isDigit 1
+token '2'  = isDigit 2
+token '3'  = isDigit 3
+token '4'  = isDigit 4
+token '5'  = isDigit 5
+token '6'  = isDigit 6
+token '7'  = isDigit 7
+token '8'  = isDigit 8
+token '9'  = isDigit 9
+token '-'  = isMinus
+token _    = isOther
 
 space : List Char → Maybe (List Char)
-space []ˡ          = just []ˡ
-space (' ' ∷ˡ cs)  = space cs
-space ('\n' ∷ˡ cs) = space cs
-space cs@(_ ∷ˡ _)  = just cs
+space []ˡ       = just []ˡ
+space (c ∷ˡ cs) =
+  case token c of λ where
+    isSpace   → space cs
+    isNewLine → space cs
+    _         → just (c ∷ˡ cs)
+
+space-≤ : ∀ cs cs′ → space cs ≡ just cs′ → length cs′ ≤ length cs
+space-≤ []ˡ       cs′ refl = ≤-refl
+space-≤ (c ∷ˡ cs) cs′ p    with token c
+space-≤ (c ∷ˡ cs) cs′ p    | isSpace   = ≤-suc (space-≤ cs cs′ p)
+space-≤ (c ∷ˡ cs) cs′ p    | isNewLine = ≤-suc (space-≤ cs cs′ p)
+space-≤ (c ∷ˡ cs) cs′ refl | isDigit _ = ≤-refl
+space-≤ (c ∷ˡ cs) cs′ refl | isMinus   = ≤-refl
+space-≤ (c ∷ˡ cs) cs′ refl | isOther   = ≤-refl
 
 line : List Char → Maybe (List Char)
-line []ˡ          = just []ˡ
-line ('\n' ∷ˡ cs) = space cs
-line (_ ∷ˡ cs)    = line cs
+line []ˡ       = just []ˡ
+line (c ∷ˡ cs) =
+  case token c of λ where
+    isNewLine → space cs
+    _         → line cs
+
+line-≤ : ∀ cs cs′ → line cs ≡ just cs′ → length cs′ ≤ length cs
+line-≤ []ˡ       cs′ refl = ≤-refl
+line-≤ (c ∷ˡ cs) cs′ p    with token c
+line-≤ (c ∷ˡ cs) cs′ p    | isSpace   = ≤-suc (line-≤ cs cs′ p)
+line-≤ (c ∷ˡ cs) cs′ p    | isNewLine = ≤-suc (space-≤ cs cs′ p)
+line-≤ (c ∷ˡ cs) cs′ p    | isDigit _ = ≤-suc (line-≤ cs cs′ p)
+line-≤ (c ∷ˡ cs) cs′ p    | isMinus   = ≤-suc (line-≤ cs cs′ p)
+line-≤ (c ∷ˡ cs) cs′ p    | isOther   = ≤-suc (line-≤ cs cs′ p)
 
 known : List Char → List Char → Maybe (List Char)
-known []ˡ          _   = nothing
-known (' ' ∷ˡ cs)  []ˡ = space cs
-known ('\n' ∷ˡ cs) []ˡ = space cs
-known (_ ∷ˡ _)     []ˡ = nothing
-known (c ∷ˡ cs) (e ∷ˡ es)
-  with c ≟ᶜ e
-... | yes _ = known cs es
-... | no  _ = nothing
+known []ˡ       []ˡ       = just []ˡ
+known []ˡ       (e ∷ˡ es) = nothing
+known (c ∷ˡ cs) []ˡ       =
+  case token c of λ where
+    isSpace   → space cs
+    isNewLine → space cs
+    _         → nothing
+known (c ∷ˡ cs) (e ∷ˡ es) =
+  case c ≟ᶜ e of λ where
+    (yes _) → known cs es
+    (no  _) → nothing
+
+known-≤ : ∀ cs es cs′ → known cs es ≡ just cs′ → length cs′ ≤ length cs
+known-≤ []ˡ       []ˡ       cs′ refl = ≤-refl
+known-≤ (c ∷ˡ cs) []ˡ       cs′ p    with token c
+known-≤ (c ∷ˡ cs) []ˡ       cs′ p    | isSpace   = ≤-suc (space-≤ cs cs′ p)
+known-≤ (c ∷ˡ cs) []ˡ       cs′ p    | isNewLine = ≤-suc (space-≤ cs cs′ p)
+known-≤ (c ∷ˡ cs) (e ∷ˡ es) cs′ p    with c ≟ᶜ e
+known-≤ (c ∷ˡ cs) (e ∷ˡ es) cs′ p    | yes _ = ≤-suc (known-≤ cs es cs′ p)
 
 natural : List Char → ℕ → Maybe (ℕ × List Char)
-natural []ˡ          _   = nothing
-natural (' ' ∷ˡ cs)  acc = mapᵐ (acc ,_) (space cs)
-natural ('\n' ∷ˡ cs) acc = mapᵐ (acc ,_) (space cs)
-natural (c ∷ˡ cs)    acc = do
-  d ← digit c
-  natural cs (10 * acc + d)
+natural []ˡ       _ = nothing
+natural (c ∷ˡ cs) a =
+  case token c of λ where
+    isSpace     → mapᵐ (a ,_) (space cs)
+    isNewLine   → mapᵐ (a ,_) (space cs)
+    (isDigit n) → natural cs (a * 10 + n)
+    _           → nothing
+
+natural-< : ∀ cs a r cs′ → natural cs a ≡ just (r , cs′) → length cs′ < length cs
+natural-< (c ∷ˡ cs) a r cs′ p    with token c
+natural-< (c ∷ˡ cs) a r cs′ p    | isSpace   with space cs in eq
+natural-< (c ∷ˡ cs) a r cs′ refl | isSpace   | just cs″ = ≤⇒<-suc (space-≤ cs cs″ eq)
+natural-< (c ∷ˡ cs) a r cs′ p    | isNewLine with space cs in eq
+natural-< (c ∷ˡ cs) a r cs′ refl | isNewLine | just cs″ = ≤⇒<-suc (space-≤ cs cs″ eq)
+natural-< (c ∷ˡ cs) a r cs′ p    | isDigit n = <-suc (natural-< cs (a * 10 + n) r cs′ p)
 
 integer : List Char → Maybe (Bool × ℕ × List Char)
-integer []ˡ         = nothing
-integer ('-' ∷ˡ cs) = do
-  n ← natural cs 0
-  return $ true , n
-integer cs@(_ ∷ˡ _) = do
-  n ← natural cs 0
-  return $ false , n
+integer []ˡ       = nothing
+integer (c ∷ˡ cs) =
+  case token c of λ where
+    isMinus     → mapᵐ (true ,_) (natural cs 0)
+    (isDigit _) → mapᵐ (false ,_) (natural (c ∷ˡ cs) 0)
+    _           → nothing
+
+integer-< : ∀ cs s r cs′ → integer cs ≡ just (s , r , cs′) → length cs′ < length cs
+integer-< (c ∷ˡ cs) s r cs′ p    with token c
+integer-< (c ∷ˡ cs) s r cs′ p    | isMinus   with natural cs 0 in eq
+integer-< (c ∷ˡ cs) s r cs′ refl | isMinus   | just (r′ , cs″) = <-suc (natural-< cs 0 r′ cs″ eq)
+integer-< (c ∷ˡ cs) s r cs′ p    | isDigit _ with natural (c ∷ˡ cs) 0 in eq
+integer-< (c ∷ˡ cs) s r cs′ refl | isDigit _ | just (r′ , cs″) = natural-< (c ∷ˡ cs) 0 r′ cs″ eq
+
+with-≡ : {S : Set} → (x : Maybe S) → Maybe (∃[ y ] x ≡ just y)
+with-≡ nothing  = nothing
+with-≡ (just x) = just (x , refl)
+
+Measure : List Char → Set
+Measure = Acc (λ x y → length x < length y)
+
+measure : (cs : List Char) → Measure cs
+measure = wellFounded length <-wellFounded
 
 module _ (bitsᶜ : Data.Nat.ℕ) where
   open import Verifier bitsᶜ as V using (
@@ -189,45 +271,76 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   Recycler : Set
   Recycler = ⟨Set⟩
 
-  {-# TERMINATING #-}
-  klause : List Char → Maybe (Clause × List Char)
-  klause cs = integer cs >>= λ where
-    (_     , zero  , cs) → just $ []ˡ , cs
-    (false , suc v , cs) → do
-      k , cs ← klause cs
-      return $ pos v ∷ˡ k , cs
-    (true ,  suc v , cs) → do
-      k , cs ← klause cs
-      return $ neg v ∷ˡ k , cs
+  klause : (cs : List Char) → Measure cs → Maybe (Clause × List Char)
+  klause cs (acc rs) = with-≡ (integer cs) >>= λ where
+    ((_ , zero , cs′) , p)      → just ([]ˡ , cs′)
+    ((false , suc v , cs′) , p) →
+      let m′ = rs cs′ (integer-< cs false (suc v) cs′ p) in
+      mapᵐ (map₁ (pos v ∷ˡ_)) (klause cs′ m′)
+    ((true , suc v , cs′) , p)  →
+      let m′ = rs cs′ (integer-< cs true (suc v) cs′ p) in
+      mapᵐ (map₁ (neg v ∷ˡ_)) (klause cs′ m′)
+
+  klause-< : ∀ cs r ds″ → (m : Measure cs) → klause cs m ≡ just (r , ds″) → length ds″ < length cs
+  klause-< cs r ds″ (acc rs) p with with-≡ (integer cs)
+  klause-< cs r ds″ (acc rs) ()   | nothing
+  klause-< cs r ds″ (acc rs) refl | just ((_ , zero , cs′) , q) = integer-< cs _ zero cs′ q
+  klause-< cs r ds″ (acc rs) p    | just ((false , suc v , cs′) , q)
+    with m′ ← rs cs′ (integer-< cs false (suc v) cs′ q)
+    with klause cs′ m′ in eq | p
+  ... | just (k , cs″) | refl =
+    <-trans (klause-< cs′ k cs″ m′ eq) (integer-< cs false (suc v) cs′ q)
+  klause-< cs r ds″ (acc rs) p    | just ((true , suc v , cs′) , q)
+    with m′ ← rs cs′ (integer-< cs true (suc v) cs′ q)
+    with klause cs′ m′ in eq | p
+  ... | just (k , cs″) | refl =
+    <-trans (klause-< cs′ k cs″ m′ eq) (integer-< cs true (suc v) cs′ q)
 
   intro : List Char → Maybe (List Char)
   intro cs = do
-    cs ← known cs (toList "p")
-    cs ← known cs (toList "cnf")
-    _ , cs ← natural cs 0
-    _ , cs ← natural cs 0
-    return cs
+    cs₁ ← known cs (toList "p")
+    cs₂ ← known cs₁ (toList "cnf")
+    _ , cs₃ ← natural cs₂ 0
+    _ , cs₄ ← natural cs₃ 0
+    return cs₄
 
-  {-# TERMINATING #-}
-  formula′ : List Char → Formula → ℕ → Translator → Maybe (Formula × Translator)
-  formula′ []ˡ         f n t = return $ f , t
-  formula′ ('c' ∷ˡ cs) f n t = do
-    cs ← line cs
-    formula′ cs f n t
-  formula′ cs@(_ ∷ˡ _) f n t = do
-    k , cs ← klause cs
-    f ← V.insert f k
-    let t = insertᵐ (suc n) n t
-    formula′ cs f (suc n) t
+  intro-< : ∀ cs cs₄′ → intro cs ≡ just cs₄′ → length cs₄′ < length cs
+  intro-< cs cs₄ p
+    with known cs (toList "p") in eq₁
+  ... | just cs₁
+    with known cs₁ (toList "cnf") in eq₂
+  ... | just cs₂
+    with natural cs₂ 0 in eq₃
+  ... | just (_ , cs₃)
+    with natural cs₃ 0 in eq₄
+  ... | just (_ , cs₄)
+    with p
+  ... | refl = begin-strict
+    length cs₄ <⟨ natural-< cs₃ 0 _ cs₄ eq₄ ⟩
+    length cs₃ <⟨ natural-< cs₂ 0 _ cs₃ eq₃ ⟩
+    length cs₂ ≤⟨ known-≤ cs₁ (toList "cnf") cs₂ eq₂ ⟩
+    length cs₁ ≤⟨ known-≤ cs (toList "p") cs₁ eq₁ ⟩
+    length cs  ∎
+    where open ≤-Reasoning
 
-  {-# TERMINATING #-}
-  formula : List Char → Maybe (Formula × Translator)
-  formula ('c' ∷ˡ cs) = do
-    cs ← line cs
-    formula cs
-  formula cs          = do
-    cs ← intro cs
-    formula′ cs nothing zero emptyᵐ
+  formula′ : (cs : List Char) → Formula → ℕ → Translator → Measure cs → Maybe (Formula × Translator)
+  formula′ []ˡ         f n t _        = return $ f , t
+  formula′ ('c' ∷ˡ cs) f n t (acc rs) = do
+     cs′ , p ← with-≡ (line cs)
+     formula′ cs′ f n t (rs cs′ (≤⇒<-suc (line-≤ cs cs′ p)))
+  formula′ (c ∷ˡ cs) f n t (acc rs) = do
+    (k , cs′) , p ← with-≡ (klause (c ∷ˡ cs) (acc rs))
+    f′ ← V.insert f k
+    let t′ = insertᵐ (suc n) n t
+    formula′ cs′ f′ (suc n) t′ (rs cs′ (klause-< (c ∷ˡ cs) k cs′ (acc rs) p ))
+
+  formula : (cs : List Char) → Measure cs → Maybe (Formula × Translator)
+  formula ('c' ∷ˡ cs) (acc rs) = do
+    cs′ , p ← with-≡ (line cs)
+    formula cs′ (rs cs′ (≤⇒<-suc (line-≤ cs cs′ p)))
+  formula cs          (acc rs) = do
+    cs′ , p ← with-≡ (intro cs)
+    formula′ cs′ nothing zero emptyᵐ (rs cs′ (intro-< cs cs′ p))
 
   lsb : ℕ → Bool
   lsb x = case x % 2 of λ where
@@ -286,7 +399,7 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   extend cs x₀ t r m = do
     let x , r , m = case headTailˢ r of λ {(just (x , r)) → x , r , m ; nothing → suc m , r , suc m}
     let t = insertᵐ x₀ x t
-    k , cs ← klause cs
+    k , cs ← klause cs (measure cs)
     is , x₀ , cs ← indexList cs t
     case x₀ of λ where
       zero    → return $ k , is , []ˡ , cs , t , r , m
@@ -324,6 +437,7 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
 
   parse : String → String → Maybe (Formula × Proof)
   parse f p = do
-    f , t ← formula (toList f)
+    f ← return $ toList f
+    f , t ← formula f (measure f)
     p ← proof (toList p) t
     return $ f , p
