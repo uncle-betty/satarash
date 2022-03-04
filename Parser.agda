@@ -12,7 +12,7 @@ open import Data.Maybe using (Maybe ; nothing ; just) renaming (map to mapᵐ)
 open import Data.Maybe.Categorical using (monad)
 open import Data.Nat using (
     ℕ ; zero ; suc ; _+_ ; _∸_ ; _*_ ; _^_ ; _≤_ ; z≤n ; s≤s ; _≤?_ ; _<_ ; _<?_ ;
-    NonZero ; >-nonZero ; >-nonZero⁻¹
+    NonZero ; >-nonZero⁻¹
   )
 open import Data.Nat.Divisibility using (_∣_ ; n∣m*n)
 open import Data.Nat.DivMod using (
@@ -22,10 +22,9 @@ open import Data.Nat.DivMod using (
 open import Data.Nat.Induction using (<-wellFounded)
 open import Data.Nat.Properties using (
     +-comm ; +-identityʳ ; m+n∸n≡m ; m∸n+n≡m ; +-assoc ; +-∸-assoc ; ∸-+-assoc ;
-    *-assoc ; *-zeroˡ ; *-identityʳ ; *-distribʳ-+ ;
-    <-strictTotalOrder ; module ≤-Reasoning ; ≤-refl ; ≤-trans ; <-trans ; n≤1+n ; n<1+n ;
-    ≰⇒> ; ≮⇒≥ ; ≤⇒≯ ; <⇒≤pred ; +-monoˡ-≤ ; ∸-monoˡ-≤ ; ∸-monoʳ-< ; *-monoʳ-<
-  )
+    *-comm ; *-assoc ; *-identityʳ ; *-distribʳ-+ ;
+    <-strictTotalOrder ; module ≤-Reasoning ; ≤-refl ; ≤-trans ; <-trans ; <-transˡ ; n≤1+n ;
+    n<1+n ; ≮⇒≥ ; <⇒≤pred ; +-monoˡ-≤ ; ∸-monoˡ-≤ ; ∸-monoʳ-< ; *-monoʳ-≤ )
 open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
 open import Data.String using (String ; toList ; fromList)
 open import Data.Vec using (Vec ; reverse) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
@@ -231,20 +230,26 @@ known-≤ (c ∷ˡ cs) []ˡ       cs′ refl | isNewLine = ≤-suc (space-≤ cs
 known-≤ (c ∷ˡ cs) (e ∷ˡ es) cs′ p    with c ≟ᶜ e
 known-≤ (c ∷ˡ cs) (e ∷ˡ es) cs′ p    | yes _ = ≤-suc (known-≤ cs es cs′ p)
 
-natural : List Char → ℕ → Maybe (ℕ × List Char)
-natural []ˡ       _ = nothing
-natural (c ∷ˡ cs) a =
+natural′ : List Char → ℕ → Maybe (ℕ × List Char)
+natural′ []ˡ       _ = nothing
+natural′ (c ∷ˡ cs) a =
   case token c of λ where
     isSpace     → just (a , space cs)
     isNewLine   → just (a , space cs)
-    (isDigit n) → natural cs (a * 10 + n)
+    (isDigit n) → natural′ cs (a * 10 + n)
     _           → nothing
 
-natural-< : ∀ cs a r cs′ → natural cs a ≡ just (r , cs′) → length cs′ < length cs
-natural-< (c ∷ˡ cs) a r cs′ p    with token c
-natural-< (c ∷ˡ cs) a r cs′ refl | isSpace   = s≤s (space-≤ cs)
-natural-< (c ∷ˡ cs) a r cs′ refl | isNewLine = s≤s (space-≤ cs)
-natural-< (c ∷ˡ cs) a r cs′ p    | isDigit n = <-suc (natural-< cs (a * 10 + n) r cs′ p)
+natural′-< : ∀ cs a r cs′ → natural′ cs a ≡ just (r , cs′) → length cs′ < length cs
+natural′-< (c ∷ˡ cs) a r cs′ p    with token c
+natural′-< (c ∷ˡ cs) a r cs′ refl | isSpace   = s≤s (space-≤ cs)
+natural′-< (c ∷ˡ cs) a r cs′ refl | isNewLine = s≤s (space-≤ cs)
+natural′-< (c ∷ˡ cs) a r cs′ p    | isDigit n = <-suc (natural′-< cs (a * 10 + n) r cs′ p)
+
+natural : List Char → Maybe (ℕ × List Char)
+natural cs = natural′ cs 0
+
+natural-< : ∀ cs r cs′ → natural cs ≡ just (r , cs′) → length cs′ < length cs
+natural-< cs r cs′ = natural′-< cs 0 r cs′
 
 printDigit : (n : ℕ) → Char
 printDigit n = fromℕ (toℕ '0' + n % 10)
@@ -274,9 +279,15 @@ printDigit-✓ n = go n
     token (fromℕ (toℕ '0' + (n % 10)))      ≡⟨ go n ⟩
     isDigit (n % 10)                        ∎
 
+mn≢0 : (m n : ℕ) → .⦃ NonZero m ⦄ → .⦃ NonZero n ⦄ → NonZero (m * n)
+mn≢0 (suc m) (suc n) = _
+
 10^e≢0 : ∀ {e} → NonZero (10 ^ e)
 10^e≢0 {zero}  = _
-10^e≢0 {suc e} = >-nonZero⁻¹ (10 ^ e) ⦃ 10^e≢0 {e} ⦄ |> *-monoʳ-< 10 |> >-nonZero
+10^e≢0 {suc e} = mn≢0 10 (10 ^ e) ⦃ _ ⦄ ⦃ 10^e≢0 {e} ⦄
+
+10^e*10≢0 : ∀ {e} → NonZero (10 ^ e * 10)
+10^e*10≢0 {e} = mn≢0 (10 ^ e) 10 ⦃ 10^e≢0 {e} ⦄
 
 infixl 7 _*10^_ _/10^_ _%10^_
 
@@ -351,9 +362,6 @@ n%km%m≡n%m k m n = go k m n (<-wellFounded n)
     n∸km<n : .⦃ NonZero (k * m) ⦄ → n ∸ k * m < n
     n∸km<n = ∸-monoʳ-< 0<km km≤n
 
-mn≢0 : (m n : ℕ) → .⦃ NonZero m ⦄ → .⦃ NonZero n ⦄ → NonZero (m * n)
-mn≢0 (suc m) (suc n) = _
-
 n/i≡∙ : ∀ n m i → .⦃ _ : NonZero i ⦄ → .⦃ _ : NonZero (m * i) ⦄ →
   n / i ≡ n % (m * i) / i + n / (m * i) * m
 n/i≡∙ n m i =
@@ -365,40 +373,40 @@ n/i≡∙ n m i =
   where open ≡-Reasoning
 
 n<mi⇒n/i<m : ∀ n m i → n < m * i → .⦃ _ : NonZero i ⦄ → n / i < m
-n<mi⇒n/i<m n zero    (suc i) n<mi = case subst (n <_) (*-zeroˡ i) n<mi of λ ()
-n<mi⇒n/i<m n (suc m) (suc i) n<mi with n ≤? i
-n<mi⇒n/i<m n (suc m) (suc i) n<mi | yes n≤i = begin-strict
-  n / (suc i) ≡⟨ m<n⇒m/n≡0 (s≤s n≤i)  ⟩
-  0           <⟨ s≤s z≤n ⟩
-  suc m       ∎
-  where open ≤-Reasoning
-
-n<mi⇒n/i<m n (suc m) (suc i) n<mi | no ¬n≤i = begin-strict
-  n / suc i               ≡⟨ m/n≡1+[m∸n]/n (≰⇒> ¬n≤i) ⟩
-  1 + (n ∸ suc i) / suc i <⟨ s≤s (n<mi⇒n/i<m (n ∸ suc i) m (suc i) (lemma₃ (≰⇒> ¬n≤i))) ⟩
-  suc m                   ∎
+n<mi⇒n/i<m n m i n<mi with n <? i
+n<mi⇒n/i<m n m i n<mi | yes n<i = begin-strict
+  n / i ≡⟨ m<n⇒m/n≡0 n<i ⟩
+  0     <⟨ lemma₁ n m i n<mi ⟩
+  m     ∎
   where
   open ≤-Reasoning
 
-  lemma₁ : suc m * suc i ∸ suc i ≡ m * suc i
+  lemma₁ : ∀ n m i → n < m * i → 0 < m
+  lemma₁ n (suc m) i n<mi = s≤s z≤n
+
+n<mi⇒n/i<m n (suc m) i n<[1+m]i | no ¬n<i = begin-strict
+  n / i           ≡⟨ m/n≡1+[m∸n]/n (≮⇒≥ ¬n<i) ⟩
+  1 + (n ∸ i) / i <⟨ s≤s (n<mi⇒n/i<m (n ∸ i) m i (lemma₃ (≮⇒≥ ¬n<i))) ⟩
+  suc m           ∎
+  where
+  open ≤-Reasoning
+
+  lemma₁ : suc m * i ∸ i ≡ m * i
   lemma₁ = begin-equality
-    suc m * suc i ∸ suc i ≡⟨⟩
-    i + m * suc i ∸ i     ≡⟨ cong (_∸ i) (+-comm i (m * suc i)) ⟩
-    m * suc i + i ∸ i     ≡⟨ m+n∸n≡m (m * suc i) i ⟩
-    m * suc i             ∎
+    suc m * i ∸ i ≡⟨⟩
+    i + m * i ∸ i ≡⟨ cong (_∸ i) (+-comm i (m * i)) ⟩
+    m * i + i ∸ i ≡⟨ m+n∸n≡m (m * i) i ⟩
+    m * i         ∎
 
-  lemma₂ : i < n → n ∸ i ≡ suc (n ∸ suc i)
-  lemma₂ i<n = sym $ begin-equality
-    suc (n ∸ suc i) ≡˘⟨ +-∸-assoc 1 i<n ⟩
-    suc n ∸ suc i   ≡⟨⟩
-    n ∸ i           ∎
+  lemma₂ : i ≤ n → suc n ∸ i ≡ suc (n ∸ i)
+  lemma₂ i≤n = +-∸-assoc 1 i≤n
 
-  lemma₃ : i < n → n ∸ suc i < m * suc i
-  lemma₃ i<n =
-        n<mi                              ∶ n < suc m * suc i
-    |> ∸-monoˡ-≤ (suc i)                 ∶ n ∸ i ≤ suc m * suc i ∸ suc i
-    |> subst (n ∸ i ≤_) lemma₁           ∶ n ∸ i ≤ m * suc i
-    |> subst (_≤ m * suc i) (lemma₂ i<n) ∶ n ∸ suc i < m * suc i
+  lemma₃ : i ≤ n → n ∸ i < m * i
+  lemma₃ i≤n =
+       n<[1+m]i                              ∶ n         < suc m * i
+    |> ∸-monoˡ-≤ i                           ∶ suc n ∸ i ≤ suc m * i ∸ i
+    |> subst (_≤ suc m * i ∸ i) (lemma₂ i≤n) ∶ n ∸ i     < suc m * i ∸ i
+    |> subst (n ∸ i <_) lemma₁               ∶ n ∸ i     < m * i
 
 n%mi/i<m : ∀ n m i → .⦃ _ : NonZero i ⦄ → .⦃ _ : NonZero (m * i) ⦄ → n % (m * i) / i < m
 n%mi/i<m n m i = n<mi⇒n/i<m (n % (m * i)) m i (m%n<n n (m * i))
@@ -417,7 +425,7 @@ printNatural″ zero    n = []ˡ
 printNatural″ (suc e) n = printDigit (n /10^ e) ∷ˡ printNatural″ e n
 
 printNatural″-✓ : ∀ e n cs a →
-  natural (printNatural″ e n ++ˡ ' ' ∷ˡ cs) a ≡ just (a *10^ e + n %10^ e , space cs)
+  natural′ (printNatural″ e n ++ˡ ' ' ∷ˡ cs) a ≡ just (a *10^ e + n %10^ e , space cs)
 printNatural″-✓ zero    n cs a =
   just (a , space cs)                ≡⟨ cong (λ # → just (# , space cs)) lemma₁ ⟩
   just (a * 1 + n %10^ 0 , space cs) ∎
@@ -432,9 +440,9 @@ printNatural″-✓ zero    n cs a =
     a                ∎
 
 printNatural″-✓ (suc e) n cs a rewrite printDigit-✓ (n /10^ e) =
-  natural (printNatural″ e n ++ˡ ' ' ∷ˡ cs) (a * 10 + (n /10^ e % 10)) ≡⟨ printNatural″-✓ e n cs (a * 10 + (n /10^ e) % 10) ⟩
-  just ((a * 10 + n /10^ e % 10) * 10 ^ e + n %10^ e , space cs)       ≡⟨ cong (λ # → just (# , space cs)) lemma₂ ⟩
-  just (a * 10 ^ suc e + n %10^ suc e , space cs)                      ∎
+  natural′ (printNatural″ e n ++ˡ ' ' ∷ˡ cs) (a * 10 + (n /10^ e % 10)) ≡⟨ printNatural″-✓ e n cs (a * 10 + (n /10^ e) % 10) ⟩
+  just ((a * 10 + n /10^ e % 10) * 10 ^ e + n %10^ e , space cs)        ≡⟨ cong (λ # → just (# , space cs)) lemma₂ ⟩
+  just (a * 10 ^ suc e + n %10^ suc e , space cs)                       ∎
   where
   open ≡-Reasoning
 
@@ -459,29 +467,143 @@ printNatural″-✓ (suc e) n cs a rewrite printDigit-✓ (n /10^ e) =
     a *10^ 1+e + (n %10^ 1+e %10^ e + n %10^ 1+e /10^ e *10^ e) ≡˘⟨ cong (a *10^ 1+e +_) (m≡m%n+[m/n]*n (n %10^ 1+e) (10 ^ e)) ⟩
     a *10^ 1+e + n %10^ 1+e                                     ∎
 
-{-
-printLength : ℕ → ℕ
-printLength zero    = zero
-printLength (suc n) = suc (printLength (suc n / 10))
+-- XXX - fuel for termination actually faster than <-wellFounded?
+printLength : ℕ → ℕ → ℕ
+printLength zero    n = zero
+printLength (suc e) n =
+  case n <? 10 of λ where
+    (yes n<10) → 1
+    (no ¬n<10) → suc (printLength e (n / 10))
+
+printLength-✓ : ∀ e n → n %10^ (printLength e n) ≡ n %10^ e
+printLength-✓ zero    n = refl
+printLength-✓ (suc e) n with n <? 10
+printLength-✓ (suc e) n | yes n<10 = begin-equality
+  n % 10         ≡⟨ n<m⇒n%m≡n n<10 ⟩
+  n              ≡˘⟨ n<m⇒n%m≡n (<-transˡ n<10 10≤10^[1+e]) ⦃ 10^e≢0 {suc e} ⦄ ⟩
+  n %10^ (suc e) ∎
+  where
+  open ≤-Reasoning
+
+  n≢0⇒0<n : ∀ n → .⦃ NonZero n ⦄ → 1 ≤ n
+  n≢0⇒0<n (suc n) = s≤s z≤n
+
+  10≤10^[1+e] : 10 ≤ 10 ^ suc e
+  10≤10^[1+e] = begin
+    10          ≡⟨⟩
+    10 * 1      ≤⟨ *-monoʳ-≤ 10 (n≢0⇒0<n (10 ^ e) ⦃ 10^e≢0 {e} ⦄ ) ⟩
+    10 * 10 ^ e ≡⟨⟩
+    10 ^ suc e  ∎
+
+printLength-✓ (suc e) n | no ¬n<10 =
+  lhs                      ≡⟨ m≡m%n+[m/n]*n lhs 10 ⟩
+  lhs % 10 + lhs / 10 * 10 ≡⟨ cong (λ # → lhs % 10 + # * 10) lhs/10≡rhs/10 ⟩
+  lhs % 10 + rhs / 10 * 10 ≡⟨ cong (_+ rhs / 10 * 10) lhs%10≡rhs%10 ⟩
+  rhs % 10 + rhs / 10 * 10 ≡˘⟨ m≡m%n+[m/n]*n rhs 10 ⟩
+  rhs                      ∎
+  where
+  open ≡-Reasoning
+
+  lhs = n %10^ (suc (printLength e (n / 10)))
+  rhs = n %10^ (suc e)
+
+  instance
+    _ : NonZero (10 ^ printLength e (n / 10))
+    _ = 10^e≢0 {printLength e (n / 10)}
+
+    _ : NonZero (10 ^ suc (printLength e (n / 10)))
+    _ = 10^e≢0 {suc (printLength e (n / 10))}
+
+    _ : NonZero (10 ^ printLength e (n / 10) * 10)
+    _ = mn≢0 (10 ^ printLength e (n / 10)) 10
+
+    _ : NonZero (10 ^ e)
+    _ = 10^e≢0 {e}
+
+    _ : NonZero (10 ^ suc e)
+    _ = 10^e≢0 {suc e}
+
+    _ : NonZero (10 ^ e * 10)
+    _ = mn≢0 (10 ^ e) 10
+
+  cong-≢0 : (f : (n : ℕ) → .⦃ NonZero n ⦄ → ℕ) {x y : ℕ } → x ≡ y → .⦃ _ : NonZero x ⦄ →
+    .⦃ _ : NonZero y ⦄ → f x ≡ f y
+  cong-≢0 f refl = refl
+
+  lhs/10≡rhs/10 : lhs / 10 ≡ rhs / 10
+  lhs/10≡rhs/10 =
+    lhs / 10 ≡⟨⟩
+    n %10^ (suc (printLength e (n / 10))) / 10  ≡⟨ cong-≢0 (λ # → n % # / 10) (*-comm 10 (10 ^ printLength e (n / 10))) ⟩
+    n % (10 ^ printLength e (n / 10) * 10) / 10 ≡˘⟨ n%mi/i≡n/i%m n (10 ^ printLength e (n / 10)) 10 ⟩
+    n / 10 %10^ printLength e (n / 10)          ≡⟨ printLength-✓ e (n / 10) ⟩
+    n / 10 %10^ e                               ≡⟨ n%mi/i≡n/i%m n (10 ^ e) 10 ⟩
+    n % (10 ^ e * 10) / 10                      ≡⟨ cong-≢0 (λ # → n % # / 10) (*-comm (10 ^ e) 10) ⟩
+    n %10^ (suc e) / 10                         ≡⟨⟩
+    rhs / 10                                    ∎
+
+  lhs%10≡rhs%10 : lhs % 10 ≡ rhs % 10
+  lhs%10≡rhs%10 =
+    lhs % 10                                    ≡⟨⟩
+    n %10^ (suc (printLength e (n / 10))) % 10  ≡⟨ cong-≢0 (λ # → n % # % 10) (*-comm 10 (10 ^ printLength e (n / 10))) ⟩
+    n % (10 ^ printLength e (n / 10) * 10) % 10 ≡⟨ n%km%m≡n%m (10 ^ printLength e (n / 10)) 10 n ⟩
+    n % 10                                      ≡˘⟨ n%km%m≡n%m (10 ^ e) 10 n  ⟩
+    n % (10 ^ e * 10) % 10                      ≡⟨ cong-≢0 (λ # → n % # % 10) (*-comm (10 ^ e) 10) ⟩
+    n %10^ (suc e) % 10                         ≡⟨⟩
+    rhs % 10                                    ∎
+    where open ≡-Reasoning
 
 printNatural′ : ℕ → List Char
-printNatural′ n = printNatural″ (printLength n) n
--}
+printNatural′ n = printNatural″ (printLength 10 n) n
+
+printNatural′-✓ : ∀ n cs →
+  natural (printNatural′ n ++ˡ ' ' ∷ˡ cs) ≡ just (n % 10 ^ 10 , space cs)
+printNatural′-✓ n cs =
+  natural (printNatural′ n ++ˡ ' ' ∷ˡ cs)   ≡⟨⟩
+  natural (printNatural″ e n ++ˡ ' ' ∷ˡ cs) ≡⟨ printNatural″-✓ e n cs 0 ⟩
+  just (n % 10 ^ e , space cs)              ≡⟨ cong (λ # → just (# , space cs)) (printLength-✓ 10 n) ⟩
+  just (n % 10 ^ 10 , space cs)             ∎
+  where
+  open ≡-Reasoning
+
+  e = printLength 10 n
+
+  instance
+    _ : NonZero (10 ^ e)
+    _ = 10^e≢0 {e}
+
+printNatural : ℕ → List Char
+printNatural n = printNatural′ n ++ˡ ' ' ∷ˡ []ˡ
+
+printNatural-✓ : ∀ n cs → natural (printNatural n ++ˡ cs) ≡ just (n % 10 ^ 10 , space cs)
+printNatural-✓ n cs =
+  natural (printNatural n ++ˡ cs)                     ≡⟨⟩
+  natural ((printNatural″ e n ++ˡ ' ' ∷ˡ []ˡ) ++ˡ cs) ≡⟨ cong natural (lemma₁ (printNatural″ e n) cs) ⟩
+  natural (printNatural″ e n ++ˡ ' ' ∷ˡ cs)           ≡⟨⟩
+  natural (printNatural′ n ++ˡ ' ' ∷ˡ cs)             ≡⟨ printNatural′-✓ n cs ⟩
+  just (n % 10 ^ 10 , space cs)                       ∎
+  where
+  open ≡-Reasoning
+
+  e = printLength 10 n
+
+  lemma₁ : ∀ xs cs → (xs ++ˡ ' ' ∷ˡ []ˡ) ++ˡ cs ≡ xs ++ˡ ' ' ∷ˡ cs
+  lemma₁ []ˡ       cs = refl
+  lemma₁ (x ∷ˡ xs) cs = cong (x ∷ˡ_) (lemma₁ xs cs)
 
 integer : List Char → Maybe (Bool × ℕ × List Char)
 integer []ˡ       = nothing
 integer (c ∷ˡ cs) =
   case token c of λ where
-    isMinus     → mapᵐ (true ,_) (natural cs 0)
-    (isDigit _) → mapᵐ (false ,_) (natural (c ∷ˡ cs) 0)
+    isMinus     → mapᵐ (true ,_) (natural cs)
+    (isDigit _) → mapᵐ (false ,_) (natural (c ∷ˡ cs))
     _           → nothing
 
 integer-< : ∀ cs s r cs′ → integer cs ≡ just (s , r , cs′) → length cs′ < length cs
 integer-< (c ∷ˡ cs) s r cs′ p    with token c
-integer-< (c ∷ˡ cs) s r cs′ p    | isMinus   with natural cs 0 in eq
-integer-< (c ∷ˡ cs) s r cs′ refl | isMinus   | just (r′ , cs″) = <-suc (natural-< cs 0 r′ cs″ eq)
-integer-< (c ∷ˡ cs) s r cs′ p    | isDigit _ with natural (c ∷ˡ cs) 0 in eq
-integer-< (c ∷ˡ cs) s r cs′ refl | isDigit _ | just (r′ , cs″) = natural-< (c ∷ˡ cs) 0 r′ cs″ eq
+integer-< (c ∷ˡ cs) s r cs′ p    | isMinus   with natural cs in eq
+integer-< (c ∷ˡ cs) s r cs′ refl | isMinus   | just (r′ , cs″) = <-suc (natural-< cs r′ cs″ eq)
+integer-< (c ∷ˡ cs) s r cs′ p    | isDigit _ with natural (c ∷ˡ cs) in eq
+integer-< (c ∷ˡ cs) s r cs′ refl | isDigit _ | just (r′ , cs″) = natural-< (c ∷ˡ cs) r′ cs″ eq
 
 with-≡ : {S : Set} → (x : Maybe S) → Maybe (∃[ y ] x ≡ just y)
 with-≡ nothing  = nothing
@@ -535,8 +657,8 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   intro cs = do
     cs₁ ← known cs (toList "p")
     cs₂ ← known cs₁ (toList "cnf")
-    _ , cs₃ ← natural cs₂ 0
-    _ , cs₄ ← natural cs₃ 0
+    _ , cs₃ ← natural cs₂
+    _ , cs₄ ← natural cs₃
     return cs₄
 
   intro-< : ∀ cs cs₄′ → intro cs ≡ just cs₄′ → length cs₄′ < length cs
@@ -545,14 +667,14 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   ... | just cs₁
     with known cs₁ (toList "cnf") in eq₂
   ... | just cs₂
-    with natural cs₂ 0 in eq₃
+    with natural cs₂ in eq₃
   ... | just (_ , cs₃)
-    with natural cs₃ 0 in eq₄
+    with natural cs₃ in eq₄
   ... | just (_ , cs₄)
     with p
   ... | refl = begin-strict
-    length cs₄ <⟨ natural-< cs₃ 0 _ cs₄ eq₄ ⟩
-    length cs₃ <⟨ natural-< cs₂ 0 _ cs₃ eq₃ ⟩
+    length cs₄ <⟨ natural-< cs₃ _ cs₄ eq₄ ⟩
+    length cs₃ <⟨ natural-< cs₂ _ cs₃ eq₃ ⟩
     length cs₂ ≤⟨ known-≤ cs₁ (toList "cnf") cs₂ eq₂ ⟩
     length cs₁ ≤⟨ known-≤ cs (toList "p") cs₁ eq₁ ⟩
     length cs  ∎
@@ -595,7 +717,7 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   {-# TERMINATING #-}
   delete : List Char → Translator → Recycler →
     Maybe (List Index × List Char × Translator × Recycler)
-  delete cs t r = natural cs 0 >>= λ where
+  delete cs t r = natural cs >>= λ where
     (zero , cs)       → return $ []ˡ , cs , t , r
     (x₀@(suc _) , cs) → do
       x ← lookupᵐ x₀ t
@@ -661,7 +783,7 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
 
   proof′ []ˡ         t r m = return $ []ˡ , t , r , m
   proof′ cs@(_ ∷ˡ _) t r m = do
-    x₀ , cs ← natural cs 0
+    x₀ , cs ← natural cs
     proof″ cs x₀ t r m
 
   proof : List Char → Translator → Maybe Proof
