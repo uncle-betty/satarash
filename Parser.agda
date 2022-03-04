@@ -605,6 +605,34 @@ integer-< (c ∷ˡ cs) s r cs′ refl | isMinus   | just (r′ , cs″) = <-suc 
 integer-< (c ∷ˡ cs) s r cs′ p    | isDigit _ with natural (c ∷ˡ cs) in eq
 integer-< (c ∷ˡ cs) s r cs′ refl | isDigit _ | just (r′ , cs″) = natural-< (c ∷ˡ cs) r′ cs″ eq
 
+printInteger : Bool → ℕ → List Char
+printInteger true  n = '-' ∷ˡ printNatural n
+printInteger false n = printNatural n
+
+printInteger-✓ : ∀ s n cs → integer (printInteger s n ++ˡ cs) ≡ just (s , n % 10 ^ 10 , space cs)
+printInteger-✓ true  n cs = cong (mapᵐ (true ,_)) (printNatural-✓ n cs)
+{-
+  idea: expand |printNatural-✓| in parallel to goal
+    - need to unblock |printLength| to get first character for |isDigit| check in |integer|
+    - case analysis on |n| unblocks |printLength| in goal
+    - parallel with-abstraction of |printNatural-✓| unblocks |printLength| also in |p|
+    - in |p|
+      - first rewrite unblocks |natural|
+    - in goal
+      - first rewrite unblocks |integer|
+      - unblocking |integer| expands it to |natural|
+      - second rewrite unblocks |natural| (analogously to |natural| in |p|)
+-}
+printInteger-✓ false n cs with n <? 10 | printNatural-✓ n cs
+printInteger-✓ false n cs | yes n<10   | p
+  rewrite printDigit-✓ (n / 1)
+  rewrite printDigit-✓ (n / 1)
+  = cong (mapᵐ (false ,_)) p
+printInteger-✓ false n cs | no ¬n<10   | p
+  rewrite printDigit-✓ (n /10^ (printLength 9 (n / 10)))
+  rewrite printDigit-✓ (n /10^ (printLength 9 (n / 10)))
+  = cong (mapᵐ (false ,_)) p
+
 with-≡ : {S : Set} → (x : Maybe S) → Maybe (∃[ y ] x ≡ just y)
 with-≡ nothing  = nothing
 with-≡ (just x) = just (x , refl)
