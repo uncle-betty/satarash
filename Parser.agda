@@ -11,7 +11,7 @@ open import Data.List
 open import Data.Maybe using (Maybe ; nothing ; just) renaming (map to mapᵐ)
 open import Data.Maybe.Categorical using (monad)
 open import Data.Nat using (
-    ℕ ; zero ; suc ; _+_ ; _∸_ ; _*_ ; _^_ ; _≤_ ; z≤n ; s≤s ; _≤?_ ; _<_ ; _<?_ ;
+    ℕ ; zero ; suc ; pred ; _+_ ; _∸_ ; _*_ ; _^_ ; _≤_ ; z≤n ; s≤s ; _≤?_ ; _<_ ; _<?_ ;
     NonZero ; >-nonZero⁻¹
   )
 open import Data.Nat.Divisibility using (_∣_ ; n∣m*n)
@@ -611,27 +611,14 @@ printInteger false n = printNatural n
 
 printInteger-✓ : ∀ s n cs → integer (printInteger s n ++ˡ cs) ≡ just (s , n % 10 ^ 10 , space cs)
 printInteger-✓ true  n cs = cong (mapᵐ (true ,_)) (printNatural-✓ n cs)
-{-
-  idea: expand |printNatural-✓| in parallel to goal
-    - need to unblock |printLength| to get first character for |isDigit| check in |integer|
-    - case analysis on |n| unblocks |printLength| in goal
-    - parallel with-abstraction of |printNatural-✓| unblocks |printLength| also in |p|
-    - in |p|
-      - first rewrite unblocks |natural|
-    - in goal
-      - first rewrite unblocks |integer|
-      - unblocking |integer| expands it to |natural|
-      - second rewrite unblocks |natural| (analogously to |natural| in |p|)
--}
-printInteger-✓ false n cs with n <? 10 | printNatural-✓ n cs
-printInteger-✓ false n cs | yes n<10   | p
-  rewrite printDigit-✓ (n / 1)
-  rewrite printDigit-✓ (n / 1)
-  = cong (mapᵐ (false ,_)) p
-printInteger-✓ false n cs | no ¬n<10   | p
-  rewrite printDigit-✓ (n /10^ (printLength 9 (n / 10)))
-  rewrite printDigit-✓ (n /10^ (printLength 9 (n / 10)))
-  = cong (mapᵐ (false ,_)) p
+-- idea: change |p₁| and |p₂| in parallel with goal
+printInteger-✓ false n cs with n <? 10 | printNatural-✓ n cs | printDigit-✓ (n /10^ pred (printLength 10 n))
+printInteger-✓ false n cs | yes n<10   | p₁                  | p₂
+  rewrite p₂ | p₂
+  = cong (mapᵐ (false ,_)) p₁
+printInteger-✓ false n cs | no ¬n<10   | p₁                  | p₂
+  rewrite p₂ | p₂
+  = cong (mapᵐ (false ,_)) p₁
 
 with-≡ : {S : Set} → (x : Maybe S) → Maybe (∃[ y ] x ≡ just y)
 with-≡ nothing  = nothing
