@@ -16,10 +16,10 @@ open import Data.Nat using (
   )
 open import Data.Nat.Divisibility using (_∣_ ; n∣m*n)
 open import Data.Nat.DivMod using (
-    _/_ ; _%_ ; m*n/n≡m ; m<n⇒m/n≡0 ; +-distrib-/-∣ʳ ; m/n≡1+[m∸n]/n ;
+    _/_ ; _%_ ; m/n<m ; m*n/n≡m ; m<n⇒m/n≡0 ; +-distrib-/-∣ʳ ; m/n≡1+[m∸n]/n ;
     n%1≡0 ; m%n<n ; m≤n⇒m%n≡m ; [m+n]%n≡m%n ; [m+kn]%n≡m%n ; m≡m%n+[m/n]*n
   )
-open import Data.Nat.Induction using (<-wellFounded)
+open import Data.Nat.Induction using (<-wellFounded ; <-wellFounded-fast)
 open import Data.Nat.Properties using (
     +-comm ; +-identityʳ ; m+n∸n≡m ; m∸n+n≡m ; +-assoc ; +-∸-assoc ; ∸-+-assoc ;
     *-comm ; *-assoc ; *-identityʳ ; *-distribʳ-+ ;
@@ -467,105 +467,94 @@ printNatural″-✓ (suc e) n cs a rewrite printDigit-✓ (n /10^ e) =
     a *10^ 1+e + (n %10^ 1+e %10^ e + n %10^ 1+e /10^ e *10^ e) ≡˘⟨ cong (a *10^ 1+e +_) (m≡m%n+[m/n]*n (n %10^ 1+e) (10 ^ e)) ⟩
     a *10^ 1+e + n %10^ 1+e                                     ∎
 
--- XXX - fuel for termination actually faster than <-wellFounded?
-printLength : ℕ → ℕ → ℕ
-printLength zero    n = zero
-printLength (suc e) n =
+¬n<10⇒n≢0 : ∀ {n} → ¬ (n < 10) → NonZero n
+¬n<10⇒n≢0 {zero}  ¬n<10 = contradiction (s≤s z≤n) ¬n<10
+¬n<10⇒n≢0 {suc n} ¬n<10 = _
+
+2≤10 : 2 ≤ 10
+2≤10 = s≤s (s≤s z≤n)
+
+n/10<n : ∀ {n} → .⦃ _ : NonZero n ⦄ → n / 10 < n
+n/10<n {n} = m/n<m n 10 2≤10
+
+printLength′ : (n : ℕ) → Acc _<_ n → ℕ
+printLength′ n (acc rs) =
   case n <? 10 of λ where
     (yes n<10) → 1
-    (no ¬n<10) → suc (printLength e (n / 10))
+    (no ¬n<10) →
+      let m′ = rs (n / 10) (n/10<n ⦃ ¬n<10⇒n≢0 ¬n<10 ⦄) in
+      suc (printLength′ (n / 10) m′)
 
-printLength-✓ : ∀ e n → n %10^ (printLength e n) ≡ n %10^ e
-printLength-✓ zero    n = refl
-printLength-✓ (suc e) n with n <? 10
-printLength-✓ (suc e) n | yes n<10 = begin-equality
-  n % 10         ≡⟨ n<m⇒n%m≡n n<10 ⟩
-  n              ≡˘⟨ n<m⇒n%m≡n (<-transˡ n<10 10≤10^[1+e]) ⦃ 10^e≢0 {suc e} ⦄ ⟩
-  n %10^ (suc e) ∎
-  where
-  open ≤-Reasoning
-
-  n≢0⇒0<n : ∀ n → .⦃ NonZero n ⦄ → 1 ≤ n
-  n≢0⇒0<n (suc n) = s≤s z≤n
-
-  10≤10^[1+e] : 10 ≤ 10 ^ suc e
-  10≤10^[1+e] = begin
-    10          ≡⟨⟩
-    10 * 1      ≤⟨ *-monoʳ-≤ 10 (n≢0⇒0<n (10 ^ e) ⦃ 10^e≢0 {e} ⦄ ) ⟩
-    10 * 10 ^ e ≡⟨⟩
-    10 ^ suc e  ∎
-
-printLength-✓ (suc e) n | no ¬n<10 =
+printLength′-✓ : ∀ n m → n %10^ (printLength′ n m) ≡ n
+printLength′-✓ n (acc rs) with n <? 10
+printLength′-✓ n (acc rs) | yes n<10 = n<m⇒n%m≡n n<10
+printLength′-✓ n (acc rs) | no ¬n<10 =
   lhs                      ≡⟨ m≡m%n+[m/n]*n lhs 10 ⟩
-  lhs % 10 + lhs / 10 * 10 ≡⟨ cong (λ # → lhs % 10 + # * 10) lhs/10≡rhs/10 ⟩
-  lhs % 10 + rhs / 10 * 10 ≡⟨ cong (_+ rhs / 10 * 10) lhs%10≡rhs%10 ⟩
-  rhs % 10 + rhs / 10 * 10 ≡˘⟨ m≡m%n+[m/n]*n rhs 10 ⟩
-  rhs                      ∎
+  lhs % 10 + lhs / 10 * 10 ≡⟨ cong (λ # → lhs % 10 + # * 10) lhs/10≡n/10 ⟩
+  lhs % 10 + n   / 10 * 10 ≡⟨ cong (_+ n / 10 * 10) lhs%10≡n%10 ⟩
+  n   % 10 + n   / 10 * 10 ≡˘⟨ m≡m%n+[m/n]*n n 10 ⟩
+  n                        ∎
   where
   open ≡-Reasoning
 
-  lhs = n %10^ (suc (printLength e (n / 10)))
-  rhs = n %10^ (suc e)
-
   instance
-    _ : NonZero (10 ^ printLength e (n / 10))
-    _ = 10^e≢0 {printLength e (n / 10)}
+    _ : NonZero n
+    _ = ¬n<10⇒n≢0 ¬n<10
 
-    _ : NonZero (10 ^ suc (printLength e (n / 10)))
-    _ = 10^e≢0 {suc (printLength e (n / 10))}
-
-    _ : NonZero (10 ^ printLength e (n / 10) * 10)
-    _ = mn≢0 (10 ^ printLength e (n / 10)) 10
-
-    _ : NonZero (10 ^ e)
-    _ = 10^e≢0 {e}
-
-    _ : NonZero (10 ^ suc e)
-    _ = 10^e≢0 {suc e}
-
-    _ : NonZero (10 ^ e * 10)
-    _ = mn≢0 (10 ^ e) 10
+  m′ = rs (n / 10) n/10<n
+  lhs = n %10^ (suc (printLength′ (n / 10) m′))
 
   cong-≢0 : (f : (n : ℕ) → .⦃ NonZero n ⦄ → ℕ) {x y : ℕ } → x ≡ y → .⦃ _ : NonZero x ⦄ →
     .⦃ _ : NonZero y ⦄ → f x ≡ f y
   cong-≢0 f refl = refl
 
-  lhs/10≡rhs/10 : lhs / 10 ≡ rhs / 10
-  lhs/10≡rhs/10 =
-    lhs / 10 ≡⟨⟩
-    n %10^ (suc (printLength e (n / 10))) / 10  ≡⟨ cong-≢0 (λ # → n % # / 10) (*-comm 10 (10 ^ printLength e (n / 10))) ⟩
-    n % (10 ^ printLength e (n / 10) * 10) / 10 ≡˘⟨ n%mi/i≡n/i%m n (10 ^ printLength e (n / 10)) 10 ⟩
-    n / 10 %10^ printLength e (n / 10)          ≡⟨ printLength-✓ e (n / 10) ⟩
-    n / 10 %10^ e                               ≡⟨ n%mi/i≡n/i%m n (10 ^ e) 10 ⟩
-    n % (10 ^ e * 10) / 10                      ≡⟨ cong-≢0 (λ # → n % # / 10) (*-comm (10 ^ e) 10) ⟩
-    n %10^ (suc e) / 10                         ≡⟨⟩
-    rhs / 10                                    ∎
+  instance
+    _ : NonZero (10 ^ printLength′ (n / 10) m′)
+    _ = 10^e≢0 {printLength′ (n / 10) m′}
 
-  lhs%10≡rhs%10 : lhs % 10 ≡ rhs % 10
-  lhs%10≡rhs%10 =
-    lhs % 10                                    ≡⟨⟩
-    n %10^ (suc (printLength e (n / 10))) % 10  ≡⟨ cong-≢0 (λ # → n % # % 10) (*-comm 10 (10 ^ printLength e (n / 10))) ⟩
-    n % (10 ^ printLength e (n / 10) * 10) % 10 ≡⟨ n%km%m≡n%m (10 ^ printLength e (n / 10)) 10 n ⟩
-    n % 10                                      ≡˘⟨ n%km%m≡n%m (10 ^ e) 10 n  ⟩
-    n % (10 ^ e * 10) % 10                      ≡⟨ cong-≢0 (λ # → n % # % 10) (*-comm (10 ^ e) 10) ⟩
-    n %10^ (suc e) % 10                         ≡⟨⟩
-    rhs % 10                                    ∎
-    where open ≡-Reasoning
+    _ : NonZero (10 ^ suc (printLength′ (n / 10) m′))
+    _ = 10^e≢0 {suc (printLength′ (n / 10) m′)}
+
+    _ : NonZero (10 ^ printLength′ (n / 10) m′ * 10)
+    _ = mn≢0 (10 ^ printLength′ (n / 10) m′) 10
+
+  lhs/10≡n/10 : lhs / 10 ≡ n / 10
+  lhs/10≡n/10 =
+    let m′ = rs (n / 10) n/10<n in
+    lhs / 10                                      ≡⟨⟩
+    n %10^ (suc (printLength′ (n / 10) m′)) / 10  ≡⟨ cong-≢0 (λ # → n % # / 10) (*-comm 10 (10 ^ printLength′ (n / 10) m′)) ⟩
+    n % (10 ^ printLength′ (n / 10) m′ * 10) / 10 ≡˘⟨ n%mi/i≡n/i%m n (10 ^ printLength′ (n / 10) m′) 10 ⟩
+    n / 10 %10^ printLength′ (n / 10) m′          ≡⟨ printLength′-✓ (n / 10) m′ ⟩
+    n / 10                                        ∎
+
+  lhs%10≡n%10 : lhs % 10 ≡ n % 10
+  lhs%10≡n%10 =
+    let m′ = rs (n / 10) n/10<n in
+    lhs % 10                                      ≡⟨⟩
+    n %10^ (suc (printLength′ (n / 10) m′)) % 10  ≡⟨ cong-≢0 (λ # → n % # % 10) (*-comm 10 (10 ^ printLength′ (n / 10) m′)) ⟩
+    n % (10 ^ printLength′ (n / 10) m′ * 10) % 10 ≡⟨ n%km%m≡n%m (10 ^ printLength′ (n / 10) m′) 10 n ⟩
+    n % 10                                        ∎
+
+printLength : ℕ → ℕ
+printLength n = printLength′ n (<-wellFounded-fast n)
+
+printLength-✓ : ∀ n → n %10^ (printLength n) ≡ n
+printLength-✓ n = printLength′-✓ n (<-wellFounded-fast n)
 
 printNatural′ : ℕ → List Char
-printNatural′ n = printNatural″ (printLength 10 n) n
+printNatural′ n = printNatural″ (printLength n) n
 
 printNatural′-✓ : ∀ n cs →
-  natural (printNatural′ n ++ˡ ' ' ∷ˡ cs) ≡ just (n % 10 ^ 10 , space cs)
+  natural (printNatural′ n ++ˡ ' ' ∷ˡ cs) ≡ just (n , space cs)
 printNatural′-✓ n cs =
   natural (printNatural′ n ++ˡ ' ' ∷ˡ cs)   ≡⟨⟩
   natural (printNatural″ e n ++ˡ ' ' ∷ˡ cs) ≡⟨ printNatural″-✓ e n cs 0 ⟩
-  just (n % 10 ^ e , space cs)              ≡⟨ cong (λ # → just (# , space cs)) (printLength-✓ 10 n) ⟩
-  just (n % 10 ^ 10 , space cs)             ∎
+  just (n % 10 ^ e , space cs)              ≡⟨ cong (λ # → just (# , space cs)) (printLength-✓ n) ⟩
+  just (n , space cs)                       ∎
   where
   open ≡-Reasoning
 
-  e = printLength 10 n
+  e = printLength n
 
   instance
     _ : NonZero (10 ^ e)
@@ -574,17 +563,17 @@ printNatural′-✓ n cs =
 printNatural : ℕ → List Char
 printNatural n = printNatural′ n ++ˡ ' ' ∷ˡ []ˡ
 
-printNatural-✓ : ∀ n cs → natural (printNatural n ++ˡ cs) ≡ just (n % 10 ^ 10 , space cs)
+printNatural-✓ : ∀ n cs → natural (printNatural n ++ˡ cs) ≡ just (n , space cs)
 printNatural-✓ n cs =
   natural (printNatural n ++ˡ cs)                     ≡⟨⟩
   natural ((printNatural″ e n ++ˡ ' ' ∷ˡ []ˡ) ++ˡ cs) ≡⟨ cong natural (lemma₁ (printNatural″ e n) cs) ⟩
   natural (printNatural″ e n ++ˡ ' ' ∷ˡ cs)           ≡⟨⟩
   natural (printNatural′ n ++ˡ ' ' ∷ˡ cs)             ≡⟨ printNatural′-✓ n cs ⟩
-  just (n % 10 ^ 10 , space cs)                       ∎
+  just (n , space cs)                                 ∎
   where
   open ≡-Reasoning
 
-  e = printLength 10 n
+  e = printLength n
 
   lemma₁ : ∀ xs cs → (xs ++ˡ ' ' ∷ˡ []ˡ) ++ˡ cs ≡ xs ++ˡ ' ' ∷ˡ cs
   lemma₁ []ˡ       cs = refl
@@ -609,14 +598,20 @@ printInteger : Bool → ℕ → List Char
 printInteger true  n = '-' ∷ˡ printNatural n
 printInteger false n = printNatural n
 
-printInteger-✓ : ∀ s n cs → integer (printInteger s n ++ˡ cs) ≡ just (s , n % 10 ^ 10 , space cs)
-printInteger-✓ true  n cs = cong (mapᵐ (true ,_)) (printNatural-✓ n cs)
--- idea: change |p₁| and |p₂| in parallel with goal
-printInteger-✓ false n cs with n <? 10 | printNatural-✓ n cs | printDigit-✓ (n /10^ pred (printLength 10 n))
-printInteger-✓ false n cs | yes n<10   | p₁                  | p₂
+printInteger-✓ : ∀ s n cs → integer (printInteger s n ++ˡ cs) ≡ just (s , n , space cs)
+printInteger-✓ true  n       cs = cong (mapᵐ (true ,_)) (printNatural-✓ n cs)
+-- case |n ≡ 0| for |<-wellFounded-skip|
+printInteger-✓ false zero    cs = refl
+{-
+  make |p₁| and |p₂| change in parallel with goal:
+    - |p₁| and |p₂| affected by |suc n <? 10| abstraction
+    - |p₁| affected by rewrites with |p₂|
+-}
+printInteger-✓ false (suc n) cs with suc n <? 10 | printNatural-✓ (suc n) cs | printDigit-✓ (suc n /10^ pred (printLength (suc n)))
+printInteger-✓ false (suc n) cs | yes n<10       | p₁                        | p₂
   rewrite p₂ | p₂
   = cong (mapᵐ (false ,_)) p₁
-printInteger-✓ false n cs | no ¬n<10   | p₁                  | p₂
+printInteger-✓ false (suc n) cs | no ¬n<10       | p₁                        | p₂
   rewrite p₂ | p₂
   = cong (mapᵐ (false ,_)) p₁
 
