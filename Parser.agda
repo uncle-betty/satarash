@@ -652,7 +652,7 @@ Measure : List Char → Set
 Measure = Acc (λ x y → length x < length y)
 
 measure : (cs : List Char) → Measure cs
-measure = wellFounded length <-wellFounded
+measure = wellFounded length <-wellFounded-fast
 
 module _ (bitsᶜ : Data.Nat.ℕ) where
   open import Verifier bitsᶜ as V using (
