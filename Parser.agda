@@ -8,6 +8,7 @@ open import Data.Bool using (Bool ; true ; false)
 open import Data.Char using (Char ; fromℕ ; toℕ) renaming (_≟_ to _≟ᶜ_)
 open import Data.List
   using (List ; length) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ ; _++_ to _++ˡ_)
+open import Data.List.Properties using (++-assoc)
 open import Data.Maybe using (Maybe ; nothing ; just) renaming (map to mapᵐ)
 open import Data.Maybe.Categorical using (monad)
 open import Data.Nat using (
@@ -563,6 +564,16 @@ printNatural′-✓ n cs =
 printNatural : ℕ → List Char
 printNatural n = printNatural′ n ++ˡ ' ' ∷ˡ []ˡ
 
+spaceNatural : ∀ n cs → space (printNatural n ++ˡ cs) ≡ printNatural n ++ˡ cs
+-- case |n ≡ 0| for |<-wellFounded-skip|
+spaceNatural zero cs = refl
+-- |suc n <? 10| abstraction changes |p| in parallel with goal
+spaceNatural (suc n) cs with (suc n) <? 10 | printDigit-✓ (suc n /10^ pred (printLength (suc n)))
+spaceNatural (suc n) cs | yes n<10         | p
+  rewrite p = refl
+spaceNatural (suc n) cs | no ¬n<10         | p
+  rewrite p = refl
+
 printNatural-✓ : ∀ n cs → natural (printNatural n ++ˡ cs) ≡ just (n , space cs)
 printNatural-✓ n cs =
   natural (printNatural n ++ˡ cs)                     ≡⟨⟩
@@ -578,6 +589,13 @@ printNatural-✓ n cs =
   lemma₁ : ∀ xs cs → (xs ++ˡ ' ' ∷ˡ []ˡ) ++ˡ cs ≡ xs ++ˡ ' ' ∷ˡ cs
   lemma₁ []ˡ       cs = refl
   lemma₁ (x ∷ˡ xs) cs = cong (x ∷ˡ_) (lemma₁ xs cs)
+
+spaceNatural-✓ : ∀ n cs → natural (space (printNatural n ++ˡ cs)) ≡ just (n , space cs)
+spaceNatural-✓ n cs =
+  natural (space (printNatural n ++ˡ cs)) ≡⟨ cong natural (spaceNatural n cs) ⟩
+  natural (printNatural n ++ˡ cs)         ≡⟨ printNatural-✓ n cs ⟩
+  just (n , space cs)                     ∎
+  where open ≡-Reasoning
 
 integer : List Char → Maybe (Bool × ℕ × List Char)
 integer []ˡ       = nothing
@@ -598,6 +616,10 @@ printInteger : Bool → ℕ → List Char
 printInteger true  n = '-' ∷ˡ printNatural n
 printInteger false n = printNatural n
 
+spaceInteger : ∀ s n cs → space (printInteger s n ++ˡ cs) ≡ printInteger s n ++ˡ cs
+spaceInteger true  n cs = refl
+spaceInteger false n cs = spaceNatural n cs
+
 printInteger-✓ : ∀ s n cs → integer (printInteger s n ++ˡ cs) ≡ just (s , n , space cs)
 printInteger-✓ true  n       cs = cong (mapᵐ (true ,_)) (printNatural-✓ n cs)
 -- case |n ≡ 0| for |<-wellFounded-skip|
@@ -614,6 +636,13 @@ printInteger-✓ false (suc n) cs | yes n<10       | p₁                       
 printInteger-✓ false (suc n) cs | no ¬n<10       | p₁                        | p₂
   rewrite p₂ | p₂
   = cong (mapᵐ (false ,_)) p₁
+
+spaceInteger-✓ : ∀ s n cs → integer (space (printInteger s n ++ˡ cs)) ≡ just (s , n , space cs)
+spaceInteger-✓ s n cs =
+  integer (space (printInteger s n ++ˡ cs)) ≡⟨ cong integer (spaceInteger s n cs) ⟩
+  integer (printInteger s n ++ˡ cs)         ≡⟨ printInteger-✓ s n cs ⟩
+  just (s , n , space cs)                   ∎
+  where open ≡-Reasoning
 
 with-≡ : {S : Set} → (x : Maybe S) → Maybe (∃[ y ] x ≡ just y)
 with-≡ nothing  = nothing
@@ -662,6 +691,62 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
     with klause cs′ m′ in eq | p
   ... | just (k , cs″) | refl =
     <-trans (klause-< cs′ k cs″ m′ eq) (integer-< cs true (suc v) cs′ q)
+
+  printKlause : Clause → List Char
+  printKlause []ˡ          = '0' ∷ˡ '\n' ∷ˡ []ˡ
+  printKlause (pos v ∷ˡ k) = printInteger false (suc v) ++ˡ printKlause k
+  printKlause (neg v ∷ˡ k) = printInteger true (suc v) ++ˡ printKlause k
+
+  spaceKlause : ∀ k cs → space (printKlause k ++ˡ cs) ≡ printKlause k ++ˡ cs
+  spaceKlause []ˡ          cs = refl
+  spaceKlause (pos v ∷ˡ k) cs =
+    space (printKlause (pos v ∷ˡ k) ++ˡ cs) ≡⟨⟩
+    space ((printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs) ≡⟨ cong space (++-assoc (printInteger false (suc v)) (printKlause k) cs) ⟩
+    space (printInteger false (suc v) ++ˡ printKlause k ++ˡ cs)   ≡⟨ spaceNatural (suc v) (printKlause k ++ˡ cs) ⟩
+    printInteger false (suc v) ++ˡ printKlause k ++ˡ cs           ≡˘⟨ ++-assoc (printInteger false (suc v)) (printKlause k) cs ⟩
+    (printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs         ≡⟨⟩
+    printKlause (pos v ∷ˡ k) ++ˡ cs ∎
+    where open ≡-Reasoning
+  spaceKlause (neg v ∷ˡ k) cs = refl
+
+  spaceInteger-with-≡ : ∀ s n cs → with-≡ (integer (space (printInteger s n ++ˡ cs))) ≡
+    just ((s , n , space cs) , spaceInteger-✓ s n cs )
+  spaceInteger-with-≡ s n cs rewrite spaceInteger-✓ s n cs = refl
+
+  spaceKlause-✓ : ∀ k cs m → klause (space (printKlause k ++ˡ cs)) m ≡ just (k , space cs)
+  spaceKlause-✓ []ˡ          cs (acc rs) = refl
+  spaceKlause-✓ (pos v ∷ˡ k) cs (acc rs)
+    rewrite ++-assoc (printNatural (suc v)) (printKlause k) cs
+
+    with rec ← spaceKlause-✓ k cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
+    with cs′ ← printKlause k ++ˡ cs
+
+    rewrite spaceInteger-with-≡ false (suc v) cs′
+
+    with ✓′ ← spaceInteger-✓ false (suc v) cs′
+    with <′ ← integer-< (space (printInteger false (suc v) ++ˡ cs′)) false (suc v) (space cs′) ✓′
+    with m′ ← rs (space cs′) <′
+
+    rewrite rec m′
+    = refl
+
+  spaceKlause-✓ (neg v ∷ˡ k) cs (acc rs)
+    rewrite ++-assoc (printNatural (suc v)) (printKlause k) cs
+
+    with rec ← spaceKlause-✓ k cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
+    with cs′ ← printKlause k ++ˡ cs
+
+    rewrite spaceInteger-with-≡ true (suc v) cs′
+
+    with ✓′ ← spaceInteger-✓ true (suc v) cs′
+    with <′ ← integer-< (space (printInteger true (suc v) ++ˡ cs′)) true (suc v) (space cs′) ✓′
+    with m′ ← rs (space cs′) <′
+
+    rewrite rec m′
+    = refl
+
+  printKlause-✓ : ∀ k cs m → klause (printKlause k ++ˡ cs) m ≡ just (k , space cs)
+  printKlause-✓ k cs m rewrite sym (spaceKlause k cs) = spaceKlause-✓ k cs m
 
   intro : List Char → Maybe (List Char)
   intro cs = do
