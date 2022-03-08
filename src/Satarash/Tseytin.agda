@@ -1,6 +1,6 @@
 -- XXX - duplication in rewrite-based proofs (e.g., makeTrue-✓₁ or roundtrip)
 
-module Tseytin where
+module Satarash.Tseytin where
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_ ; _≟_)
 open import Data.Bool.Properties

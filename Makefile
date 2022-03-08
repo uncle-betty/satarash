@@ -18,14 +18,17 @@ else
 GHC_FLAGS :=
 endif
 
+TOP :=			src/Satarash/Checker.agda
+ALL :=			$(wildcard src/Satarash/*.agda)
+
 %.o:			%.cc
 				$(CXX) $(CXX_FLAGS) -c -o $@ $<
 
 checker:		checker.o
 				$(CXX) $(CXX_FLAGS) -o checker checker.o
 
-Checker:		Checker.agda Parser.agda Verifier.agda
-				agda --ghc $(GHC_FLAGS) Checker.agda
+Checker:		$(ALL)
+				agda --ghc $(GHC_FLAGS) --compile-dir=. $(TOP)
 
 clean:
 				rm -f checker checker.o

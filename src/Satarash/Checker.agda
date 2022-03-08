@@ -1,6 +1,6 @@
 {-# OPTIONS --guardedness #-}
 
-module Checker where
+module Satarash.Checker where
 
 open import Data.Bool using (Bool ; true ; false)
 open import Data.List using (List ; [] ; _∷_)
@@ -13,8 +13,8 @@ open import Function using (_$_ ; _∘_ ; case_of_)
 open import IO using (Main ; run ; readFiniteFile ; putStrLn)
 open import System.Environment using (getArgs)
 
-open import Parser using (parse)
-open import Verifier using (Formula ; Proof ; checkLRAT)
+open import Satarash.Parser using (parse)
+open import Satarash.Verifier using (Formula ; Proof ; checkLRAT)
 
 bitsᶜ : ℕ
 bitsᶜ = 24

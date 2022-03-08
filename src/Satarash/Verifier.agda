@@ -1,6 +1,6 @@
 import Data.Nat
 
-module Verifier (bitsᶜ : Data.Nat.ℕ) where
+module Satarash.Verifier (bitsᶜ : Data.Nat.ℕ) where
 
 open Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
 

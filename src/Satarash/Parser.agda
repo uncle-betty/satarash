@@ -1,6 +1,4 @@
-import Data.Nat
-
-module Parser where
+module Satarash.Parser where
 
 open import Agda.Builtin.Nat using () renaming (mod-helper to modʰ ; div-helper to divʰ)
 open import Category.Monad using (RawMonad)
@@ -655,7 +653,7 @@ measure : (cs : List Char) → Measure cs
 measure = wellFounded length <-wellFounded-fast
 
 module _ (bitsᶜ : Data.Nat.ℕ) where
-  open import Verifier bitsᶜ as V using (
+  open import Satarash.Verifier bitsᶜ as V using (
       Proof ; Step ; del ; ext ;
       Clause ; Literal ; pos ; neg ;
       Formula ; Trie ; node ; leaf ; Index
