@@ -31,7 +31,7 @@ open import Tactic.Cong using (cong!)
 bitsᶜ : ℕ
 bitsᶜ = 24
 
-import Verifier bitsᶜ as V
+import Satarash.Verifier bitsᶜ as V
 
 infix 4 _↔_
 

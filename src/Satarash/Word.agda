@@ -256,37 +256,35 @@ notʷ (x ∷ xs) = not x ∷ notʷ xs
 
 infixl 6 _∧ʷ_
 
-_∧ʷ_ : {i : ℕ} → (xs : Word i) → (ys : Word i) → Word i
+_∧ʷ_ : {i : ℕ} → (xs ys : Word i) → Word i
 _∧ʷ_ []       []       = []
 _∧ʷ_ (x ∷ xs) (y ∷ ys) = x ∧ y ∷ xs ∧ʷ ys
 
--- XXX - why doesn't kong work here?
 ∧ʷ-zeroʳ : ∀ {i} xs → xs ∧ʷ (replicate {n = i} false) ≡ replicate false
 ∧ʷ-zeroʳ {zero}  []       = refl
 ∧ʷ-zeroʳ {suc i} (x ∷ xs) =
-  x ∧ false ∷ (xs ∧ʷ replicate false) ≡⟨ cong (_∷ (xs ∧ʷ replicate false)) (∧-zeroʳ x) ⟩
-  false ∷ (xs ∧ʷ replicate false)     ≡⟨ cong (false ∷_) (∧ʷ-zeroʳ xs) ⟩
+  x ∧ false ∷ (xs ∧ʷ replicate false) ≡⟨ kong (∧-zeroʳ x) ⟩
+  false ∷ (xs ∧ʷ replicate false)     ≡⟨ kong (∧ʷ-zeroʳ xs) ⟩
   replicate false                     ∎
   where open ≡-Reasoning
 
--- XXX - why doesn't kong work here?
 ∧ʷ-identityʳ : ∀ {i} xs → xs ∧ʷ (replicate {n = i} true) ≡ xs
 ∧ʷ-identityʳ {zero}  []       = refl
 ∧ʷ-identityʳ {suc i} (x ∷ xs) =
-  x ∧ true ∷ xs ∧ʷ (replicate true) ≡⟨ cong (_∷ (xs ∧ʷ replicate true)) (∧-identityʳ x) ⟩
-  x ∷ xs ∧ʷ (replicate true)        ≡⟨ cong (x ∷_) (∧ʷ-identityʳ xs) ⟩
+  x ∧ true ∷ xs ∧ʷ (replicate true) ≡⟨ kong (∧-identityʳ x) ⟩
+  x ∷ xs ∧ʷ (replicate true)        ≡⟨ kong (∧ʷ-identityʳ xs) ⟩
   x ∷ xs                            ∎
   where open ≡-Reasoning
 
 infixl 5 _∨ʷ_
 
-_∨ʷ_ : {i : ℕ} → (xs : Word i) → (ys : Word i) → Word i
+_∨ʷ_ : {i : ℕ} → (xs ys : Word i) → Word i
 _∨ʷ_ []       []       = []
 _∨ʷ_ (x ∷ xs) (y ∷ ys) = (x ∨ y) ∷ (xs ∨ʷ ys)
 
 infixl 5 _xorʷ_
 
-_xorʷ_ : {i : ℕ} → (xs : Word i) → (ys : Word i) → Word i
+_xorʷ_ : {i : ℕ} → (xs ys : Word i) → Word i
 _xorʷ_ []       []       = []
 _xorʷ_ (x ∷ xs) (y ∷ ys) = (x xor y) ∷ (xs xorʷ ys)
 
