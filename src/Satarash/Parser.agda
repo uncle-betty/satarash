@@ -5,8 +5,8 @@ open import Category.Monad using (RawMonad)
 open import Data.Bool using (Bool ; true ; false)
 open import Data.Char using (Char ; fromℕ ; toℕ) renaming (_≟_ to _≟ᶜ_)
 open import Data.List
-  using (List ; length) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ ; _++_ to _++ˡ_)
-open import Data.List.Properties using (++-assoc)
+  using (List ; length ; _∷ʳ_) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ ; _++_ to _++ˡ_)
+open import Data.List.Properties using (++-assoc ; ++-identityʳ)
 open import Data.Maybe using (Maybe ; nothing ; just) renaming (map to mapᵐ)
 open import Data.Maybe.Categorical using (monad)
 open import Data.Nat using (
@@ -25,9 +25,10 @@ open import Data.Nat.Properties using (
     <-strictTotalOrder ; module ≤-Reasoning ; ≤-refl ; ≤-trans ; <-trans ; <-transˡ ; n≤1+n ;
     n<1+n ; ≮⇒≥ ; <⇒≤pred ; +-monoˡ-≤ ; ∸-monoˡ-≤ ; ∸-monoʳ-< ; *-monoʳ-≤ )
 open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
+open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.String using (String ; toList ; fromList)
 open import Data.Vec using (Vec ; reverse) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
-open import Function using (_$_ ; case_of_ ; _∘_)
+open import Function using (_$_ ; case_of_ ; _∘_ ; _∘₂_ ; flip ; const)
 open import Function.Reasoning using (_|>_ ; ∋-syntax)
 open import Induction.WellFounded using (Acc ; acc)
 open import Level using (0ℓ)
@@ -38,6 +39,15 @@ open import Relation.Nullary using (¬_ ; yes ; no)
 open import Relation.Nullary.Negation using (contradiction)
 
 open RawMonad (monad {0ℓ})
+
+>>=-assoc : ∀ {S T U} (m : Maybe S) (f : S → Maybe T) (g : T → Maybe U) →
+  (m >>= f >>= g) ≡ (m >>= λ x → f x >>= g)
+>>=-assoc nothing  f g = refl
+>>=-assoc (just x) f g = refl
+
+>>=-nothing : ∀ {S T} (m : Maybe S) → (m >>= const {0ℓ} {Maybe T} {0ℓ} {S} nothing) ≡ nothing
+>>=-nothing nothing  = refl
+>>=-nothing (just x) = refl
 
 module AgdaSetMap where
   open import Data.Tree.AVL.Sets <-strictTotalOrder using (
@@ -152,11 +162,16 @@ open HaskellSetMap
 ≤⇒<-suc : ∀ {m n} → m ≤ n → m < suc n
 ≤⇒<-suc {m} {n} m≤n = s≤s m≤n
 
+with-≡ : {S : Set} → (x : Maybe S) → Maybe (∃[ y ] x ≡ just y)
+with-≡ nothing  = nothing
+with-≡ (just x) = just (x , refl)
+
 data Token : Set where
   isSpace   : Token
   isNewLine : Token
   isDigit   : (n : ℕ) → Token
   isMinus   : Token
+  isC       : Token
   isOther   : Token
 
 token : (c : Char) → Token
@@ -173,6 +188,7 @@ token '7'  = isDigit 7
 token '8'  = isDigit 8
 token '9'  = isDigit 9
 token '-'  = isMinus
+token 'c'  = isC
 token _    = isOther
 
 space : List Char → List Char
@@ -190,6 +206,7 @@ space-≤ (c ∷ˡ cs) | isSpace   = ≤-suc (space-≤ cs)
 space-≤ (c ∷ˡ cs) | isNewLine = ≤-suc (space-≤ cs)
 space-≤ (c ∷ˡ cs) | isDigit _ = ≤-refl
 space-≤ (c ∷ˡ cs) | isMinus   = ≤-refl
+space-≤ (c ∷ˡ cs) | isC       = ≤-refl
 space-≤ (c ∷ˡ cs) | isOther   = ≤-refl
 
 line : List Char → List Char
@@ -206,6 +223,7 @@ line-≤ (c ∷ˡ cs) | isSpace   = ≤-suc (line-≤ cs)
 line-≤ (c ∷ˡ cs) | isNewLine = ≤-suc (space-≤ cs)
 line-≤ (c ∷ˡ cs) | isDigit _ = ≤-suc (line-≤ cs)
 line-≤ (c ∷ˡ cs) | isMinus   = ≤-suc (line-≤ cs)
+line-≤ (c ∷ˡ cs) | isC       = ≤-suc (line-≤ cs)
 line-≤ (c ∷ˡ cs) | isOther   = ≤-suc (line-≤ cs)
 
 known : List Char → List Char → Maybe (List Char)
@@ -534,11 +552,19 @@ printLength′-✓ n (acc rs) | no ¬n<10 =
     n % (10 ^ printLength′ (n / 10) m′ * 10) % 10 ≡⟨ n%km%m≡n%m (10 ^ printLength′ (n / 10) m′) 10 n ⟩
     n % 10                                        ∎
 
+printLength′≢0 : ∀ n m → printLength′ n m ≢ 0
+printLength′≢0 n (acc rs) with n <? 10
+printLength′≢0 n (acc rs)    | yes n<10 = λ ()
+printLength′≢0 n (acc rs)    | no ¬n<10 = λ ()
+
 printLength : ℕ → ℕ
 printLength n = printLength′ n (<-wellFounded-fast n)
 
 printLength-✓ : ∀ n → n %10^ (printLength n) ≡ n
 printLength-✓ n = printLength′-✓ n (<-wellFounded-fast n)
+
+printLength≢0 : ∀ n → printLength n ≢ 0
+printLength≢0 n = printLength′≢0 n (<-wellFounded-fast n)
 
 printNatural′ : ℕ → List Char
 printNatural′ n = printNatural″ (printLength n) n
@@ -562,14 +588,14 @@ printNatural′-✓ n cs =
 printNatural : ℕ → List Char
 printNatural n = printNatural′ n ++ˡ ' ' ∷ˡ []ˡ
 
-spaceNatural : ∀ n cs → space (printNatural n ++ˡ cs) ≡ printNatural n ++ˡ cs
+⋯-printNatural : ∀ n cs → space (printNatural n ++ˡ cs) ≡ printNatural n ++ˡ cs
 -- case |n ≡ 0| for |<-wellFounded-skip|
-spaceNatural zero cs = refl
+⋯-printNatural zero cs = refl
 -- |suc n <? 10| abstraction changes |p| in parallel with goal
-spaceNatural (suc n) cs with (suc n) <? 10 | printDigit-✓ (suc n /10^ pred (printLength (suc n)))
-spaceNatural (suc n) cs | yes n<10         | p
+⋯-printNatural (suc n) cs with (suc n) <? 10 | printDigit-✓ (suc n /10^ pred (printLength (suc n)))
+⋯-printNatural (suc n) cs | yes n<10         | p
   rewrite p = refl
-spaceNatural (suc n) cs | no ¬n<10         | p
+⋯-printNatural (suc n) cs | no ¬n<10         | p
   rewrite p = refl
 
 printNatural-✓ : ∀ n cs → natural (printNatural n ++ˡ cs) ≡ just (n , space cs)
@@ -587,13 +613,6 @@ printNatural-✓ n cs =
   lemma₁ : ∀ xs cs → (xs ++ˡ ' ' ∷ˡ []ˡ) ++ˡ cs ≡ xs ++ˡ ' ' ∷ˡ cs
   lemma₁ []ˡ       cs = refl
   lemma₁ (x ∷ˡ xs) cs = cong (x ∷ˡ_) (lemma₁ xs cs)
-
-spaceNatural-✓ : ∀ n cs → natural (space (printNatural n ++ˡ cs)) ≡ just (n , space cs)
-spaceNatural-✓ n cs =
-  natural (space (printNatural n ++ˡ cs)) ≡⟨ cong natural (spaceNatural n cs) ⟩
-  natural (printNatural n ++ˡ cs)         ≡⟨ printNatural-✓ n cs ⟩
-  just (n , space cs)                     ∎
-  where open ≡-Reasoning
 
 integer : List Char → Maybe (Bool × ℕ × List Char)
 integer []ˡ       = nothing
@@ -614,9 +633,9 @@ printInteger : Bool → ℕ → List Char
 printInteger true  n = '-' ∷ˡ printNatural n
 printInteger false n = printNatural n
 
-spaceInteger : ∀ s n cs → space (printInteger s n ++ˡ cs) ≡ printInteger s n ++ˡ cs
-spaceInteger true  n cs = refl
-spaceInteger false n cs = spaceNatural n cs
+⋯-printInteger : ∀ s n cs → space (printInteger s n ++ˡ cs) ≡ printInteger s n ++ˡ cs
+⋯-printInteger true  n cs = refl
+⋯-printInteger false n cs = ⋯-printNatural n cs
 
 printInteger-✓ : ∀ s n cs → integer (printInteger s n ++ˡ cs) ≡ just (s , n , space cs)
 printInteger-✓ true  n       cs = cong (mapᵐ (true ,_)) (printNatural-✓ n cs)
@@ -635,16 +654,9 @@ printInteger-✓ false (suc n) cs | no ¬n<10       | p₁                      
   rewrite p₂ | p₂
   = cong (mapᵐ (false ,_)) p₁
 
-spaceInteger-✓ : ∀ s n cs → integer (space (printInteger s n ++ˡ cs)) ≡ just (s , n , space cs)
-spaceInteger-✓ s n cs =
-  integer (space (printInteger s n ++ˡ cs)) ≡⟨ cong integer (spaceInteger s n cs) ⟩
-  integer (printInteger s n ++ˡ cs)         ≡⟨ printInteger-✓ s n cs ⟩
-  just (s , n , space cs)                   ∎
-  where open ≡-Reasoning
-
-with-≡ : {S : Set} → (x : Maybe S) → Maybe (∃[ y ] x ≡ just y)
-with-≡ nothing  = nothing
-with-≡ (just x) = just (x , refl)
+printInteger-≡-✓ : ∀ s n cs →
+  with-≡ (integer (printInteger s n ++ˡ cs)) ≡ just ((s , n , space cs) , printInteger-✓ s n cs)
+printInteger-≡-✓ s n cs rewrite printInteger-✓ s n cs = refl
 
 Measure : List Char → Set
 Measure = Acc (λ x y → length x < length y)
@@ -695,56 +707,84 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   printKlause (pos v ∷ˡ k) = printInteger false (suc v) ++ˡ printKlause k
   printKlause (neg v ∷ˡ k) = printInteger true (suc v) ++ˡ printKlause k
 
-  spaceKlause : ∀ k cs → space (printKlause k ++ˡ cs) ≡ printKlause k ++ˡ cs
-  spaceKlause []ˡ          cs = refl
-  spaceKlause (pos v ∷ˡ k) cs =
-    space (printKlause (pos v ∷ˡ k) ++ˡ cs) ≡⟨⟩
+  ⋯-printKlause : ∀ k cs → space (printKlause k ++ˡ cs) ≡ printKlause k ++ˡ cs
+  ⋯-printKlause []ˡ          cs = refl
+  ⋯-printKlause (pos v ∷ˡ k) cs =
+    space (printKlause (pos v ∷ˡ k) ++ˡ cs)                       ≡⟨⟩
     space ((printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs) ≡⟨ cong space (++-assoc (printInteger false (suc v)) (printKlause k) cs) ⟩
-    space (printInteger false (suc v) ++ˡ printKlause k ++ˡ cs)   ≡⟨ spaceNatural (suc v) (printKlause k ++ˡ cs) ⟩
+    space (printInteger false (suc v) ++ˡ printKlause k ++ˡ cs)   ≡⟨ ⋯-printNatural (suc v) (printKlause k ++ˡ cs) ⟩
     printInteger false (suc v) ++ˡ printKlause k ++ˡ cs           ≡˘⟨ ++-assoc (printInteger false (suc v)) (printKlause k) cs ⟩
     (printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs         ≡⟨⟩
-    printKlause (pos v ∷ˡ k) ++ˡ cs ∎
+    printKlause (pos v ∷ˡ k) ++ˡ cs                               ∎
     where open ≡-Reasoning
-  spaceKlause (neg v ∷ˡ k) cs = refl
-
-  spaceInteger-with-≡ : ∀ s n cs → with-≡ (integer (space (printInteger s n ++ˡ cs))) ≡
-    just ((s , n , space cs) , spaceInteger-✓ s n cs )
-  spaceInteger-with-≡ s n cs rewrite spaceInteger-✓ s n cs = refl
-
-  spaceKlause-✓ : ∀ k cs m → klause (space (printKlause k ++ˡ cs)) m ≡ just (k , space cs)
-  spaceKlause-✓ []ˡ          cs (acc rs) = refl
-  spaceKlause-✓ (pos v ∷ˡ k) cs (acc rs)
-    rewrite ++-assoc (printNatural (suc v)) (printKlause k) cs
-
-    with rec ← spaceKlause-✓ k cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
-    with cs′ ← printKlause k ++ˡ cs
-
-    rewrite spaceInteger-with-≡ false (suc v) cs′
-
-    with ✓′ ← spaceInteger-✓ false (suc v) cs′
-    with <′ ← integer-< (space (printInteger false (suc v) ++ˡ cs′)) false (suc v) (space cs′) ✓′
-    with m′ ← rs (space cs′) <′
-
-    rewrite rec m′
-    = refl
-
-  spaceKlause-✓ (neg v ∷ˡ k) cs (acc rs)
-    rewrite ++-assoc (printNatural (suc v)) (printKlause k) cs
-
-    with rec ← spaceKlause-✓ k cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
-    with cs′ ← printKlause k ++ˡ cs
-
-    rewrite spaceInteger-with-≡ true (suc v) cs′
-
-    with ✓′ ← spaceInteger-✓ true (suc v) cs′
-    with <′ ← integer-< (space (printInteger true (suc v) ++ˡ cs′)) true (suc v) (space cs′) ✓′
-    with m′ ← rs (space cs′) <′
-
-    rewrite rec m′
-    = refl
+  ⋯-printKlause (neg v ∷ˡ k) cs = refl
 
   printKlause-✓ : ∀ k cs m → klause (printKlause k ++ˡ cs) m ≡ just (k , space cs)
-  printKlause-✓ k cs m rewrite sym (spaceKlause k cs) = spaceKlause-✓ k cs m
+  printKlause-✓ []ˡ           cs (acc rs) = refl
+  printKlause-✓ (pos v ∷ˡ ls) cs (acc rs)
+    rewrite ++-assoc (printNatural (suc v)) (printKlause ls) cs
+
+    with rec ← printKlause-✓ ls cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
+    with lem ← ⋯-printKlause ls cs -- make |lem| have the |cs′| shortcut, too
+
+    with cs′ ← printKlause ls ++ˡ cs
+
+    rewrite printInteger-≡-✓ false (suc v) cs′
+
+    with ✓′ ← printInteger-✓ false (suc v) cs′
+    with <′ ← integer-< (printInteger false (suc v) ++ˡ cs′) false (suc v) (space cs′) ✓′
+    with m′ ← rs (space cs′) <′
+
+    rewrite lem
+    rewrite rec m′
+    = refl
+
+  printKlause-✓ (neg v ∷ˡ ls) cs (acc rs)
+    rewrite ++-assoc (printNatural (suc v)) (printKlause ls) cs
+
+    with rec ← printKlause-✓ ls cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
+    with lem ← ⋯-printKlause ls cs -- make |lem| have the |cs′| shortcut, too
+
+    with cs′ ← printKlause ls ++ˡ cs
+
+    rewrite printInteger-≡-✓ true (suc v) cs′
+
+    with ✓′ ← printInteger-✓ true (suc v) cs′
+    with <′ ← integer-< (printInteger true (suc v) ++ˡ cs′) true (suc v) (space cs′) ✓′
+    with m′ ← rs (space cs′) <′
+
+    rewrite lem
+    rewrite rec m′
+    = refl
+
+  printKlause-✓′ : ∀ k cs cs′ m → cs ≡ printKlause k → klause (cs ++ˡ cs′) m ≡ just (k , space cs′)
+  printKlause-✓′ k cs cs′ m refl = printKlause-✓ k cs′ m
+
+  printKlause-≡-✓ : ∀ k cs m →
+    with-≡ (klause (printKlause k ++ˡ cs) m) ≡ just ((k , space cs) , printKlause-✓ k cs m)
+  printKlause-≡-✓ k cs m rewrite printKlause-✓ k cs m = refl
+
+  printKlause-≡-✓′ : ∀ k cs cs′ m → (p : cs ≡ printKlause k) →
+    with-≡ (klause (cs ++ˡ cs′) m) ≡ just ((k , space cs′) , printKlause-✓′ k cs cs′ m p)
+  printKlause-≡-✓′ k cs cs′ m refl = printKlause-≡-✓ k cs′ m
+
+  printKlauseToken : ∀ k → ∃[ c ] ∃[ cs ]
+    printKlause k ≡ c ∷ˡ cs × (∃[ n ] token c ≡ isDigit n ⊎ token c ≡ isMinus)
+  printKlauseToken []ˡ                      = '0' , '\n' ∷ˡ []ˡ , refl , inj₁ (0 , refl)
+  printKlauseToken (pos v ∷ˡ ls) with printLength (suc v) in eq
+  printKlauseToken (pos v ∷ˡ ls)    | zero  = contradiction eq (printLength≢0 (suc v))
+  printKlauseToken (pos v ∷ˡ ls)    | suc e = c , cs , p₁ , p₂
+    where
+      c = printDigit (suc v /10^ e)
+      cs = printNatural″ e (suc v) ++ˡ ' ' ∷ˡ []ˡ ++ˡ printKlause ls
+      n′ = suc v /10^ e
+      n = n′ % 10
+      p₁ = cong (c ∷ˡ_) (++-assoc (printNatural″ e (suc v)) (' ' ∷ˡ []ˡ) (printKlause ls))
+      p₂ = inj₁ (n , printDigit-✓ n′)
+
+  printKlauseToken (neg v ∷ˡ ls) = '-' , cs , refl , inj₂ refl
+    where
+      cs = printNatural (suc v) ++ˡ printKlause ls
 
   intro : List Char → Maybe (List Char)
   intro cs = do
@@ -773,24 +813,87 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
     length cs  ∎
     where open ≤-Reasoning
 
-  formula′ : (cs : List Char) → Formula → ℕ → Translator → Measure cs → Maybe (Formula × Translator)
-  formula′ []ˡ         f n t _        = return $ f , t
-  formula′ ('c' ∷ˡ cs) f n t (acc rs) = do
-     let cs′ = line cs
-     formula′ cs′ f n t (rs cs′ (≤⇒<-suc (line-≤ cs)))
-  formula′ (c ∷ˡ cs) f n t (acc rs) = do
-    (k , cs′) , p ← with-≡ (klause (c ∷ˡ cs) (acc rs))
-    f′ ← V.insert f k
-    let t′ = insertᵐ (suc n) n t
-    formula′ cs′ f′ (suc n) t′ (rs cs′ (klause-< (c ∷ˡ cs) k cs′ (acc rs) p ))
+  printIntro : ℕ → ℕ → List Char
+  printIntro nᵛ nᶜ = toList "p cnf " ++ˡ printNatural nᵛ ++ˡ printNatural nᶜ
 
-  formula : (cs : List Char) → Measure cs → Maybe (Formula × Translator)
-  formula ('c' ∷ˡ cs) (acc rs) = do
-    let cs′ = line cs
-    formula cs′ (rs cs′ (≤⇒<-suc (line-≤ cs)))
-  formula cs          (acc rs) = do
-    cs′ , p ← with-≡ (intro cs)
-    formula′ cs′ nothing zero emptyᵐ (rs cs′ (intro-< cs cs′ p))
+  printIntro-✓ : ∀ nᵛ nᶜ cs → intro (printIntro nᵛ nᶜ ++ˡ cs) ≡ just (space cs)
+  printIntro-✓ nᵛ nᶜ cs
+    rewrite ++-assoc (printNatural nᵛ) (printNatural nᶜ) cs
+    rewrite ⋯-printNatural nᵛ (printNatural nᶜ ++ˡ cs)
+    rewrite printNatural-✓ nᵛ (printNatural nᶜ ++ˡ cs)
+    rewrite ⋯-printNatural nᶜ cs
+    rewrite printNatural-✓ nᶜ cs
+    = refl
+
+  printIntro-≡-✓ : ∀ nᵛ nᶜ cs →
+    with-≡ (intro (printIntro nᵛ nᶜ ++ˡ cs)) ≡ just (space cs , printIntro-✓ nᵛ nᶜ cs)
+  printIntro-≡-✓ nᵛ nᶜ cs rewrite printIntro-✓ nᵛ nᶜ cs = refl
+
+  formula′ : {F : Set} → (cs : List Char) → (F → Clause → Maybe F) → F → ℕ → Translator →
+    Measure cs → Maybe (F × Translator)
+  formula′ []ˡ       f⁺ f n t _        = return $ f , t
+  formula′ (c ∷ˡ cs) f⁺ f n t (acc rs) =
+    case token c of λ where
+      isC → do
+        let cs′ = line cs
+        formula′ cs′ f⁺ f n t (rs cs′ (≤⇒<-suc (line-≤ cs)))
+      _   → do
+        (k , cs′) , p ← with-≡ (klause (c ∷ˡ cs) (acc rs))
+        f′ ← f⁺ f k
+        let t′ = insertᵐ (suc n) n t
+        formula′ cs′ f⁺ f′ (suc n) t′ (rs cs′ (klause-< (c ∷ˡ cs) k cs′ (acc rs) p ))
+
+  printFormula′ : List Clause → List Char
+  printFormula′ []ˡ       = []ˡ
+  printFormula′ (k ∷ˡ ks) = printKlause k ++ˡ printFormula′ ks
+
+  ⋯-printFormula′ : ∀ ks → space (printFormula′ ks) ≡ printFormula′ ks
+  ⋯-printFormula′ []ˡ       = refl
+  ⋯-printFormula′ (k ∷ˡ ks) = ⋯-printKlause k (printFormula′ ks)
+
+  -- XXX - fix duplication
+  printFormula′-✓ : ∀ ks f n t m →
+    ∃[ t′ ] formula′ (printFormula′ ks) (just ∘₂ _∷ʳ_) f n t m ≡ just (f ++ˡ ks , t′)
+  -- XXX - factored out of printFormula′-✓ to avoid ill-typed with-abstraction
+  printFormula′-✓′ : ∀ ks f n t m →
+    ∃[ t′ ] formula′ (space (printFormula′ ks)) (just ∘₂ _∷ʳ_) f n t m ≡ just (f ++ˡ ks , t′)
+
+  printFormula′-✓ []ˡ       f n t m        = t , cong (just ∘ (_, t)) (sym (++-identityʳ f))
+  printFormula′-✓ (k ∷ˡ ks) f n t (acc rs) with printKlauseToken k
+  printFormula′-✓ (k ∷ˡ ks) f n t (acc rs)    | c , cs , p₁ , inj₁ (n′ , p₂)
+    rewrite p₁ | p₂
+    rewrite printKlause-≡-✓′ k (c ∷ˡ cs) (printFormula′ ks) (acc rs) (sym p₁)
+    rewrite sym (++-assoc f (k ∷ˡ []ˡ) ks)
+    = printFormula′-✓′ ks (f ∷ʳ k) (suc n) (insertᵐ (suc n) n t) _
+
+  printFormula′-✓ (k ∷ˡ ks) f n t (acc rs)    | c , cs , p₁ , inj₂ p₂
+    rewrite p₁ | p₂
+    rewrite printKlause-≡-✓′ k (c ∷ˡ cs) (printFormula′ ks) (acc rs) (sym p₁)
+    rewrite sym (++-assoc f (k ∷ˡ []ˡ) ks)
+    = printFormula′-✓′ ks (f ∷ʳ k) (suc n) (insertᵐ (suc n) n t) _
+
+  printFormula′-✓′ ks rewrite ⋯-printFormula′ ks = printFormula′-✓ ks
+
+  formula : {F : Set} → (cs : List Char) → (F → Clause → Maybe F) → F → Measure cs →
+    Maybe (F × Translator)
+  formula []ˡ       f⁺ f₀ _        = return $ f₀ , emptyᵐ
+  formula (c ∷ˡ cs) f⁺ f₀ (acc rs) =
+    case token c of λ where
+      isC → do
+        let cs′ = line cs
+        formula cs′ f⁺ f₀ (rs cs′ (≤⇒<-suc (line-≤ cs)))
+      _   → do
+        cs′ , p ← with-≡ (intro (c ∷ˡ cs))
+        formula′ cs′ f⁺ f₀ zero emptyᵐ (rs cs′ (intro-< (c ∷ˡ cs) cs′ p))
+
+  printFormula : ℕ → ℕ → List Clause → List Char
+  printFormula nᵛ nᶜ ks = printIntro nᵛ nᶜ ++ˡ printFormula′ ks
+
+  printFormula-✓ : ∀ nᵛ nᶜ ks m →
+    ∃[ t′ ] formula (printFormula nᵛ nᶜ ks) (just ∘₂ _∷ʳ_) []ˡ m ≡ just (ks , t′)
+  printFormula-✓ nᵛ nᶜ ks (acc rs)
+    rewrite printIntro-≡-✓ nᵛ nᶜ (printFormula′ ks)
+    = printFormula′-✓′ ks []ˡ 0 emptyᵐ _
 
   lsb : ℕ → Bool
   lsb x = case x % 2 of λ where
@@ -888,6 +991,90 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   parse : String → String → Maybe (Formula × Proof)
   parse f p = do
     f ← return $ toList f
-    f , t ← formula f (measure f)
+    f , t ← formula f V.insert nothing (measure f)
     p ← proof (toList p) t
     return $ f , p
+
+  fromCNF : List Clause → Maybe Formula
+  fromCNF []ˡ       = just nothing
+  fromCNF (k ∷ˡ ks) = fromCNF ks >>= flip V.insert k
+
+  formula′CNF₁ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
+    Maybe (Formula × Translator)
+  formula′CNF₁ cs ks n t m = do
+    ks′ , t ← formula′ cs (just ∘₂ flip _∷ˡ_) ks n t m
+    f ← fromCNF ks′
+    return (f , t)
+
+  formula′CNF₂ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
+    Maybe (Formula × Translator)
+  formula′CNF₂ cs ks n t m = do
+    f ← fromCNF ks
+    formula′ cs V.insert f n t m
+
+  formula′CNF₃ : (cs : List Char) → Clause → List Clause → ℕ → Translator → Measure cs →
+    Maybe (Formula × Translator)
+  formula′CNF₃ cs k ks n t m = do
+    f ← fromCNF ks
+    do
+      f′ ← V.insert f k
+      formula′ cs V.insert f′ n t m
+
+  module _ where
+    formula′CNF-≡ : ∀ cs ks n t m → formula′CNF₁ cs ks n t m ≡ formula′CNF₂ cs ks n t m
+
+    private
+      lemma : ∀ cs′ k ks n t m → formula′CNF₁ cs′ (k ∷ˡ ks) n t m ≡ formula′CNF₃ cs′ k ks n t m
+      lemma cs′ k ks n t m =
+        begin
+          formula′CNF₁ cs′ (k ∷ˡ ks) n t m ≡⟨ formula′CNF-≡ cs′ (k ∷ˡ ks) n t m ⟩
+          formula′CNF₂ cs′ (k ∷ˡ ks) n t m ≡⟨ >>=-assoc (fromCNF ks) (flip V.insert k) _ ⟩
+          formula′CNF₃ cs′ k ks n t m      ∎
+        where open ≡-Reasoning
+
+    -- XXX - fix duplication
+    formula′CNF-≡ []ˡ       ks n t m        = refl
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs) with token c
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | nothing                            = sym (>>=-nothing (fromCNF ks))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine  with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | nothing                            = sym (>>=-nothing (fromCNF ks))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′ with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | nothing                            = sym (>>=-nothing (fromCNF ks))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | nothing                            = sym (>>=-nothing (fromCNF ks))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isC                                                = formula′CNF-≡ (line cs) ks n t _
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | nothing                            = sym (>>=-nothing (fromCNF ks))
+    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+
+  formulaCNF : (cs : List Char) → Measure cs → Maybe (Formula × Translator)
+  formulaCNF cs m = do
+    ks′ , t ← formula cs (just ∘₂ flip _∷ˡ_) []ˡ m
+    f ← fromCNF ks′
+    return (f , t)
+
+  -- XXX - fix duplication
+  formulaCNF-✓ : ∀ cs m → formulaCNF cs m ≡ formula cs V.insert nothing m
+  formulaCNF-✓ []ˡ       m        = refl
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) with token c
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isSpace   with with-≡ (intro (c ∷ˡ cs))
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isSpace      | nothing        = refl
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isSpace      | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isNewLine with with-≡ (intro (c ∷ˡ cs))
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isNewLine    | nothing        = refl
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isNewLine    | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isDigit n with with-≡ (intro (c ∷ˡ cs))
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isDigit n    | nothing        = refl
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isDigit n    | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isMinus   with with-≡ (intro (c ∷ˡ cs))
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isMinus      | nothing        = refl
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isMinus      | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isC                           = formulaCNF-✓ (line cs) _
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isOther   with with-≡ (intro (c ∷ˡ cs))
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isOther      | nothing        = refl
+  formulaCNF-✓ (c ∷ˡ cs) (acc rs) | isOther      | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _

@@ -1,4 +1,4 @@
--- XXX - duplication in rewrite-based proofs (e.g., makeTrue-✓₁ or roundtrip)
+-- XXX - fix duplication in rewrite-based proofs (e.g., makeTrue-✓₁ or roundtrip)
 
 module Satarash.Tseytin where
 
@@ -32,6 +32,7 @@ bitsᶜ : ℕ
 bitsᶜ = 24
 
 import Satarash.Verifier bitsᶜ as V
+import Satarash.Parser as P
 
 infix 4 _↔_
 
@@ -330,19 +331,19 @@ transform₁-✓ v f
 ≡⇒≡? : ∀ {x y} → (p : x ≡ y) → x ≡? y ≡ yes p
 ≡⇒≡? = ≡-≟-identity _≡?_
 
-≢⇒≡? : ∀ {x y} → x ≢ y → ∃[ p ] x ≡? y ≡ no p
+≢⇒≡? : ∀ {x y} → (p : x ≢ y) → x ≡? y ≡ no p
 ≢⇒≡? = ≢-≟-identity _≡?_
 
 ≡⇒≟ⁿ : ∀ {x y} → (p : x ≡ y) → (x ≟ⁿ y) ≡ yes p
 ≡⇒≟ⁿ = ≡-≟-identity _≟ⁿ_
 
-≢⇒≟ⁿ : ∀ {x y} → x ≢ y → ∃[ p ] (x ≟ⁿ y) ≡ no p
+≢⇒≟ⁿ : ∀ {x y} → (p : x ≢ y) → (x ≟ⁿ y) ≡ no p
 ≢⇒≟ⁿ = ≢-≟-identity _≟ⁿ_
 
 <⇒<? : ∀ {x y} → (p : x < y) → (x <?ⁿ y) ≡ yes p
 <⇒<? {x} {y} p = dec-yes-irr (x <?ⁿ y) <-irrelevant p
 
-≮⇒<? : ∀ {x y} → ¬ (x < y) → ∃[ p ] (x <?ⁿ y) ≡ no p
+≮⇒<? : ∀ {x y} → (p : ¬ (x < y)) → (x <?ⁿ y) ≡ no p
 ≮⇒<? {x} {y} p = dec-no (x <?ⁿ y) p
 
 module _ where
@@ -535,26 +536,26 @@ roundtrip : ∀ n v f a →
   (makeTrue₁ v f ∘ proj₂ (ℕ→bin n f)) (proj₂ (bin→ℕ n f) a) ≡ makeTrue₁ v f a
 roundtrip n v (var₀ x)   a = refl
 roundtrip n v (and₀ x y) []
-  rewrite (proj₂ ∘ ≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
-  rewrite (proj₂ ∘ ≮⇒<?) (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
+  rewrite (≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
+  rewrite ≮⇒<? (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
   = refl
 roundtrip n v (and₀ x y) (false ∷ as)
   rewrite <⇒<? (fw₂<bw₁ n x as)
   = roundtrip n v x as
 roundtrip n v (and₀ x y) (true ∷ as)
-  rewrite (proj₂ ∘ ≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
+  rewrite (≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
   rewrite <⇒<? (fw₂fw₁<bw₁bw₁ n x y as)
   rewrite sym (fw₁≡bw₁ n x)
   = roundtrip (proj₁ (bin→ℕ n x)) v y as
 roundtrip n v (or₀ x y) []
-  rewrite (proj₂ ∘ ≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
-  rewrite (proj₂ ∘ ≮⇒<?) (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
+  rewrite (≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
+  rewrite ≮⇒<? (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
   = refl
 roundtrip n v (or₀ x y) (false ∷ as)
   rewrite <⇒<? (fw₂<bw₁ n x as)
   = roundtrip n v x as
 roundtrip n v (or₀ x y) (true ∷ as)
-  rewrite (proj₂ ∘ ≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
+  rewrite (≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
   rewrite <⇒<? (fw₂fw₁<bw₁bw₁ n x y as)
   rewrite sym (fw₁≡bw₁ n x)
   = roundtrip (proj₁ (bin→ℕ n x)) v y as
@@ -562,29 +563,29 @@ roundtrip n v (not₀ x)   []
   rewrite ≡⇒≟ⁿ (fw₁≡bw₁ n x)
   = refl
 roundtrip n v (not₀ x)   (a ∷ as)
-  rewrite (proj₂ ∘ ≢⇒≟ⁿ ∘ <⇒≢) (fw₂<bw₁ n x as)
+  rewrite (≢⇒≟ⁿ ∘ <⇒≢) (fw₂<bw₁ n x as)
   = roundtrip n v x as
 roundtrip n v (xor₀ x y) []
-  rewrite (proj₂ ∘ ≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
-  rewrite (proj₂ ∘ ≮⇒<?) (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
+  rewrite (≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
+  rewrite ≮⇒<? (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
   = refl
 roundtrip n v (xor₀ x y) (false ∷ as)
   rewrite <⇒<? (fw₂<bw₁ n x as)
   = roundtrip n v x as
 roundtrip n v (xor₀ x y) (true ∷ as)
-  rewrite (proj₂ ∘ ≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
+  rewrite (≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
   rewrite <⇒<? (fw₂fw₁<bw₁bw₁ n x y as)
   rewrite sym (fw₁≡bw₁ n x)
   = roundtrip (proj₁ (bin→ℕ n x)) v y as
 roundtrip n v (iff₀ x y) []
-  rewrite (proj₂ ∘ ≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
-  rewrite (proj₂ ∘ ≮⇒<?) (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
+  rewrite (≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
+  rewrite ≮⇒<? (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
   = refl
 roundtrip n v (iff₀ x y) (false ∷ as)
   rewrite <⇒<? (fw₂<bw₁ n x as)
   = roundtrip n v x as
 roundtrip n v (iff₀ x y) (true ∷ as)
-  rewrite (proj₂ ∘ ≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
+  rewrite (≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
   rewrite <⇒<? (fw₂fw₁<bw₁bw₁ n x y as)
   rewrite sym (fw₁≡bw₁ n x)
   = roundtrip (proj₁ (bin→ℕ n x)) v y as
@@ -664,7 +665,7 @@ mergeRemap {b} v t (var₂ x)   p
   rewrite <⇒<? p
   = refl
 mergeRemap {b} v t (tmp₂ x)   p
-  rewrite (proj₂ ∘ ≮⇒<? ∘ ≤⇒≯) (m≤m+n b x)
+  rewrite (≮⇒<? ∘ ≤⇒≯) (m≤m+n b x)
   rewrite m+n∸m≡n b x
   = refl
 mergeRemap {b} v t (and₂ x y) p
@@ -752,25 +753,21 @@ transform₄-✓ v f
 unsat₄-✓ : ∀ f → (∀ v → eval₄ v (transform₄ f) ≡ false) → (∀ v → eval₀ v f ≡ false)
 unsat₄-✓ f p v = sym (trans (sym (p (makeTrue₃ v f))) (transform₄-✓ v f))
 
-toTrie : Formula₄ → Maybe Formula₅
-toTrie []       = just nothing
-toTrie (c ∷ cs) = toTrie cs >>= flip V.insert c
-
-toTrie-✓ : ∀ v f₄ f₅ → toTrie f₄ ≡ just f₅ → eval₅ v f₅ ≡ eval₄ v f₄
-toTrie-✓ v []       f₅ refl = refl
-toTrie-✓ v (c ∷ cs) f₅ p
-  with toTrie cs in eq
+fromCNF-✓ : ∀ v f₄ f₅ → P.fromCNF bitsᶜ f₄ ≡ just f₅ → eval₅ v f₅ ≡ eval₄ v f₄
+fromCNF-✓ v []       f₅ refl = refl
+fromCNF-✓ v (c ∷ cs) f₅ p
+  with P.fromCNF bitsᶜ cs in eq
 ... | just f₅′
   rewrite V.insert⇒∧ f₅′ f₅ c p v
-  rewrite toTrie-✓ v cs f₅′ eq
+  rewrite fromCNF-✓ v cs f₅′ eq
   = ∧-comm (eval₄ v cs) (V.evalᶜ v c)
 
 transform₅ : Formula₀ → Maybe Formula₅
-transform₅ f = toTrie (transform₄ f)
+transform₅ f = P.fromCNF bitsᶜ (transform₄ f)
 
 transform₅-✓ : ∀ v f₀ f₅ → transform₅ f₀ ≡ just f₅ → eval₅ (makeTrue₃ v f₀) f₅ ≡ eval₀ v f₀
 transform₅-✓ v f₀ f₅ p
-  rewrite toTrie-✓ (makeTrue₃ v f₀) (transform₄ f₀) f₅ p
+  rewrite fromCNF-✓ (makeTrue₃ v f₀) (transform₄ f₀) f₅ p
   rewrite sym (transform₄-✓ v f₀)
   = refl
 
