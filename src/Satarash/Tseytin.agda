@@ -8,7 +8,7 @@ open import Data.Bool.Properties
 open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
-open import Data.Maybe using (Maybe ; nothing ; just ; _>>=_)
+open import Data.Maybe using (Maybe ; nothing ; just ; _>>=_ ; map)
 open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; _+_ ; _∸_ ; _⊔_)
   renaming (_≟_ to _≟ⁿ_ ; _<?_ to _<?ⁿ_)
 open import Data.Nat.Properties using (
@@ -753,14 +753,26 @@ transform₄-✓ v f
 unsat₄-✓ : ∀ f → (∀ v → eval₄ v (transform₄ f) ≡ false) → (∀ v → eval₀ v f ≡ false)
 unsat₄-✓ f p v = sym (trans (sym (p (makeTrue₃ v f))) (transform₄-✓ v f))
 
+fromCNF′-✓ : ∀ v b₅ f₄ f₅ → P.fromCNF′ bitsᶜ b₅ f₄ ≡ just f₅ → eval₅ v f₅ ≡ eval₄ v f₄ ∧ eval₅ v b₅
+fromCNF′-✓ v b₅ []       f₅ refl = refl
+fromCNF′-✓ v b₅ (k ∷ ks) f₅ p    with V.insert b₅ k in eq
+fromCNF′-✓ v b₅ (k ∷ ks) f₅ p       | just b₅′            =
+  begin
+    eval₅ v f₅                              ≡⟨ fromCNF′-✓ v b₅′ ks f₅ p ⟩
+    eval₄ v ks ∧ eval₅ v b₅′                ≡⟨ cong (eval₄ v ks ∧_) (V.insert⇒∧ b₅ b₅′ k eq v) ⟩
+    eval₄ v ks ∧ eval₅ v b₅ ∧ V.evalᶜ v k   ≡˘⟨ ∧-assoc (eval₄ v ks) (eval₅ v b₅) (V.evalᶜ v k) ⟩
+    (eval₄ v ks ∧ eval₅ v b₅) ∧ V.evalᶜ v k ≡⟨ ∧-comm (eval₄ v ks ∧ eval₅ v b₅) (V.evalᶜ v k) ⟩
+    V.evalᶜ v k ∧ (eval₄ v ks ∧ eval₅ v b₅) ≡˘⟨ ∧-assoc (V.evalᶜ v k) (eval₄ v ks) (eval₅ v b₅) ⟩
+    eval₄ v (k ∷ ks) ∧ eval₅ v b₅           ∎
+  where open ≡-Reasoning
+
 fromCNF-✓ : ∀ v f₄ f₅ → P.fromCNF bitsᶜ f₄ ≡ just f₅ → eval₅ v f₅ ≡ eval₄ v f₄
-fromCNF-✓ v []       f₅ refl = refl
-fromCNF-✓ v (c ∷ cs) f₅ p
-  with P.fromCNF bitsᶜ cs in eq
-... | just f₅′
-  rewrite V.insert⇒∧ f₅′ f₅ c p v
-  rewrite fromCNF-✓ v cs f₅′ eq
-  = ∧-comm (eval₄ v cs) (V.evalᶜ v c)
+fromCNF-✓ v f₄ f₅ p =
+  begin
+    eval₅ v f₅        ≡⟨ fromCNF′-✓ v nothing f₄ f₅ p ⟩
+    eval₄ v f₄ ∧ true ≡⟨ ∧-identityʳ (eval₄ v f₄) ⟩
+    eval₄ v f₄        ∎
+  where open ≡-Reasoning
 
 transform₅ : Formula₀ → Maybe Formula₅
 transform₅ f = P.fromCNF bitsᶜ (transform₄ f)
@@ -774,3 +786,18 @@ transform₅-✓ v f₀ f₅ p
 unsat₅-✓ : ∀ f₀ f₅ → transform₅ f₀ ≡ just f₅ → (∀ v → eval₅ v f₅ ≡ false) →
   (∀ v → eval₀ v f₀ ≡ false)
 unsat₅-✓ f₀ f₅ p₁ p₂ v = sym (trans (sym (p₂ (makeTrue₃ v f₀))) (transform₅-✓ v f₀ f₅ p₁))
+
+module _ (nᵛ nᶜ : ℕ) (f₀ : Formula₀) where
+  f₄ = transform₄ f₀
+  wr₄ = P.printFormula bitsᶜ nᵛ nᶜ f₄
+  rd₅ = P.formula bitsᶜ wr₄ V.insert nothing (P.measure wr₄)
+
+  write₄Read₅ : map proj₁ rd₅ ≡ transform₅ f₀
+  write₄Read₅ =
+    begin
+      map proj₁ rd₅                                                    ≡⟨⟩
+      map proj₁ (P.formula bitsᶜ wr₄ V.insert nothing (P.measure wr₄)) ≡⟨ cong (map proj₁) (sym (P.formulaCNF-✓₁ bitsᶜ wr₄ (P.measure wr₄))) ⟩
+      map proj₁ (P.formulaCNF bitsᶜ wr₄ (P.measure wr₄))               ≡⟨ P.formulaCNF-✓₂ bitsᶜ nᵛ nᶜ f₄ (P.measure wr₄) ⟩
+      P.fromCNF bitsᶜ f₄                                               ≡⟨⟩
+      transform₅ f₀                                                    ∎
+    where open ≡-Reasoning
