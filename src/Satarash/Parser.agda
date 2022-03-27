@@ -814,15 +814,16 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
     where open ≤-Reasoning
 
   printIntro : ℕ → ℕ → List Char
-  printIntro nᵛ nᶜ = toList "p cnf " ++ˡ printNatural nᵛ ++ˡ printNatural nᶜ
+  printIntro nᵛ nᶜ = toList "p cnf " ++ˡ printNatural nᵛ ++ˡ printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ
 
   printIntro-✓ : ∀ nᵛ nᶜ cs → intro (printIntro nᵛ nᶜ ++ˡ cs) ≡ just (space cs)
   printIntro-✓ nᵛ nᶜ cs
-    rewrite ++-assoc (printNatural nᵛ) (printNatural nᶜ) cs
-    rewrite ⋯-printNatural nᵛ (printNatural nᶜ ++ˡ cs)
-    rewrite printNatural-✓ nᵛ (printNatural nᶜ ++ˡ cs)
-    rewrite ⋯-printNatural nᶜ cs
-    rewrite printNatural-✓ nᶜ cs
+    rewrite ++-assoc (printNatural nᵛ) (printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) cs
+    rewrite ⋯-printNatural nᵛ ((printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) ++ˡ cs)
+    rewrite printNatural-✓ nᵛ ((printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) ++ˡ cs)
+    rewrite ++-assoc (printNatural nᶜ) ('\n' ∷ˡ []ˡ) cs
+    rewrite ⋯-printNatural nᶜ ('\n' ∷ˡ cs)
+    rewrite printNatural-✓ nᶜ ('\n' ∷ˡ cs)
     = refl
 
   printIntro-≡-✓ : ∀ nᵛ nᶜ cs →
