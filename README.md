@@ -49,7 +49,7 @@ won't ever make it accept an invalid LRAT proof.
 In LRAT proofs, the clauses of a formula are identified by unbounded numeric
 indices. Sataraš represents these indices as fixed-length bit vectors, i.e., in
 binary form, and keeps the clauses in a trie. The length of the bit vectors is
-given by `bitsᶜ` in `Checker.agda`. By default, `bitsᶜ` is 24, which is good
+given by `bitsᶜ` in `Verifier.agda`. By default, `bitsᶜ` is 24, which is good
 for proofs with up to ~16.8 million clauses. If necessary, it can be increased.
 
 When a proof step deletes a clause from the CNF, Sataraš records its index, so

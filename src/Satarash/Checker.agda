@@ -17,13 +17,10 @@ open import System.Environment using (getArgs)
 open import Satarash.Parser using (parse)
 open import Satarash.Verifier using (Formula ; Proof ; checkLRAT)
 
-bitsᶜ : ℕ
-bitsᶜ = 24
-
 runCheck : List Char → List Char → Maybe Bool
 runCheck fStr pStr = do
-  f , p ← parse bitsᶜ fStr pStr
-  just $ case checkLRAT bitsᶜ f p of λ where
+  f , p ← parse fStr pStr
+  just $ case checkLRAT f p of λ where
     (just _) → true
     nothing  → false
   where

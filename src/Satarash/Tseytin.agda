@@ -28,10 +28,7 @@ open import Relation.Nullary.Decidable using (dec-yes-irr ; dec-no)
 open import Relation.Nullary.Negation using (contradiction)
 open import Tactic.Cong using (cong!)
 
-bitsᶜ : ℕ
-bitsᶜ = 24
-
-import Satarash.Verifier bitsᶜ as V
+import Satarash.Verifier as V
 import Satarash.Parser as P
 
 infix 4 _↔_
@@ -107,7 +104,7 @@ Formula₄ : Set
 Formula₄ = List V.Clause
 
 eval₄ : (ℕ → Bool) → Formula₄ → Bool
-eval₄ = P.eval-∷ bitsᶜ
+eval₄ = P.eval-∷
 
 -- verifier's representation
 Formula₅ : Set
@@ -753,11 +750,11 @@ unsat₄-✓ : ∀ f → (∀ v → eval₄ v (transform₄ f) ≡ false) → (�
 unsat₄-✓ f p v = sym (trans (sym (p (makeTrue₃ v f))) (transform₄-✓ v f))
 
 transform₅ : Formula₀ → Maybe Formula₅
-transform₅ f = P.from-∷ bitsᶜ (transform₄ f)
+transform₅ f = P.from-∷ (transform₄ f)
 
 transform₅-✓ : ∀ v f₀ f₅ → transform₅ f₀ ≡ just f₅ → eval₅ (makeTrue₃ v f₀) f₅ ≡ eval₀ v f₀
 transform₅-✓ v f₀ f₅ p
-  rewrite P.from-∷-✓ bitsᶜ (makeTrue₃ v f₀) (transform₄ f₀) f₅ p
+  rewrite P.from-∷-✓ (makeTrue₃ v f₀) (transform₄ f₀) f₅ p
   rewrite sym (transform₄-✓ v f₀)
   = refl
 

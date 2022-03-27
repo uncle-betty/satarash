@@ -1,8 +1,4 @@
-import Data.Nat
-
-module Satarash.Verifier (bitsᶜ : Data.Nat.ℕ) where
-
-open Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
+module Satarash.Verifier where
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; if_then_else_)
 open import Data.Bool.Properties
@@ -15,6 +11,7 @@ open import Data.List using (List) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; _++
 open import Data.List.Relation.Unary.All using (All) renaming ([] to []ᵃ ; _∷_ to _∷ᵃ_)
 open import Data.List.Relation.Unary.Any using (Any ; here ; there)
 open import Data.Maybe using (Maybe ; just ; nothing) renaming (map to mapᵐ)
+open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _*_)
 open import Data.Nat.Properties using () renaming (_≟_ to _≟ⁿ_)
 open import Data.Nat.Show using () renaming (show to showⁿ)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂ ; ∃)
@@ -33,6 +30,9 @@ open import Relation.Nullary.Negation using (contradiction)
 open import Algebra.Lattice.Properties.BooleanAlgebra ∨-∧-booleanAlgebra
   using (deMorgan₁ ; deMorgan₂)
 open ≡-Reasoning
+
+bitsᶜ : ℕ
+bitsᶜ = 24
 
 Variable : Set
 Variable = ℕ

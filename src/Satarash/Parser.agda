@@ -154,6 +154,11 @@ module HaskellSetMap where
 -- open AgdaSetMap instead for slower implementation in Agda
 open HaskellSetMap
 
+open import Satarash.Verifier as V using (
+    Proof ; Step ; del ; ext ; Clause ; Literal ; pos ; neg ;
+    bitsᶜ ; Formula ; Trie ; node ; leaf ; Index ; evalᶜ ; eval
+  )
+
 ≤-suc : ∀ {m n} → m ≤ n → m ≤ suc n
 ≤-suc {m} {n} m≤n = ≤-trans m≤n (n≤1+n n)
 
@@ -665,488 +670,480 @@ Measure = Acc (λ x y → length x < length y)
 measure : (cs : List Char) → Measure cs
 measure = wellFounded length <-wellFounded-fast
 
-module _ (bitsᶜ : Data.Nat.ℕ) where
-  open import Satarash.Verifier bitsᶜ as V using (
-      Proof ; Step ; del ; ext ;
-      Clause ; Literal ; pos ; neg ;
-      Formula ; Trie ; node ; leaf ; Index ;
-      evalᶜ ; eval
-    )
+Translator : Set
+Translator = Map ℕ
 
-  Translator : Set
-  Translator = Map ℕ
+Recycler : Set
+Recycler = ⟨Set⟩
 
-  Recycler : Set
-  Recycler = ⟨Set⟩
+klause : (cs : List Char) → Measure cs → Maybe (Clause × List Char)
+klause cs (acc rs) = with-≡ (integer cs) >>= λ where
+  ((_ , zero , cs′) , p)      → just ([]ˡ , cs′)
+  ((false , suc v , cs′) , p) →
+    let m′ = rs cs′ (integer-< cs false (suc v) cs′ p) in
+    mapᵐ (map₁ (pos v ∷ˡ_)) (klause cs′ m′)
+  ((true , suc v , cs′) , p)  →
+    let m′ = rs cs′ (integer-< cs true (suc v) cs′ p) in
+    mapᵐ (map₁ (neg v ∷ˡ_)) (klause cs′ m′)
 
-  klause : (cs : List Char) → Measure cs → Maybe (Clause × List Char)
-  klause cs (acc rs) = with-≡ (integer cs) >>= λ where
-    ((_ , zero , cs′) , p)      → just ([]ˡ , cs′)
-    ((false , suc v , cs′) , p) →
-      let m′ = rs cs′ (integer-< cs false (suc v) cs′ p) in
-      mapᵐ (map₁ (pos v ∷ˡ_)) (klause cs′ m′)
-    ((true , suc v , cs′) , p)  →
-      let m′ = rs cs′ (integer-< cs true (suc v) cs′ p) in
-      mapᵐ (map₁ (neg v ∷ˡ_)) (klause cs′ m′)
+klause-< : ∀ cs r ds″ → (m : Measure cs) → klause cs m ≡ just (r , ds″) → length ds″ < length cs
+klause-< cs r ds″ (acc rs) p with with-≡ (integer cs)
+klause-< cs r ds″ (acc rs) ()   | nothing
+klause-< cs r ds″ (acc rs) refl | just ((_ , zero , cs′) , q) = integer-< cs _ zero cs′ q
+klause-< cs r ds″ (acc rs) p    | just ((false , suc v , cs′) , q)
+  with m′ ← rs cs′ (integer-< cs false (suc v) cs′ q)
+  with klause cs′ m′ in eq | p
+... | just (k , cs″) | refl =
+  <-trans (klause-< cs′ k cs″ m′ eq) (integer-< cs false (suc v) cs′ q)
+klause-< cs r ds″ (acc rs) p    | just ((true , suc v , cs′) , q)
+  with m′ ← rs cs′ (integer-< cs true (suc v) cs′ q)
+  with klause cs′ m′ in eq | p
+... | just (k , cs″) | refl =
+  <-trans (klause-< cs′ k cs″ m′ eq) (integer-< cs true (suc v) cs′ q)
 
-  klause-< : ∀ cs r ds″ → (m : Measure cs) → klause cs m ≡ just (r , ds″) → length ds″ < length cs
-  klause-< cs r ds″ (acc rs) p with with-≡ (integer cs)
-  klause-< cs r ds″ (acc rs) ()   | nothing
-  klause-< cs r ds″ (acc rs) refl | just ((_ , zero , cs′) , q) = integer-< cs _ zero cs′ q
-  klause-< cs r ds″ (acc rs) p    | just ((false , suc v , cs′) , q)
-    with m′ ← rs cs′ (integer-< cs false (suc v) cs′ q)
-    with klause cs′ m′ in eq | p
-  ... | just (k , cs″) | refl =
-    <-trans (klause-< cs′ k cs″ m′ eq) (integer-< cs false (suc v) cs′ q)
-  klause-< cs r ds″ (acc rs) p    | just ((true , suc v , cs′) , q)
-    with m′ ← rs cs′ (integer-< cs true (suc v) cs′ q)
-    with klause cs′ m′ in eq | p
-  ... | just (k , cs″) | refl =
-    <-trans (klause-< cs′ k cs″ m′ eq) (integer-< cs true (suc v) cs′ q)
+printKlause : Clause → List Char
+printKlause []ˡ          = '0' ∷ˡ '\n' ∷ˡ []ˡ
+printKlause (pos v ∷ˡ k) = printInteger false (suc v) ++ˡ printKlause k
+printKlause (neg v ∷ˡ k) = printInteger true (suc v) ++ˡ printKlause k
 
-  printKlause : Clause → List Char
-  printKlause []ˡ          = '0' ∷ˡ '\n' ∷ˡ []ˡ
-  printKlause (pos v ∷ˡ k) = printInteger false (suc v) ++ˡ printKlause k
-  printKlause (neg v ∷ˡ k) = printInteger true (suc v) ++ˡ printKlause k
+⋯-printKlause : ∀ k cs → space (printKlause k ++ˡ cs) ≡ printKlause k ++ˡ cs
+⋯-printKlause []ˡ          cs = refl
+⋯-printKlause (pos v ∷ˡ k) cs =
+  space (printKlause (pos v ∷ˡ k) ++ˡ cs)                       ≡⟨⟩
+  space ((printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs) ≡⟨ cong space (++-assoc (printInteger false (suc v)) (printKlause k) cs) ⟩
+  space (printInteger false (suc v) ++ˡ printKlause k ++ˡ cs)   ≡⟨ ⋯-printNatural (suc v) (printKlause k ++ˡ cs) ⟩
+  printInteger false (suc v) ++ˡ printKlause k ++ˡ cs           ≡˘⟨ ++-assoc (printInteger false (suc v)) (printKlause k) cs ⟩
+  (printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs         ≡⟨⟩
+  printKlause (pos v ∷ˡ k) ++ˡ cs                               ∎
+  where open ≡-Reasoning
+⋯-printKlause (neg v ∷ˡ k) cs = refl
 
-  ⋯-printKlause : ∀ k cs → space (printKlause k ++ˡ cs) ≡ printKlause k ++ˡ cs
-  ⋯-printKlause []ˡ          cs = refl
-  ⋯-printKlause (pos v ∷ˡ k) cs =
-    space (printKlause (pos v ∷ˡ k) ++ˡ cs)                       ≡⟨⟩
-    space ((printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs) ≡⟨ cong space (++-assoc (printInteger false (suc v)) (printKlause k) cs) ⟩
-    space (printInteger false (suc v) ++ˡ printKlause k ++ˡ cs)   ≡⟨ ⋯-printNatural (suc v) (printKlause k ++ˡ cs) ⟩
-    printInteger false (suc v) ++ˡ printKlause k ++ˡ cs           ≡˘⟨ ++-assoc (printInteger false (suc v)) (printKlause k) cs ⟩
-    (printInteger false (suc v) ++ˡ printKlause k) ++ˡ cs         ≡⟨⟩
-    printKlause (pos v ∷ˡ k) ++ˡ cs                               ∎
-    where open ≡-Reasoning
-  ⋯-printKlause (neg v ∷ˡ k) cs = refl
+printKlause-✓ : ∀ k cs m → klause (printKlause k ++ˡ cs) m ≡ just (k , space cs)
+printKlause-✓ []ˡ           cs (acc rs) = refl
+printKlause-✓ (pos v ∷ˡ ls) cs (acc rs)
+  rewrite ++-assoc (printNatural (suc v)) (printKlause ls) cs
 
-  printKlause-✓ : ∀ k cs m → klause (printKlause k ++ˡ cs) m ≡ just (k , space cs)
-  printKlause-✓ []ˡ           cs (acc rs) = refl
-  printKlause-✓ (pos v ∷ˡ ls) cs (acc rs)
-    rewrite ++-assoc (printNatural (suc v)) (printKlause ls) cs
+  with rec ← printKlause-✓ ls cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
+  with lem ← ⋯-printKlause ls cs -- make |lem| have the |cs′| shortcut, too
 
-    with rec ← printKlause-✓ ls cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
-    with lem ← ⋯-printKlause ls cs -- make |lem| have the |cs′| shortcut, too
+  with cs′ ← printKlause ls ++ˡ cs
 
-    with cs′ ← printKlause ls ++ˡ cs
+  rewrite printInteger-≡-✓ false (suc v) cs′
 
-    rewrite printInteger-≡-✓ false (suc v) cs′
+  with ✓′ ← printInteger-✓ false (suc v) cs′
+  with <′ ← integer-< (printInteger false (suc v) ++ˡ cs′) false (suc v) (space cs′) ✓′
+  with m′ ← rs (space cs′) <′
 
-    with ✓′ ← printInteger-✓ false (suc v) cs′
-    with <′ ← integer-< (printInteger false (suc v) ++ˡ cs′) false (suc v) (space cs′) ✓′
-    with m′ ← rs (space cs′) <′
+  rewrite lem
+  rewrite rec m′
+  = refl
 
-    rewrite lem
-    rewrite rec m′
-    = refl
+printKlause-✓ (neg v ∷ˡ ls) cs (acc rs)
+  rewrite ++-assoc (printNatural (suc v)) (printKlause ls) cs
 
-  printKlause-✓ (neg v ∷ˡ ls) cs (acc rs)
-    rewrite ++-assoc (printNatural (suc v)) (printKlause ls) cs
+  with rec ← printKlause-✓ ls cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
+  with lem ← ⋯-printKlause ls cs -- make |lem| have the |cs′| shortcut, too
 
-    with rec ← printKlause-✓ ls cs -- prepare recursion now, so |rec| gets the |cs′| shortcut
-    with lem ← ⋯-printKlause ls cs -- make |lem| have the |cs′| shortcut, too
+  with cs′ ← printKlause ls ++ˡ cs
 
-    with cs′ ← printKlause ls ++ˡ cs
+  rewrite printInteger-≡-✓ true (suc v) cs′
 
-    rewrite printInteger-≡-✓ true (suc v) cs′
+  with ✓′ ← printInteger-✓ true (suc v) cs′
+  with <′ ← integer-< (printInteger true (suc v) ++ˡ cs′) true (suc v) (space cs′) ✓′
+  with m′ ← rs (space cs′) <′
 
-    with ✓′ ← printInteger-✓ true (suc v) cs′
-    with <′ ← integer-< (printInteger true (suc v) ++ˡ cs′) true (suc v) (space cs′) ✓′
-    with m′ ← rs (space cs′) <′
+  rewrite lem
+  rewrite rec m′
+  = refl
 
-    rewrite lem
-    rewrite rec m′
-    = refl
+printKlause-✓′ : ∀ k cs cs′ m → cs ≡ printKlause k → klause (cs ++ˡ cs′) m ≡ just (k , space cs′)
+printKlause-✓′ k cs cs′ m refl = printKlause-✓ k cs′ m
 
-  printKlause-✓′ : ∀ k cs cs′ m → cs ≡ printKlause k → klause (cs ++ˡ cs′) m ≡ just (k , space cs′)
-  printKlause-✓′ k cs cs′ m refl = printKlause-✓ k cs′ m
+printKlause-≡-✓ : ∀ k cs m →
+  with-≡ (klause (printKlause k ++ˡ cs) m) ≡ just ((k , space cs) , printKlause-✓ k cs m)
+printKlause-≡-✓ k cs m rewrite printKlause-✓ k cs m = refl
 
-  printKlause-≡-✓ : ∀ k cs m →
-    with-≡ (klause (printKlause k ++ˡ cs) m) ≡ just ((k , space cs) , printKlause-✓ k cs m)
-  printKlause-≡-✓ k cs m rewrite printKlause-✓ k cs m = refl
+printKlause-≡-✓′ : ∀ k cs cs′ m → (p : cs ≡ printKlause k) →
+  with-≡ (klause (cs ++ˡ cs′) m) ≡ just ((k , space cs′) , printKlause-✓′ k cs cs′ m p)
+printKlause-≡-✓′ k cs cs′ m refl = printKlause-≡-✓ k cs′ m
 
-  printKlause-≡-✓′ : ∀ k cs cs′ m → (p : cs ≡ printKlause k) →
-    with-≡ (klause (cs ++ˡ cs′) m) ≡ just ((k , space cs′) , printKlause-✓′ k cs cs′ m p)
-  printKlause-≡-✓′ k cs cs′ m refl = printKlause-≡-✓ k cs′ m
+printKlauseToken : ∀ k → ∃[ c ] ∃[ cs ]
+  printKlause k ≡ c ∷ˡ cs × (∃[ n ] token c ≡ isDigit n ⊎ token c ≡ isMinus)
+printKlauseToken []ˡ                      = '0' , '\n' ∷ˡ []ˡ , refl , inj₁ (0 , refl)
+printKlauseToken (pos v ∷ˡ ls) with printLength (suc v) in eq
+printKlauseToken (pos v ∷ˡ ls)    | zero  = contradiction eq (printLength≢0 (suc v))
+printKlauseToken (pos v ∷ˡ ls)    | suc e = c , cs , p₁ , p₂
+  where
+    c = printDigit (suc v /10^ e)
+    cs = printNatural″ e (suc v) ++ˡ ' ' ∷ˡ []ˡ ++ˡ printKlause ls
+    n′ = suc v /10^ e
+    n = n′ % 10
+    p₁ = cong (c ∷ˡ_) (++-assoc (printNatural″ e (suc v)) (' ' ∷ˡ []ˡ) (printKlause ls))
+    p₂ = inj₁ (n , printDigit-✓ n′)
 
-  printKlauseToken : ∀ k → ∃[ c ] ∃[ cs ]
-    printKlause k ≡ c ∷ˡ cs × (∃[ n ] token c ≡ isDigit n ⊎ token c ≡ isMinus)
-  printKlauseToken []ˡ                      = '0' , '\n' ∷ˡ []ˡ , refl , inj₁ (0 , refl)
-  printKlauseToken (pos v ∷ˡ ls) with printLength (suc v) in eq
-  printKlauseToken (pos v ∷ˡ ls)    | zero  = contradiction eq (printLength≢0 (suc v))
-  printKlauseToken (pos v ∷ˡ ls)    | suc e = c , cs , p₁ , p₂
-    where
-      c = printDigit (suc v /10^ e)
-      cs = printNatural″ e (suc v) ++ˡ ' ' ∷ˡ []ˡ ++ˡ printKlause ls
-      n′ = suc v /10^ e
-      n = n′ % 10
-      p₁ = cong (c ∷ˡ_) (++-assoc (printNatural″ e (suc v)) (' ' ∷ˡ []ˡ) (printKlause ls))
-      p₂ = inj₁ (n , printDigit-✓ n′)
+printKlauseToken (neg v ∷ˡ ls) = '-' , cs , refl , inj₂ refl
+  where
+    cs = printNatural (suc v) ++ˡ printKlause ls
 
-  printKlauseToken (neg v ∷ˡ ls) = '-' , cs , refl , inj₂ refl
-    where
-      cs = printNatural (suc v) ++ˡ printKlause ls
+intro : List Char → Maybe (List Char)
+intro cs = do
+  cs₁ ← known cs (toList "p")
+  cs₂ ← known cs₁ (toList "cnf")
+  _ , cs₃ ← natural cs₂
+  _ , cs₄ ← natural cs₃
+  return cs₄
 
-  intro : List Char → Maybe (List Char)
-  intro cs = do
-    cs₁ ← known cs (toList "p")
-    cs₂ ← known cs₁ (toList "cnf")
-    _ , cs₃ ← natural cs₂
-    _ , cs₄ ← natural cs₃
-    return cs₄
+intro-< : ∀ cs cs₄′ → intro cs ≡ just cs₄′ → length cs₄′ < length cs
+intro-< cs cs₄ p
+  with known cs (toList "p") in eq₁
+... | just cs₁
+  with known cs₁ (toList "cnf") in eq₂
+... | just cs₂
+  with natural cs₂ in eq₃
+... | just (_ , cs₃)
+  with natural cs₃ in eq₄
+... | just (_ , cs₄)
+  with p
+... | refl = begin-strict
+  length cs₄ <⟨ natural-< cs₃ _ cs₄ eq₄ ⟩
+  length cs₃ <⟨ natural-< cs₂ _ cs₃ eq₃ ⟩
+  length cs₂ ≤⟨ known-≤ cs₁ (toList "cnf") cs₂ eq₂ ⟩
+  length cs₁ ≤⟨ known-≤ cs (toList "p") cs₁ eq₁ ⟩
+  length cs  ∎
+  where open ≤-Reasoning
 
-  intro-< : ∀ cs cs₄′ → intro cs ≡ just cs₄′ → length cs₄′ < length cs
-  intro-< cs cs₄ p
-    with known cs (toList "p") in eq₁
-  ... | just cs₁
-    with known cs₁ (toList "cnf") in eq₂
-  ... | just cs₂
-    with natural cs₂ in eq₃
-  ... | just (_ , cs₃)
-    with natural cs₃ in eq₄
-  ... | just (_ , cs₄)
-    with p
-  ... | refl = begin-strict
-    length cs₄ <⟨ natural-< cs₃ _ cs₄ eq₄ ⟩
-    length cs₃ <⟨ natural-< cs₂ _ cs₃ eq₃ ⟩
-    length cs₂ ≤⟨ known-≤ cs₁ (toList "cnf") cs₂ eq₂ ⟩
-    length cs₁ ≤⟨ known-≤ cs (toList "p") cs₁ eq₁ ⟩
-    length cs  ∎
-    where open ≤-Reasoning
+printIntro : ℕ → ℕ → List Char
+printIntro nᵛ nᶜ = toList "p cnf " ++ˡ printNatural nᵛ ++ˡ printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ
 
-  printIntro : ℕ → ℕ → List Char
-  printIntro nᵛ nᶜ = toList "p cnf " ++ˡ printNatural nᵛ ++ˡ printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ
+printIntro-✓ : ∀ nᵛ nᶜ cs → intro (printIntro nᵛ nᶜ ++ˡ cs) ≡ just (space cs)
+printIntro-✓ nᵛ nᶜ cs
+  rewrite ++-assoc (printNatural nᵛ) (printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) cs
+  rewrite ⋯-printNatural nᵛ ((printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) ++ˡ cs)
+  rewrite printNatural-✓ nᵛ ((printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) ++ˡ cs)
+  rewrite ++-assoc (printNatural nᶜ) ('\n' ∷ˡ []ˡ) cs
+  rewrite ⋯-printNatural nᶜ ('\n' ∷ˡ cs)
+  rewrite printNatural-✓ nᶜ ('\n' ∷ˡ cs)
+  = refl
 
-  printIntro-✓ : ∀ nᵛ nᶜ cs → intro (printIntro nᵛ nᶜ ++ˡ cs) ≡ just (space cs)
-  printIntro-✓ nᵛ nᶜ cs
-    rewrite ++-assoc (printNatural nᵛ) (printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) cs
-    rewrite ⋯-printNatural nᵛ ((printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) ++ˡ cs)
-    rewrite printNatural-✓ nᵛ ((printNatural nᶜ ++ˡ '\n' ∷ˡ []ˡ) ++ˡ cs)
-    rewrite ++-assoc (printNatural nᶜ) ('\n' ∷ˡ []ˡ) cs
-    rewrite ⋯-printNatural nᶜ ('\n' ∷ˡ cs)
-    rewrite printNatural-✓ nᶜ ('\n' ∷ˡ cs)
-    = refl
+printIntro-≡-✓ : ∀ nᵛ nᶜ cs →
+  with-≡ (intro (printIntro nᵛ nᶜ ++ˡ cs)) ≡ just (space cs , printIntro-✓ nᵛ nᶜ cs)
+printIntro-≡-✓ nᵛ nᶜ cs rewrite printIntro-✓ nᵛ nᶜ cs = refl
 
-  printIntro-≡-✓ : ∀ nᵛ nᶜ cs →
-    with-≡ (intro (printIntro nᵛ nᶜ ++ˡ cs)) ≡ just (space cs , printIntro-✓ nᵛ nᶜ cs)
-  printIntro-≡-✓ nᵛ nᶜ cs rewrite printIntro-✓ nᵛ nᶜ cs = refl
+formula′ : {F : Set} → (cs : List Char) → (F → Clause → Maybe F) → F → ℕ → Translator →
+  Measure cs → Maybe (F × Translator)
+formula′ []ˡ       f⁺ f n t _        = return $ f , t
+formula′ (c ∷ˡ cs) f⁺ f n t (acc rs) =
+  case token c of λ where
+    isC → do
+      let cs′ = line cs
+      formula′ cs′ f⁺ f n t (rs cs′ (≤⇒<-suc (line-≤ cs)))
+    _   → do
+      (k , cs′) , p ← with-≡ (klause (c ∷ˡ cs) (acc rs))
+      f′ ← f⁺ f k
+      let t′ = insertᵐ (suc n) n t
+      formula′ cs′ f⁺ f′ (suc n) t′ (rs cs′ (klause-< (c ∷ˡ cs) k cs′ (acc rs) p ))
 
-  formula′ : {F : Set} → (cs : List Char) → (F → Clause → Maybe F) → F → ℕ → Translator →
-    Measure cs → Maybe (F × Translator)
-  formula′ []ˡ       f⁺ f n t _        = return $ f , t
-  formula′ (c ∷ˡ cs) f⁺ f n t (acc rs) =
-    case token c of λ where
-      isC → do
-        let cs′ = line cs
-        formula′ cs′ f⁺ f n t (rs cs′ (≤⇒<-suc (line-≤ cs)))
-      _   → do
-        (k , cs′) , p ← with-≡ (klause (c ∷ˡ cs) (acc rs))
-        f′ ← f⁺ f k
-        let t′ = insertᵐ (suc n) n t
-        formula′ cs′ f⁺ f′ (suc n) t′ (rs cs′ (klause-< (c ∷ˡ cs) k cs′ (acc rs) p ))
+printFormula′ : List Clause → List Char
+printFormula′ []ˡ       = []ˡ
+printFormula′ (k ∷ˡ ks) = printKlause k ++ˡ printFormula′ ks
 
-  printFormula′ : List Clause → List Char
-  printFormula′ []ˡ       = []ˡ
-  printFormula′ (k ∷ˡ ks) = printKlause k ++ˡ printFormula′ ks
+⋯-printFormula′ : ∀ ks → space (printFormula′ ks) ≡ printFormula′ ks
+⋯-printFormula′ []ˡ       = refl
+⋯-printFormula′ (k ∷ˡ ks) = ⋯-printKlause k (printFormula′ ks)
 
-  ⋯-printFormula′ : ∀ ks → space (printFormula′ ks) ≡ printFormula′ ks
-  ⋯-printFormula′ []ˡ       = refl
-  ⋯-printFormula′ (k ∷ˡ ks) = ⋯-printKlause k (printFormula′ ks)
+-- XXX - fix duplication
+printFormula′-✓ : ∀ ks f n t m →
+  ∃[ t′ ] formula′ (printFormula′ ks) (just ∘₂ _∷ʳ_) f n t m ≡ just (f ++ˡ ks , t′)
+-- XXX - factored out of printFormula′-✓ to avoid ill-typed with-abstraction
+printFormula′-✓′ : ∀ ks f n t m →
+  ∃[ t′ ] formula′ (space (printFormula′ ks)) (just ∘₂ _∷ʳ_) f n t m ≡ just (f ++ˡ ks , t′)
 
-  -- XXX - fix duplication
-  printFormula′-✓ : ∀ ks f n t m →
-    ∃[ t′ ] formula′ (printFormula′ ks) (just ∘₂ _∷ʳ_) f n t m ≡ just (f ++ˡ ks , t′)
-  -- XXX - factored out of printFormula′-✓ to avoid ill-typed with-abstraction
-  printFormula′-✓′ : ∀ ks f n t m →
-    ∃[ t′ ] formula′ (space (printFormula′ ks)) (just ∘₂ _∷ʳ_) f n t m ≡ just (f ++ˡ ks , t′)
+printFormula′-✓ []ˡ       f n t m        = t , cong (just ∘ (_, t)) (sym (++-identityʳ f))
+printFormula′-✓ (k ∷ˡ ks) f n t (acc rs) with printKlauseToken k
+printFormula′-✓ (k ∷ˡ ks) f n t (acc rs)    | c , cs , p₁ , inj₁ (n′ , p₂)
+  rewrite p₁ | p₂
+  rewrite printKlause-≡-✓′ k (c ∷ˡ cs) (printFormula′ ks) (acc rs) (sym p₁)
+  rewrite sym (++-assoc f (k ∷ˡ []ˡ) ks)
+  = printFormula′-✓′ ks (f ∷ʳ k) (suc n) (insertᵐ (suc n) n t) _
 
-  printFormula′-✓ []ˡ       f n t m        = t , cong (just ∘ (_, t)) (sym (++-identityʳ f))
-  printFormula′-✓ (k ∷ˡ ks) f n t (acc rs) with printKlauseToken k
-  printFormula′-✓ (k ∷ˡ ks) f n t (acc rs)    | c , cs , p₁ , inj₁ (n′ , p₂)
-    rewrite p₁ | p₂
-    rewrite printKlause-≡-✓′ k (c ∷ˡ cs) (printFormula′ ks) (acc rs) (sym p₁)
-    rewrite sym (++-assoc f (k ∷ˡ []ˡ) ks)
-    = printFormula′-✓′ ks (f ∷ʳ k) (suc n) (insertᵐ (suc n) n t) _
+printFormula′-✓ (k ∷ˡ ks) f n t (acc rs)    | c , cs , p₁ , inj₂ p₂
+  rewrite p₁ | p₂
+  rewrite printKlause-≡-✓′ k (c ∷ˡ cs) (printFormula′ ks) (acc rs) (sym p₁)
+  rewrite sym (++-assoc f (k ∷ˡ []ˡ) ks)
+  = printFormula′-✓′ ks (f ∷ʳ k) (suc n) (insertᵐ (suc n) n t) _
 
-  printFormula′-✓ (k ∷ˡ ks) f n t (acc rs)    | c , cs , p₁ , inj₂ p₂
-    rewrite p₁ | p₂
-    rewrite printKlause-≡-✓′ k (c ∷ˡ cs) (printFormula′ ks) (acc rs) (sym p₁)
-    rewrite sym (++-assoc f (k ∷ˡ []ˡ) ks)
-    = printFormula′-✓′ ks (f ∷ʳ k) (suc n) (insertᵐ (suc n) n t) _
+printFormula′-✓′ ks rewrite ⋯-printFormula′ ks = printFormula′-✓ ks
 
-  printFormula′-✓′ ks rewrite ⋯-printFormula′ ks = printFormula′-✓ ks
+formula : {F : Set} → (cs : List Char) → (F → Clause → Maybe F) → F → Measure cs →
+  Maybe (F × Translator)
+formula []ˡ       f⁺ f₀ _        = return $ f₀ , emptyᵐ
+formula (c ∷ˡ cs) f⁺ f₀ (acc rs) =
+  case token c of λ where
+    isC → do
+      let cs′ = line cs
+      formula cs′ f⁺ f₀ (rs cs′ (≤⇒<-suc (line-≤ cs)))
+    _   → do
+      cs′ , p ← with-≡ (intro (c ∷ˡ cs))
+      formula′ cs′ f⁺ f₀ zero emptyᵐ (rs cs′ (intro-< (c ∷ˡ cs) cs′ p))
 
-  formula : {F : Set} → (cs : List Char) → (F → Clause → Maybe F) → F → Measure cs →
-    Maybe (F × Translator)
-  formula []ˡ       f⁺ f₀ _        = return $ f₀ , emptyᵐ
-  formula (c ∷ˡ cs) f⁺ f₀ (acc rs) =
-    case token c of λ where
-      isC → do
-        let cs′ = line cs
-        formula cs′ f⁺ f₀ (rs cs′ (≤⇒<-suc (line-≤ cs)))
-      _   → do
-        cs′ , p ← with-≡ (intro (c ∷ˡ cs))
-        formula′ cs′ f⁺ f₀ zero emptyᵐ (rs cs′ (intro-< (c ∷ˡ cs) cs′ p))
+printFormula : ℕ → ℕ → List Clause → List Char
+printFormula nᵛ nᶜ ks = printIntro nᵛ nᶜ ++ˡ printFormula′ ks
 
-  printFormula : ℕ → ℕ → List Clause → List Char
-  printFormula nᵛ nᶜ ks = printIntro nᵛ nᶜ ++ˡ printFormula′ ks
+printFormula-✓ : ∀ nᵛ nᶜ ks m →
+  ∃[ t′ ] formula (printFormula nᵛ nᶜ ks) (just ∘₂ _∷ʳ_) []ˡ m ≡ just (ks , t′)
+printFormula-✓ nᵛ nᶜ ks (acc rs)
+  rewrite printIntro-≡-✓ nᵛ nᶜ (printFormula′ ks)
+  = printFormula′-✓′ ks []ˡ 0 emptyᵐ _
 
-  printFormula-✓ : ∀ nᵛ nᶜ ks m →
-    ∃[ t′ ] formula (printFormula nᵛ nᶜ ks) (just ∘₂ _∷ʳ_) []ˡ m ≡ just (ks , t′)
-  printFormula-✓ nᵛ nᶜ ks (acc rs)
-    rewrite printIntro-≡-✓ nᵛ nᶜ (printFormula′ ks)
-    = printFormula′-✓′ ks []ˡ 0 emptyᵐ _
+lsb : ℕ → Bool
+lsb x = case x % 2 of λ where
+  zero    → false
+  (suc _) → true
 
-  lsb : ℕ → Bool
-  lsb x = case x % 2 of λ where
-    zero    → false
-    (suc _) → true
+shr : ℕ → ℕ
+shr x = x / 2
 
-  shr : ℕ → ℕ
-  shr x = x / 2
+bin′ : (n : ℕ) → ℕ → Vec Bool n
+bin′ zero    _ = []ᵛ
+bin′ (suc n) x = lsb x ∷ᵛ bin′ n (shr x)
 
-  bin′ : (n : ℕ) → ℕ → Vec Bool n
-  bin′ zero    _ = []ᵛ
-  bin′ (suc n) x = lsb x ∷ᵛ bin′ n (shr x)
+bin : (n : ℕ) → ℕ → Vec Bool n
+bin n x = reverse $ bin′ n x
 
-  bin : (n : ℕ) → ℕ → Vec Bool n
-  bin n x = reverse $ bin′ n x
+{-# TERMINATING #-}
+delete : List Char → Translator → Recycler →
+  Maybe (List Index × List Char × Translator × Recycler)
+delete cs t r = natural cs >>= λ where
+  (zero , cs)       → return $ []ˡ , cs , t , r
+  (x₀@(suc _) , cs) → do
+    x ← lookupᵐ x₀ t
+    let t = deleteᵐ x₀ t
+    let r = insertˢ x r
+    is , cs , t , r ← delete cs t r
+    return $ bin bitsᶜ x ∷ˡ is , cs , t , r
 
-  {-# TERMINATING #-}
-  delete : List Char → Translator → Recycler →
-    Maybe (List Index × List Char × Translator × Recycler)
-  delete cs t r = natural cs >>= λ where
-    (zero , cs)       → return $ []ˡ , cs , t , r
-    (x₀@(suc _) , cs) → do
-      x ← lookupᵐ x₀ t
-      let t = deleteᵐ x₀ t
-      let r = insertˢ x r
-      is , cs , t , r ← delete cs t r
-      return $ bin bitsᶜ x ∷ˡ is , cs , t , r
+{-# TERMINATING #-}
+indexList : List Char → Translator → Maybe (List Index × ℕ × List Char)
+indexList cs t = integer cs >>= λ where
+  (_     , zero , cs) → return $ []ˡ , zero , cs
+  (true  , x₀   , cs) → return $ []ˡ , x₀   , cs
+  (false , x₀   , cs) → do
+    x ← lookupᵐ x₀ t
+    is , x₀ , cs ← indexList cs t
+    return $ bin bitsᶜ x ∷ˡ is , x₀ , cs
 
-  {-# TERMINATING #-}
-  indexList : List Char → Translator → Maybe (List Index × ℕ × List Char)
-  indexList cs t = integer cs >>= λ where
-    (_     , zero , cs) → return $ []ˡ , zero , cs
-    (true  , x₀   , cs) → return $ []ˡ , x₀   , cs
-    (false , x₀   , cs) → do
-      x ← lookupᵐ x₀ t
-      is , x₀ , cs ← indexList cs t
-      return $ bin bitsᶜ x ∷ˡ is , x₀ , cs
+-- the |Map| keeps the |is|s ordered by mapped indices; also: we drop empty |is|s
+{-# TERMINATING #-}
+indexLists : List Char → ℕ → Translator → Maybe (Map (List Index) × List Char)
+indexLists cs x t = indexList cs t >>= λ where
+  ([]ˡ , zero       , cs) → return $ emptyᵐ , cs
+  (is  , zero       , cs) → return $ insertᵐ x is emptyᵐ , cs
+  ([]ˡ , x₀@(suc _) , cs) → do
+    x ← lookupᵐ x₀ t
+    indexLists cs x t
+  (is  , x₀@(suc _) , cs) → do
+    let insert = insertᵐ x is
+    x ← lookupᵐ x₀ t
+    mis , cs ← indexLists cs x t
+    return $ insert mis , cs
 
-  -- the |Map| keeps the |is|s ordered by mapped indices; also: we drop empty |is|s
-  {-# TERMINATING #-}
-  indexLists : List Char → ℕ → Translator → Maybe (Map (List Index) × List Char)
-  indexLists cs x t = indexList cs t >>= λ where
-    ([]ˡ , zero       , cs) → return $ emptyᵐ , cs
-    (is  , zero       , cs) → return $ insertᵐ x is emptyᵐ , cs
-    ([]ˡ , x₀@(suc _) , cs) → do
-      x ← lookupᵐ x₀ t
-      indexLists cs x t
-    (is  , x₀@(suc _) , cs) → do
-      let insert = insertᵐ x is
+extend : List Char → ℕ → Translator → Recycler → ℕ →
+  Maybe (Clause × List Index × List (List Index) × List Char × Translator × Recycler × ℕ)
+extend cs x₀ t r m = do
+  let x , r , m = case headTailˢ r of λ {(just (x , r)) → x , r , m ; nothing → suc m , r , suc m}
+  let t = insertᵐ x₀ x t
+  k , cs ← klause cs (measure cs)
+  is , x₀ , cs ← indexList cs t
+  case x₀ of λ where
+    zero    → return $ k , is , []ˡ , cs , t , r , m
+    (suc _) → do
       x ← lookupᵐ x₀ t
       mis , cs ← indexLists cs x t
-      return $ insert mis , cs
+      let iss = mapˡ proj₂ $ toListᵐ mis
+      return $ k , is , iss , cs , t , r , m
 
-  extend : List Char → ℕ → Translator → Recycler → ℕ →
-    Maybe (Clause × List Index × List (List Index) × List Char × Translator × Recycler × ℕ)
-  extend cs x₀ t r m = do
-    let x , r , m = case headTailˢ r of λ {(just (x , r)) → x , r , m ; nothing → suc m , r , suc m}
-    let t = insertᵐ x₀ x t
-    k , cs ← klause cs (measure cs)
-    is , x₀ , cs ← indexList cs t
-    case x₀ of λ where
-      zero    → return $ k , is , []ˡ , cs , t , r , m
-      (suc _) → do
-        x ← lookupᵐ x₀ t
-        mis , cs ← indexLists cs x t
-        let iss = mapˡ proj₂ $ toListᵐ mis
-        return $ k , is , iss , cs , t , r , m
+proof′ : List Char → Translator → Recycler → ℕ → Maybe (Proof × Translator × Recycler × ℕ)
 
-  proof′ : List Char → Translator → Recycler → ℕ → Maybe (Proof × Translator × Recycler × ℕ)
+{-# TERMINATING #-}
+proof″ : List Char → ℕ → Translator → Recycler → ℕ → Maybe (Proof × Translator × Recycler × ℕ)
+proof″ []ˡ         x₀ t r m = nothing
+proof″ ('d' ∷ˡ cs) x₀ t r m = do
+  let cs = space cs
+  is , cs , t , r ← delete cs t r
+  p , t , r ,  m ← proof′ cs t r m
+  return $ del is ∷ˡ p , t , r , m
+proof″ cs@(_ ∷ˡ _) x₀ t r m = do
+  k , is , iss , cs , t , r , m ← extend cs x₀ t r m
+  p , t , r , m ← proof′ cs t r m
+  return $ ext k is iss ∷ˡ p , t , r , m
 
-  {-# TERMINATING #-}
-  proof″ : List Char → ℕ → Translator → Recycler → ℕ → Maybe (Proof × Translator × Recycler × ℕ)
-  proof″ []ˡ         x₀ t r m = nothing
-  proof″ ('d' ∷ˡ cs) x₀ t r m = do
-    let cs = space cs
-    is , cs , t , r ← delete cs t r
-    p , t , r ,  m ← proof′ cs t r m
-    return $ del is ∷ˡ p , t , r , m
-  proof″ cs@(_ ∷ˡ _) x₀ t r m = do
-    k , is , iss , cs , t , r , m ← extend cs x₀ t r m
-    p , t , r , m ← proof′ cs t r m
-    return $ ext k is iss ∷ˡ p , t , r , m
+proof′ []ˡ         t r m = return $ []ˡ , t , r , m
+proof′ cs@(_ ∷ˡ _) t r m = do
+  x₀ , cs ← natural cs
+  proof″ cs x₀ t r m
 
-  proof′ []ˡ         t r m = return $ []ˡ , t , r , m
-  proof′ cs@(_ ∷ˡ _) t r m = do
-    x₀ , cs ← natural cs
-    proof″ cs x₀ t r m
+proof : List Char → Translator → Maybe Proof
+proof cs t = do
+  _ , _ , m ← initLastᵐ t
+  p , _ , _ , _ ← proof′ cs t emptyˢ m
+  return p
 
-  proof : List Char → Translator → Maybe Proof
-  proof cs t = do
-    _ , _ , m ← initLastᵐ t
-    p , _ , _ , _ ← proof′ cs t emptyˢ m
-    return p
+parse : List Char → List Char → Maybe (Formula × Proof)
+parse fs ps = do
+  f , t ← formula fs V.insert nothing (measure fs)
+  p ← proof ps t
+  return $ f , p
 
-  parse : List Char → List Char → Maybe (Formula × Proof)
-  parse fs ps = do
-    f , t ← formula fs V.insert nothing (measure fs)
-    p ← proof ps t
-    return $ f , p
+eval-∷ : (ℕ → Bool) → List Clause → Bool
+eval-∷ v []ˡ       = true
+eval-∷ v (c ∷ˡ cs) = evalᶜ v c ∧ eval-∷ v cs
 
-  eval-∷ : (ℕ → Bool) → List Clause → Bool
-  eval-∷ v []ˡ       = true
-  eval-∷ v (c ∷ˡ cs) = evalᶜ v c ∧ eval-∷ v cs
+from-∷′ : Formula → List Clause → Maybe Formula
+from-∷′ f []ˡ       = just f
+from-∷′ f (k ∷ˡ ks) = V.insert f k >>= flip from-∷′ ks
 
-  from-∷′ : Formula → List Clause → Maybe Formula
-  from-∷′ f []ˡ       = just f
-  from-∷′ f (k ∷ˡ ks) = V.insert f k >>= flip from-∷′ ks
+from-∷′-✓ : ∀ v f₀ f∷ f → from-∷′ f₀ f∷ ≡ just f → eval v f ≡ eval-∷ v f∷ ∧ eval v f₀
+from-∷′-✓ v f₀ []ˡ       f refl = refl
+from-∷′-✓ v f₀ (k ∷ˡ ks) f p    with V.insert f₀ k in eq
+from-∷′-✓ v f₀ (k ∷ˡ ks) f p       | just f₀′            =
+  begin
+    eval v f                              ≡⟨ from-∷′-✓ v f₀′ ks f p ⟩
+    eval-∷ v ks ∧ eval v f₀′              ≡⟨ cong (eval-∷ v ks ∧_) (V.insert⇒∧ f₀ f₀′ k eq v) ⟩
+    eval-∷ v ks ∧ eval v f₀ ∧ evalᶜ v k   ≡˘⟨ ∧-assoc (eval-∷ v ks) (eval v f₀) (evalᶜ v k) ⟩
+    (eval-∷ v ks ∧ eval v f₀) ∧ evalᶜ v k ≡⟨ ∧-comm (eval-∷ v ks ∧ eval v f₀) (evalᶜ v k) ⟩
+    evalᶜ v k ∧ (eval-∷ v ks ∧ eval v f₀) ≡˘⟨ ∧-assoc (evalᶜ v k) (eval-∷ v ks) (eval v f₀) ⟩
+    eval-∷ v (k ∷ˡ ks) ∧ eval v f₀        ∎
+  where open ≡-Reasoning
 
-  from-∷′-✓ : ∀ v f₀ f∷ f → from-∷′ f₀ f∷ ≡ just f → eval v f ≡ eval-∷ v f∷ ∧ eval v f₀
-  from-∷′-✓ v f₀ []ˡ       f refl = refl
-  from-∷′-✓ v f₀ (k ∷ˡ ks) f p    with V.insert f₀ k in eq
-  from-∷′-✓ v f₀ (k ∷ˡ ks) f p       | just f₀′            =
-    begin
-      eval v f                              ≡⟨ from-∷′-✓ v f₀′ ks f p ⟩
-      eval-∷ v ks ∧ eval v f₀′              ≡⟨ cong (eval-∷ v ks ∧_) (V.insert⇒∧ f₀ f₀′ k eq v) ⟩
-      eval-∷ v ks ∧ eval v f₀ ∧ evalᶜ v k   ≡˘⟨ ∧-assoc (eval-∷ v ks) (eval v f₀) (evalᶜ v k) ⟩
-      (eval-∷ v ks ∧ eval v f₀) ∧ evalᶜ v k ≡⟨ ∧-comm (eval-∷ v ks ∧ eval v f₀) (evalᶜ v k) ⟩
-      evalᶜ v k ∧ (eval-∷ v ks ∧ eval v f₀) ≡˘⟨ ∧-assoc (evalᶜ v k) (eval-∷ v ks) (eval v f₀) ⟩
-      eval-∷ v (k ∷ˡ ks) ∧ eval v f₀        ∎
-    where open ≡-Reasoning
+from-∷ : List Clause → Maybe Formula
+from-∷ = from-∷′ nothing
 
-  from-∷ : List Clause → Maybe Formula
-  from-∷ = from-∷′ nothing
+from-∷-✓ : ∀ v f∷ f → from-∷ f∷ ≡ just f → eval v f ≡ eval-∷ v f∷
+from-∷-✓ v f∷ f p =
+  begin
+    eval v f           ≡⟨ from-∷′-✓ v nothing f∷ f p ⟩
+    eval-∷ v f∷ ∧ true ≡⟨ ∧-identityʳ (eval-∷ v f∷) ⟩
+    eval-∷ v f∷        ∎
+  where open ≡-Reasoning
 
-  from-∷-✓ : ∀ v f∷ f → from-∷ f∷ ≡ just f → eval v f ≡ eval-∷ v f∷
-  from-∷-✓ v f∷ f p =
-    begin
-      eval v f           ≡⟨ from-∷′-✓ v nothing f∷ f p ⟩
-      eval-∷ v f∷ ∧ true ≡⟨ ∧-identityʳ (eval-∷ v f∷) ⟩
-      eval-∷ v f∷        ∎
-    where open ≡-Reasoning
+from-∷ʳ′ : ∀ f ks k → from-∷′ f (ks ∷ʳ k) ≡ (from-∷′ f ks >>= flip V.insert k)
+from-∷ʳ′ f []ˡ         k
+  with V.insert f k
+... | nothing = refl
+... | just f′ = refl
+from-∷ʳ′ f (k′ ∷ˡ ks′) k
+  with V.insert f k′
+... | nothing = refl
+... | just f′ = from-∷ʳ′ f′ ks′ k
 
-  from-∷ʳ′ : ∀ f ks k → from-∷′ f (ks ∷ʳ k) ≡ (from-∷′ f ks >>= flip V.insert k)
-  from-∷ʳ′ f []ˡ         k
-    with V.insert f k
-  ... | nothing = refl
-  ... | just f′ = refl
-  from-∷ʳ′ f (k′ ∷ˡ ks′) k
-    with V.insert f k′
-  ... | nothing = refl
-  ... | just f′ = from-∷ʳ′ f′ ks′ k
+from-∷ʳ : ∀ ks k → from-∷ (ks ∷ʳ k) ≡ (from-∷ ks >>= flip V.insert k)
+from-∷ʳ = from-∷ʳ′ nothing
 
-  from-∷ʳ : ∀ ks k → from-∷ (ks ∷ʳ k) ≡ (from-∷ ks >>= flip V.insert k)
-  from-∷ʳ = from-∷ʳ′ nothing
+formula′-∷₁ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
+  Maybe (Formula × Translator)
+formula′-∷₁ cs ks n t m = do
+  ks′ , t ← formula′ cs (just ∘₂ _∷ʳ_) ks n t m
+  f ← from-∷ ks′
+  return (f , t)
 
-  formula′-∷₁ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
-    Maybe (Formula × Translator)
-  formula′-∷₁ cs ks n t m = do
-    ks′ , t ← formula′ cs (just ∘₂ _∷ʳ_) ks n t m
-    f ← from-∷ ks′
-    return (f , t)
+formula′-∷₂ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
+  Maybe (Formula × Translator)
+formula′-∷₂ cs ks n t m = do
+  f ← from-∷ ks
+  formula′ cs V.insert f n t m
 
-  formula′-∷₂ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
-    Maybe (Formula × Translator)
-  formula′-∷₂ cs ks n t m = do
-    f ← from-∷ ks
-    formula′ cs V.insert f n t m
+formula′-∷₃ : (cs : List Char) → Clause → List Clause → ℕ → Translator → Measure cs →
+  Maybe (Formula × Translator)
+formula′-∷₃ cs k ks n t m = do
+  f ← from-∷ ks
+  do
+    f′ ← V.insert f k
+    formula′ cs V.insert f′ n t m
 
-  formula′-∷₃ : (cs : List Char) → Clause → List Clause → ℕ → Translator → Measure cs →
-    Maybe (Formula × Translator)
-  formula′-∷₃ cs k ks n t m = do
-    f ← from-∷ ks
-    do
-      f′ ← V.insert f k
-      formula′ cs V.insert f′ n t m
+module _ where
+  formula′-∷-≡ : ∀ cs ks n t m → formula′-∷₁ cs ks n t m ≡ formula′-∷₂ cs ks n t m
 
-  module _ where
-    formula′-∷-≡ : ∀ cs ks n t m → formula′-∷₁ cs ks n t m ≡ formula′-∷₂ cs ks n t m
-
-    private
-      lemma : ∀ cs′ k ks n t m → formula′-∷₁ cs′ (ks ∷ʳ k) n t m ≡ formula′-∷₃ cs′ k ks n t m
-      lemma cs′ k ks n t m
-        rewrite formula′-∷-≡ cs′ (ks ∷ʳ k) n t m
-        rewrite from-∷ʳ ks k
-        = >>=-assoc (from-∷ ks) (flip V.insert k) (λ f → formula′ cs′ (V.insert′ bitsᶜ) f n t m)
-
-    -- XXX - fix duplication
-    formula′-∷-≡ []ˡ       ks n t m        = refl
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs) with token c
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace    with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | nothing                            = sym (>>=-nothing (from-∷ ks))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine  with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | nothing                            = sym (>>=-nothing (from-∷ ks))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′ with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | nothing                            = sym (>>=-nothing (from-∷ ks))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus    with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | nothing                            = sym (>>=-nothing (from-∷ ks))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isC                                                = formula′-∷-≡ (line cs) ks n t _
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther    with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | nothing                            = sym (>>=-nothing (from-∷ ks))
-    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-
-  formula-∷ : (cs : List Char) → Measure cs → Maybe (Formula × Translator)
-  formula-∷ cs m = do
-    ks , t ← formula cs (just ∘₂ _∷ʳ_) []ˡ m
-    f ← from-∷ ks
-    return (f , t)
+  private
+    lemma : ∀ cs′ k ks n t m → formula′-∷₁ cs′ (ks ∷ʳ k) n t m ≡ formula′-∷₃ cs′ k ks n t m
+    lemma cs′ k ks n t m
+      rewrite formula′-∷-≡ cs′ (ks ∷ʳ k) n t m
+      rewrite from-∷ʳ ks k
+      = >>=-assoc (from-∷ ks) (flip V.insert k) (λ f → formula′ cs′ (V.insert′ bitsᶜ) f n t m)
 
   -- XXX - fix duplication
-  formula-∷-✓₁ : ∀ cs m → formula-∷ cs m ≡ formula cs V.insert nothing m
-  formula-∷-✓₁ []ˡ       m        = refl
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) with token c
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace   with with-≡ (intro (c ∷ˡ cs))
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | nothing        = refl
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine with with-≡ (intro (c ∷ˡ cs))
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | nothing        = refl
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n with with-≡ (intro (c ∷ˡ cs))
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | nothing        = refl
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus   with with-≡ (intro (c ∷ˡ cs))
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | nothing        = refl
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isC                           = formula-∷-✓₁ (line cs) _
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther   with with-≡ (intro (c ∷ˡ cs))
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | nothing        = refl
-  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+  formula′-∷-≡ []ˡ       ks n t m        = refl
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs) with token c
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | nothing                            = sym (>>=-nothing (from-∷ ks))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine  with with-≡ (klause (c ∷ˡ cs) (acc rs))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | nothing                            = sym (>>=-nothing (from-∷ ks))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′ with with-≡ (klause (c ∷ˡ cs) (acc rs))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | nothing                            = sym (>>=-nothing (from-∷ ks))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | nothing                            = sym (>>=-nothing (from-∷ ks))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isC                                                = formula′-∷-≡ (line cs) ks n t _
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | nothing                            = sym (>>=-nothing (from-∷ ks))
+  formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
 
-  formula-∷-✓₂ : ∀ nᵛ nᶜ ks m → mapᵐ proj₁ (formula-∷ (printFormula nᵛ nᶜ ks) m) ≡ from-∷ ks
-  formula-∷-✓₂ nᵛ nᶜ ks m
-    rewrite proj₂ (printFormula-✓ nᵛ nᶜ ks m)
-    with from-∷ ks
-  ... | nothing = refl
-  ... | just f  = refl
+formula-∷ : (cs : List Char) → Measure cs → Maybe (Formula × Translator)
+formula-∷ cs m = do
+  ks , t ← formula cs (just ∘₂ _∷ʳ_) []ˡ m
+  f ← from-∷ ks
+  return (f , t)
 
-  module _ (nᵛ nᶜ : ℕ) (f∷ : List Clause) where
-    cs = printFormula nᵛ nᶜ f∷
-    f = mapᵐ proj₁ (formula cs V.insert nothing (measure cs))
+-- XXX - fix duplication
+formula-∷-✓₁ : ∀ cs m → formula-∷ cs m ≡ formula cs V.insert nothing m
+formula-∷-✓₁ []ˡ       m        = refl
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) with token c
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace   with with-≡ (intro (c ∷ˡ cs))
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | nothing        = refl
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine with with-≡ (intro (c ∷ˡ cs))
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | nothing        = refl
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n with with-≡ (intro (c ∷ˡ cs))
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | nothing        = refl
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus   with with-≡ (intro (c ∷ˡ cs))
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | nothing        = refl
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isC                           = formula-∷-✓₁ (line cs) _
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther   with with-≡ (intro (c ∷ˡ cs))
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | nothing        = refl
+formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
 
-    f∷⇒f : f ≡ from-∷ f∷
-    f∷⇒f =
-      begin
-        f                                                     ≡⟨⟩
-        mapᵐ proj₁ (formula cs V.insert nothing (measure cs)) ≡⟨ cong (mapᵐ proj₁) (sym (formula-∷-✓₁ cs (measure cs))) ⟩
-        mapᵐ proj₁ (formula-∷ cs (measure cs))                ≡⟨ formula-∷-✓₂ nᵛ nᶜ f∷ (measure cs) ⟩
-        from-∷ f∷                                             ∎
-      where
-      open ≡-Reasoning
+formula-∷-✓₂ : ∀ nᵛ nᶜ ks m → mapᵐ proj₁ (formula-∷ (printFormula nᵛ nᶜ ks) m) ≡ from-∷ ks
+formula-∷-✓₂ nᵛ nᶜ ks m
+  rewrite proj₂ (printFormula-✓ nᵛ nᶜ ks m)
+  with from-∷ ks
+... | nothing = refl
+... | just f  = refl
 
-    printParse-✓ : ∀ ps f′ p → parse cs ps ≡ just (f′ , p) → from-∷ f∷ ≡ just f′
-    printParse-✓ ps f′ p eq
-      with lem ← f∷⇒f
-      with formula cs V.insert nothing (measure cs)
-    ... | just (f″ , t)
-      with proof ps t
-    ... | just p′
-      with eq
-    ... | refl = sym lem
+module _ (nᵛ nᶜ : ℕ) (f∷ : List Clause) where
+  cs = printFormula nᵛ nᶜ f∷
+  f = mapᵐ proj₁ (formula cs V.insert nothing (measure cs))
+
+  f∷⇒f : f ≡ from-∷ f∷
+  f∷⇒f =
+    begin
+      f                                                     ≡⟨⟩
+      mapᵐ proj₁ (formula cs V.insert nothing (measure cs)) ≡⟨ cong (mapᵐ proj₁) (sym (formula-∷-✓₁ cs (measure cs))) ⟩
+      mapᵐ proj₁ (formula-∷ cs (measure cs))                ≡⟨ formula-∷-✓₂ nᵛ nᶜ f∷ (measure cs) ⟩
+      from-∷ f∷                                             ∎
+    where
+    open ≡-Reasoning
+
+  printParse-✓ : ∀ ps f′ p → parse cs ps ≡ just (f′ , p) → from-∷ f∷ ≡ just f′
+  printParse-✓ ps f′ p eq
+    with lem ← f∷⇒f
+    with formula cs V.insert nothing (measure cs)
+  ... | just (f″ , t)
+    with proof ps t
+  ... | just p′
+    with eq
+  ... | refl = sym lem
