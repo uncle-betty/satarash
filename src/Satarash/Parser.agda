@@ -1,14 +1,13 @@
 module Satarash.Parser where
 
 open import Agda.Builtin.Nat using () renaming (mod-helper to modʰ ; div-helper to divʰ)
-open import Category.Monad using (RawMonad)
 open import Data.Bool using (Bool ; true ; false)
 open import Data.Char using (Char ; fromℕ ; toℕ) renaming (_≟_ to _≟ᶜ_)
 open import Data.List
   using (List ; length ; _∷ʳ_) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ ; _++_ to _++ˡ_)
 open import Data.List.Properties using (++-assoc ; ++-identityʳ)
 open import Data.Maybe using (Maybe ; nothing ; just) renaming (map to mapᵐ)
-open import Data.Maybe.Categorical using (monad)
+open import Data.Maybe.Effectful using (monad)
 open import Data.Nat using (
     ℕ ; zero ; suc ; pred ; _+_ ; _∸_ ; _*_ ; _^_ ; _≤_ ; z≤n ; s≤s ; _≤?_ ; _<_ ; _<?_ ;
     NonZero ; >-nonZero⁻¹
@@ -28,6 +27,7 @@ open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂ ; ma
 open import Data.Sum using (_⊎_ ; inj₁ ; inj₂)
 open import Data.String using (String ; toList ; fromList)
 open import Data.Vec using (Vec ; reverse) renaming ([] to []ᵛ ; _∷_ to _∷ᵛ_)
+open import Effect.Monad using (RawMonad)
 open import Function using (_$_ ; case_of_ ; _∘_ ; _∘₂_ ; flip ; const)
 open import Function.Reasoning using (_|>_ ; ∋-syntax)
 open import Induction.WellFounded using (Acc ; acc)
