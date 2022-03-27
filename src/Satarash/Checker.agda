@@ -3,11 +3,12 @@
 module Satarash.Checker where
 
 open import Data.Bool using (Bool ; true ; false)
+open import Data.Char using (Char)
 open import Data.List using (List ; [] ; _∷_)
 open import Data.Maybe using (Maybe ; nothing ; just)
 open import Data.Nat using (ℕ ; zero ; suc)
 open import Data.Product using (_×_ ; _,_)
-open import Data.String using (String)
+open import Data.String using (String ; toList)
 open import Data.Unit using (⊤)
 open import Function using (_$_ ; _∘_ ; case_of_)
 open import IO using (Main ; run ; readFiniteFile ; putStrLn)
@@ -19,7 +20,7 @@ open import Satarash.Verifier using (Formula ; Proof ; checkLRAT)
 bitsᶜ : ℕ
 bitsᶜ = 24
 
-runCheck : String → String → Maybe Bool
+runCheck : List Char → List Char → Maybe Bool
 runCheck fStr pStr = do
   f , p ← parse bitsᶜ fStr pStr
   just $ case checkLRAT bitsᶜ f p of λ where
@@ -34,7 +35,7 @@ main = run $ do
     where _ → putStrLn "usage: Checker foobar.cnf foobar.lrat"
   fStr ← readFiniteFile fPath
   pStr ← readFiniteFile pPath
-  case runCheck fStr pStr of λ where
+  case runCheck (toList fStr) (toList pStr) of λ where
     nothing      → putStrLn "parse error"
     (just true)  → putStrLn "ok"
     (just false) → putStrLn "invalid proof"

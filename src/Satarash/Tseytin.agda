@@ -801,3 +801,13 @@ module _ (nᵛ nᶜ : ℕ) (f₀ : Formula₀) where
       P.fromCNF bitsᶜ f₄                                               ≡⟨⟩
       transform₅ f₀                                                    ∎
     where open ≡-Reasoning
+
+  printParse-✓ : ∀ ps rd₅′ p → P.parse bitsᶜ wr₄ ps ≡ just (rd₅′ , p) → transform₅ f₀ ≡ just rd₅′
+  printParse-✓ ps rd₅′ p eq₁
+    rewrite sym write₄Read₅
+    with rd₅
+  ... | just (rd₅″ , t)
+    with P.proof bitsᶜ ps t
+  ... | just _
+    with eq₁
+  ... | refl = refl

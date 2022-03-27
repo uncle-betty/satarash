@@ -989,11 +989,10 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
     p , _ , _ , _ ← proof′ cs t emptyˢ m
     return p
 
-  parse : String → String → Maybe (Formula × Proof)
-  parse f p = do
-    f ← return $ toList f
-    f , t ← formula f V.insert nothing (measure f)
-    p ← proof (toList p) t
+  parse : List Char → List Char → Maybe (Formula × Proof)
+  parse fs ps = do
+    f , t ← formula fs V.insert nothing (measure fs)
+    p ← proof ps t
     return $ f , p
 
   fromCNF′ : Formula → List Clause → Maybe Formula
