@@ -1,7 +1,8 @@
 module Satarash.Parser where
 
 open import Agda.Builtin.Nat using () renaming (mod-helper to modʰ ; div-helper to divʰ)
-open import Data.Bool using (Bool ; true ; false)
+open import Data.Bool using (Bool ; true ; false ; _∧_)
+open import Data.Bool.Properties using (∧-identityʳ ; ∧-comm ; ∧-assoc)
 open import Data.Char using (Char ; fromℕ ; toℕ) renaming (_≟_ to _≟ᶜ_)
 open import Data.List
   using (List ; length ; _∷ʳ_) renaming ([] to []ˡ ; _∷_ to _∷ˡ_ ; map to mapˡ ; _++_ to _++ˡ_)
@@ -668,7 +669,8 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
   open import Satarash.Verifier bitsᶜ as V using (
       Proof ; Step ; del ; ext ;
       Clause ; Literal ; pos ; neg ;
-      Formula ; Trie ; node ; leaf ; Index
+      Formula ; Trie ; node ; leaf ; Index ;
+      evalᶜ ; eval
     )
 
   Translator : Set
@@ -995,107 +997,156 @@ module _ (bitsᶜ : Data.Nat.ℕ) where
     p ← proof ps t
     return $ f , p
 
-  fromCNF′ : Formula → List Clause → Maybe Formula
-  fromCNF′ f []ˡ       = just f
-  fromCNF′ f (k ∷ˡ ks) = V.insert f k >>= flip fromCNF′ ks
+  eval-∷ : (ℕ → Bool) → List Clause → Bool
+  eval-∷ v []ˡ       = true
+  eval-∷ v (c ∷ˡ cs) = evalᶜ v c ∧ eval-∷ v cs
 
-  fromCNF : List Clause → Maybe Formula
-  fromCNF = fromCNF′ nothing
+  from-∷′ : Formula → List Clause → Maybe Formula
+  from-∷′ f []ˡ       = just f
+  from-∷′ f (k ∷ˡ ks) = V.insert f k >>= flip from-∷′ ks
 
-  fromCNF⁺′ : ∀ f ks k → fromCNF′ f (ks ∷ʳ k) ≡ (fromCNF′ f ks >>= flip V.insert k)
-  fromCNF⁺′ f []ˡ         k
+  from-∷′-✓ : ∀ v f₀ f∷ f → from-∷′ f₀ f∷ ≡ just f → eval v f ≡ eval-∷ v f∷ ∧ eval v f₀
+  from-∷′-✓ v f₀ []ˡ       f refl = refl
+  from-∷′-✓ v f₀ (k ∷ˡ ks) f p    with V.insert f₀ k in eq
+  from-∷′-✓ v f₀ (k ∷ˡ ks) f p       | just f₀′            =
+    begin
+      eval v f                              ≡⟨ from-∷′-✓ v f₀′ ks f p ⟩
+      eval-∷ v ks ∧ eval v f₀′              ≡⟨ cong (eval-∷ v ks ∧_) (V.insert⇒∧ f₀ f₀′ k eq v) ⟩
+      eval-∷ v ks ∧ eval v f₀ ∧ evalᶜ v k   ≡˘⟨ ∧-assoc (eval-∷ v ks) (eval v f₀) (evalᶜ v k) ⟩
+      (eval-∷ v ks ∧ eval v f₀) ∧ evalᶜ v k ≡⟨ ∧-comm (eval-∷ v ks ∧ eval v f₀) (evalᶜ v k) ⟩
+      evalᶜ v k ∧ (eval-∷ v ks ∧ eval v f₀) ≡˘⟨ ∧-assoc (evalᶜ v k) (eval-∷ v ks) (eval v f₀) ⟩
+      eval-∷ v (k ∷ˡ ks) ∧ eval v f₀        ∎
+    where open ≡-Reasoning
+
+  from-∷ : List Clause → Maybe Formula
+  from-∷ = from-∷′ nothing
+
+  from-∷-✓ : ∀ v f∷ f → from-∷ f∷ ≡ just f → eval v f ≡ eval-∷ v f∷
+  from-∷-✓ v f∷ f p =
+    begin
+      eval v f           ≡⟨ from-∷′-✓ v nothing f∷ f p ⟩
+      eval-∷ v f∷ ∧ true ≡⟨ ∧-identityʳ (eval-∷ v f∷) ⟩
+      eval-∷ v f∷        ∎
+    where open ≡-Reasoning
+
+  from-∷ʳ′ : ∀ f ks k → from-∷′ f (ks ∷ʳ k) ≡ (from-∷′ f ks >>= flip V.insert k)
+  from-∷ʳ′ f []ˡ         k
     with V.insert f k
   ... | nothing = refl
   ... | just f′ = refl
-  fromCNF⁺′ f (k′ ∷ˡ ks′) k
+  from-∷ʳ′ f (k′ ∷ˡ ks′) k
     with V.insert f k′
   ... | nothing = refl
-  ... | just f′ = fromCNF⁺′ f′ ks′ k
+  ... | just f′ = from-∷ʳ′ f′ ks′ k
 
-  fromCNF⁺ : ∀ ks k → fromCNF (ks ∷ʳ k) ≡ (fromCNF ks >>= flip V.insert k)
-  fromCNF⁺ = fromCNF⁺′ nothing
+  from-∷ʳ : ∀ ks k → from-∷ (ks ∷ʳ k) ≡ (from-∷ ks >>= flip V.insert k)
+  from-∷ʳ = from-∷ʳ′ nothing
 
-  formula′CNF₁ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
+  formula′-∷₁ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
     Maybe (Formula × Translator)
-  formula′CNF₁ cs ks n t m = do
+  formula′-∷₁ cs ks n t m = do
     ks′ , t ← formula′ cs (just ∘₂ _∷ʳ_) ks n t m
-    f ← fromCNF ks′
+    f ← from-∷ ks′
     return (f , t)
 
-  formula′CNF₂ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
+  formula′-∷₂ : (cs : List Char) → List Clause → ℕ → Translator → Measure cs →
     Maybe (Formula × Translator)
-  formula′CNF₂ cs ks n t m = do
-    f ← fromCNF ks
+  formula′-∷₂ cs ks n t m = do
+    f ← from-∷ ks
     formula′ cs V.insert f n t m
 
-  formula′CNF₃ : (cs : List Char) → Clause → List Clause → ℕ → Translator → Measure cs →
+  formula′-∷₃ : (cs : List Char) → Clause → List Clause → ℕ → Translator → Measure cs →
     Maybe (Formula × Translator)
-  formula′CNF₃ cs k ks n t m = do
-    f ← fromCNF ks
+  formula′-∷₃ cs k ks n t m = do
+    f ← from-∷ ks
     do
       f′ ← V.insert f k
       formula′ cs V.insert f′ n t m
 
   module _ where
-    formula′CNF-≡ : ∀ cs ks n t m → formula′CNF₁ cs ks n t m ≡ formula′CNF₂ cs ks n t m
+    formula′-∷-≡ : ∀ cs ks n t m → formula′-∷₁ cs ks n t m ≡ formula′-∷₂ cs ks n t m
 
     private
-      lemma : ∀ cs′ k ks n t m → formula′CNF₁ cs′ (ks ∷ʳ k) n t m ≡ formula′CNF₃ cs′ k ks n t m
+      lemma : ∀ cs′ k ks n t m → formula′-∷₁ cs′ (ks ∷ʳ k) n t m ≡ formula′-∷₃ cs′ k ks n t m
       lemma cs′ k ks n t m
-        rewrite formula′CNF-≡ cs′ (ks ∷ʳ k) n t m
-        rewrite fromCNF⁺ ks k
-        = >>=-assoc (fromCNF ks) (flip V.insert k) (λ f → formula′ cs′ (V.insert′ bitsᶜ) f n t m)
+        rewrite formula′-∷-≡ cs′ (ks ∷ʳ k) n t m
+        rewrite from-∷ʳ ks k
+        = >>=-assoc (from-∷ ks) (flip V.insert k) (λ f → formula′ cs′ (V.insert′ bitsᶜ) f n t m)
 
     -- XXX - fix duplication
-    formula′CNF-≡ []ˡ       ks n t m        = refl
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs) with token c
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace    with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | nothing                            = sym (>>=-nothing (fromCNF ks))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine  with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | nothing                            = sym (>>=-nothing (fromCNF ks))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′ with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | nothing                            = sym (>>=-nothing (fromCNF ks))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus    with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | nothing                            = sym (>>=-nothing (fromCNF ks))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isC                                                = formula′CNF-≡ (line cs) ks n t _
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther    with with-≡ (klause (c ∷ˡ cs) (acc rs))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | nothing                            = sym (>>=-nothing (fromCNF ks))
-    formula′CNF-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′-∷-≡ []ˡ       ks n t m        = refl
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs) with token c
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | nothing                            = sym (>>=-nothing (from-∷ ks))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isSpace       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine  with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | nothing                            = sym (>>=-nothing (from-∷ ks))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isNewLine     | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′ with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | nothing                            = sym (>>=-nothing (from-∷ ks))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isDigit n′    | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | nothing                            = sym (>>=-nothing (from-∷ ks))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isMinus       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isC                                                = formula′-∷-≡ (line cs) ks n t _
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther    with with-≡ (klause (c ∷ˡ cs) (acc rs))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | nothing                            = sym (>>=-nothing (from-∷ ks))
+    formula′-∷-≡ (c ∷ˡ cs) ks n t (acc rs)    | isOther       | just ((k , cs′) , p)               = lemma cs′ k ks (suc n) (insertᵐ (suc n) n t) _
 
-  formulaCNF : (cs : List Char) → Measure cs → Maybe (Formula × Translator)
-  formulaCNF cs m = do
+  formula-∷ : (cs : List Char) → Measure cs → Maybe (Formula × Translator)
+  formula-∷ cs m = do
     ks , t ← formula cs (just ∘₂ _∷ʳ_) []ˡ m
-    f ← fromCNF ks
+    f ← from-∷ ks
     return (f , t)
 
   -- XXX - fix duplication
-  formulaCNF-✓₁ : ∀ cs m → formulaCNF cs m ≡ formula cs V.insert nothing m
-  formulaCNF-✓₁ []ˡ       m        = refl
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) with token c
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isSpace   with with-≡ (intro (c ∷ˡ cs))
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | nothing        = refl
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine with with-≡ (intro (c ∷ˡ cs))
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | nothing        = refl
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n with with-≡ (intro (c ∷ˡ cs))
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | nothing        = refl
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isMinus   with with-≡ (intro (c ∷ˡ cs))
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | nothing        = refl
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isC                           = formulaCNF-✓₁ (line cs) _
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isOther   with with-≡ (intro (c ∷ˡ cs))
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | nothing        = refl
-  formulaCNF-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | just (cs′ , p) = formula′CNF-≡ cs′ []ˡ zero emptyᵐ _
+  formula-∷-✓₁ : ∀ cs m → formula-∷ cs m ≡ formula cs V.insert nothing m
+  formula-∷-✓₁ []ˡ       m        = refl
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) with token c
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace   with with-≡ (intro (c ∷ˡ cs))
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | nothing        = refl
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isSpace      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine with with-≡ (intro (c ∷ˡ cs))
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | nothing        = refl
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isNewLine    | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n with with-≡ (intro (c ∷ˡ cs))
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | nothing        = refl
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isDigit n    | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus   with with-≡ (intro (c ∷ˡ cs))
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | nothing        = refl
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isMinus      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isC                           = formula-∷-✓₁ (line cs) _
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther   with with-≡ (intro (c ∷ˡ cs))
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | nothing        = refl
+  formula-∷-✓₁ (c ∷ˡ cs) (acc rs) | isOther      | just (cs′ , p) = formula′-∷-≡ cs′ []ˡ zero emptyᵐ _
 
-  formulaCNF-✓₂ : ∀ nᵛ nᶜ ks m → mapᵐ proj₁ (formulaCNF (printFormula nᵛ nᶜ ks) m) ≡ fromCNF ks
-  formulaCNF-✓₂ nᵛ nᶜ ks m
+  formula-∷-✓₂ : ∀ nᵛ nᶜ ks m → mapᵐ proj₁ (formula-∷ (printFormula nᵛ nᶜ ks) m) ≡ from-∷ ks
+  formula-∷-✓₂ nᵛ nᶜ ks m
     rewrite proj₂ (printFormula-✓ nᵛ nᶜ ks m)
-    with fromCNF ks
+    with from-∷ ks
   ... | nothing = refl
   ... | just f  = refl
+
+  module _ (nᵛ nᶜ : ℕ) (f∷ : List Clause) where
+    cs = printFormula nᵛ nᶜ f∷
+    f = mapᵐ proj₁ (formula cs V.insert nothing (measure cs))
+
+    f∷⇒f : f ≡ from-∷ f∷
+    f∷⇒f =
+      begin
+        f                                                     ≡⟨⟩
+        mapᵐ proj₁ (formula cs V.insert nothing (measure cs)) ≡⟨ cong (mapᵐ proj₁) (sym (formula-∷-✓₁ cs (measure cs))) ⟩
+        mapᵐ proj₁ (formula-∷ cs (measure cs))                ≡⟨ formula-∷-✓₂ nᵛ nᶜ f∷ (measure cs) ⟩
+        from-∷ f∷                                             ∎
+      where
+      open ≡-Reasoning
+
+    printParse-✓ : ∀ ps f′ p → parse cs ps ≡ just (f′ , p) → from-∷ f∷ ≡ just f′
+    printParse-✓ ps f′ p eq
+      with lem ← f∷⇒f
+      with formula cs V.insert nothing (measure cs)
+    ... | just (f″ , t)
+      with proof ps t
+    ... | just p′
+      with eq
+    ... | refl = sym lem

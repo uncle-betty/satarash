@@ -107,8 +107,7 @@ Formula₄ : Set
 Formula₄ = List V.Clause
 
 eval₄ : (ℕ → Bool) → Formula₄ → Bool
-eval₄ v []       = true
-eval₄ v (c ∷ cs) = V.evalᶜ v c ∧ eval₄ v cs
+eval₄ = P.eval-∷ bitsᶜ
 
 -- verifier's representation
 Formula₅ : Set
@@ -693,16 +692,16 @@ transform₃-✓ v f
   rewrite sym (transform₂-✓ v f)
   = refl
 
-toCNF-∨ : {l : ℕ} → (f : Formula₃ (suc l)) → List V.Literal
-toCNF-∨ (var₃ x)        = [ V.pos x ]
-toCNF-∨ (not₃ (var₃ x)) = [ V.neg x ]
-toCNF-∨ (or₃ x y)       = toCNF-∨ x ++ toCNF-∨ y
+to-∷-∨ : {l : ℕ} → (f : Formula₃ (suc l)) → List V.Literal
+to-∷-∨ (var₃ x)        = [ V.pos x ]
+to-∷-∨ (not₃ (var₃ x)) = [ V.neg x ]
+to-∷-∨ (or₃ x y)       = to-∷-∨ x ++ to-∷-∨ y
 
-toCNF-∧ : (f : Formula₃ 0) → List V.Clause
-toCNF-∧ (and₃ {zero}  {zero} x y)  = toCNF-∧ x ++ toCNF-∧ y
-toCNF-∧ (and₃ {zero}  {suc n} x y) = toCNF-∧ x ++ [ toCNF-∨ y ]
-toCNF-∧ (and₃ {suc m} {zero} x y)  = [ toCNF-∨ x ] ++ toCNF-∧ y
-toCNF-∧ (and₃ {suc m} {suc n} x y) = [ toCNF-∨ x ] ++ [ toCNF-∨ y ]
+to-∷-∧ : (f : Formula₃ 0) → List V.Clause
+to-∷-∧ (and₃ {zero}  {zero} x y)  = to-∷-∧ x ++ to-∷-∧ y
+to-∷-∧ (and₃ {zero}  {suc n} x y) = to-∷-∧ x ++ [ to-∷-∨ y ]
+to-∷-∧ (and₃ {suc m} {zero} x y)  = [ to-∷-∨ x ] ++ to-∷-∧ y
+to-∷-∧ (and₃ {suc m} {suc n} x y) = [ to-∷-∨ x ] ++ [ to-∷-∨ y ]
 
 ++⇒∧ : ∀ v x y → eval₄ v (x ++ y) ≡ eval₄ v x ∧ eval₄ v y
 ++⇒∧ v []       y = refl
@@ -710,104 +709,58 @@ toCNF-∧ (and₃ {suc m} {suc n} x y) = [ toCNF-∨ x ] ++ [ toCNF-∨ y ]
   rewrite ++⇒∧ v xs y
   = sym (∧-assoc (V.evalᶜ v x) (eval₄ v xs) (eval₄ v y))
 
-toCNF-∨-✓ : ∀ {l} v f → eval₄ v [ toCNF-∨ {l} f ] ≡ eval₃ v f
-toCNF-∨-✓ v (var₃ x)        = trans (∧-identityʳ (v x ∨ false)) (∨-identityʳ (v x))
-toCNF-∨-✓ v (not₃ (var₃ x)) = trans (∧-identityʳ ((not (v x)) ∨ false)) (∨-identityʳ (not (v x)))
-toCNF-∨-✓ v (or₃ x y)
-  rewrite V.++⇒∨ v (toCNF-∨ x) (toCNF-∨ y)
-  rewrite sym (toCNF-∨-✓ v x)
-  rewrite sym (toCNF-∨-✓ v y)
-  = ∧-distribʳ-∨ true (V.evalᶜ v (toCNF-∨ x)) (V.evalᶜ v (toCNF-∨ y))
+to-∷-∨-✓ : ∀ {l} v f → eval₄ v [ to-∷-∨ {l} f ] ≡ eval₃ v f
+to-∷-∨-✓ v (var₃ x)        = trans (∧-identityʳ (v x ∨ false)) (∨-identityʳ (v x))
+to-∷-∨-✓ v (not₃ (var₃ x)) = trans (∧-identityʳ ((not (v x)) ∨ false)) (∨-identityʳ (not (v x)))
+to-∷-∨-✓ v (or₃ x y)
+  rewrite V.++⇒∨ v (to-∷-∨ x) (to-∷-∨ y)
+  rewrite sym (to-∷-∨-✓ v x)
+  rewrite sym (to-∷-∨-✓ v y)
+  = ∧-distribʳ-∨ true (V.evalᶜ v (to-∷-∨ x)) (V.evalᶜ v (to-∷-∨ y))
 
-toCNF-∧-✓ : ∀ v f → eval₄ v (toCNF-∧ f) ≡ eval₃ v f
-toCNF-∧-✓ v (and₃ {zero}  {zero}  x y)
-  rewrite ++⇒∧ v (toCNF-∧ x) (toCNF-∧ y)
-  rewrite toCNF-∧-✓ v x
-  rewrite toCNF-∧-✓ v y
+to-∷-∧-✓ : ∀ v f → eval₄ v (to-∷-∧ f) ≡ eval₃ v f
+to-∷-∧-✓ v (and₃ {zero}  {zero}  x y)
+  rewrite ++⇒∧ v (to-∷-∧ x) (to-∷-∧ y)
+  rewrite to-∷-∧-✓ v x
+  rewrite to-∷-∧-✓ v y
   = refl
-toCNF-∧-✓ v (and₃ {zero}  {suc n} x y)
-  rewrite ++⇒∧ v (toCNF-∧ x) [ toCNF-∨ y ]
-  rewrite toCNF-∧-✓ v x
-  rewrite toCNF-∨-✓ v y
+to-∷-∧-✓ v (and₃ {zero}  {suc n} x y)
+  rewrite ++⇒∧ v (to-∷-∧ x) [ to-∷-∨ y ]
+  rewrite to-∷-∧-✓ v x
+  rewrite to-∷-∨-✓ v y
   = refl
-toCNF-∧-✓ v (and₃ {suc m} {zero}  x y)
-  rewrite ++⇒∧ v [ toCNF-∨ x ] (toCNF-∧ y)
-  rewrite toCNF-∨-✓ v x
-  rewrite toCNF-∧-✓ v y
+to-∷-∧-✓ v (and₃ {suc m} {zero}  x y)
+  rewrite ++⇒∧ v [ to-∷-∨ x ] (to-∷-∧ y)
+  rewrite to-∷-∨-✓ v x
+  rewrite to-∷-∧-✓ v y
   = refl
-toCNF-∧-✓ v (and₃ {suc m} {suc n} x y)
-  rewrite sym (toCNF-∨-✓ v x)
-  rewrite sym (toCNF-∨-✓ v y)
-  rewrite ∧-identityʳ (V.evalᶜ v (toCNF-∨ x))
+to-∷-∧-✓ v (and₃ {suc m} {suc n} x y)
+  rewrite sym (to-∷-∨-✓ v x)
+  rewrite sym (to-∷-∨-✓ v y)
+  rewrite ∧-identityʳ (V.evalᶜ v (to-∷-∨ x))
   = refl
 
 transform₄ : Formula₀ → Formula₄
-transform₄ f = toCNF-∧ (transform₃ f)
+transform₄ f = to-∷-∧ (transform₃ f)
 
 transform₄-✓ : ∀ v f → eval₄ (makeTrue₃ v f) (transform₄ f) ≡ eval₀ v f
 transform₄-✓ v f
- rewrite toCNF-∧-✓ (makeTrue₃ v f) (transform₃ f)
+ rewrite to-∷-∧-✓ (makeTrue₃ v f) (transform₃ f)
  rewrite sym (transform₃-✓ v f)
  = refl
 
 unsat₄-✓ : ∀ f → (∀ v → eval₄ v (transform₄ f) ≡ false) → (∀ v → eval₀ v f ≡ false)
 unsat₄-✓ f p v = sym (trans (sym (p (makeTrue₃ v f))) (transform₄-✓ v f))
 
-fromCNF′-✓ : ∀ v b₅ f₄ f₅ → P.fromCNF′ bitsᶜ b₅ f₄ ≡ just f₅ → eval₅ v f₅ ≡ eval₄ v f₄ ∧ eval₅ v b₅
-fromCNF′-✓ v b₅ []       f₅ refl = refl
-fromCNF′-✓ v b₅ (k ∷ ks) f₅ p    with V.insert b₅ k in eq
-fromCNF′-✓ v b₅ (k ∷ ks) f₅ p       | just b₅′            =
-  begin
-    eval₅ v f₅                              ≡⟨ fromCNF′-✓ v b₅′ ks f₅ p ⟩
-    eval₄ v ks ∧ eval₅ v b₅′                ≡⟨ cong (eval₄ v ks ∧_) (V.insert⇒∧ b₅ b₅′ k eq v) ⟩
-    eval₄ v ks ∧ eval₅ v b₅ ∧ V.evalᶜ v k   ≡˘⟨ ∧-assoc (eval₄ v ks) (eval₅ v b₅) (V.evalᶜ v k) ⟩
-    (eval₄ v ks ∧ eval₅ v b₅) ∧ V.evalᶜ v k ≡⟨ ∧-comm (eval₄ v ks ∧ eval₅ v b₅) (V.evalᶜ v k) ⟩
-    V.evalᶜ v k ∧ (eval₄ v ks ∧ eval₅ v b₅) ≡˘⟨ ∧-assoc (V.evalᶜ v k) (eval₄ v ks) (eval₅ v b₅) ⟩
-    eval₄ v (k ∷ ks) ∧ eval₅ v b₅           ∎
-  where open ≡-Reasoning
-
-fromCNF-✓ : ∀ v f₄ f₅ → P.fromCNF bitsᶜ f₄ ≡ just f₅ → eval₅ v f₅ ≡ eval₄ v f₄
-fromCNF-✓ v f₄ f₅ p =
-  begin
-    eval₅ v f₅        ≡⟨ fromCNF′-✓ v nothing f₄ f₅ p ⟩
-    eval₄ v f₄ ∧ true ≡⟨ ∧-identityʳ (eval₄ v f₄) ⟩
-    eval₄ v f₄        ∎
-  where open ≡-Reasoning
-
 transform₅ : Formula₀ → Maybe Formula₅
-transform₅ f = P.fromCNF bitsᶜ (transform₄ f)
+transform₅ f = P.from-∷ bitsᶜ (transform₄ f)
 
 transform₅-✓ : ∀ v f₀ f₅ → transform₅ f₀ ≡ just f₅ → eval₅ (makeTrue₃ v f₀) f₅ ≡ eval₀ v f₀
 transform₅-✓ v f₀ f₅ p
-  rewrite fromCNF-✓ (makeTrue₃ v f₀) (transform₄ f₀) f₅ p
+  rewrite P.from-∷-✓ bitsᶜ (makeTrue₃ v f₀) (transform₄ f₀) f₅ p
   rewrite sym (transform₄-✓ v f₀)
   = refl
 
 unsat₅-✓ : ∀ f₀ f₅ → transform₅ f₀ ≡ just f₅ → (∀ v → eval₅ v f₅ ≡ false) →
   (∀ v → eval₀ v f₀ ≡ false)
 unsat₅-✓ f₀ f₅ p₁ p₂ v = sym (trans (sym (p₂ (makeTrue₃ v f₀))) (transform₅-✓ v f₀ f₅ p₁))
-
-module _ (nᵛ nᶜ : ℕ) (f₀ : Formula₀) where
-  f₄ = transform₄ f₀
-  wr₄ = P.printFormula bitsᶜ nᵛ nᶜ f₄
-  rd₅ = P.formula bitsᶜ wr₄ V.insert nothing (P.measure wr₄)
-
-  write₄Read₅ : map proj₁ rd₅ ≡ transform₅ f₀
-  write₄Read₅ =
-    begin
-      map proj₁ rd₅                                                    ≡⟨⟩
-      map proj₁ (P.formula bitsᶜ wr₄ V.insert nothing (P.measure wr₄)) ≡⟨ cong (map proj₁) (sym (P.formulaCNF-✓₁ bitsᶜ wr₄ (P.measure wr₄))) ⟩
-      map proj₁ (P.formulaCNF bitsᶜ wr₄ (P.measure wr₄))               ≡⟨ P.formulaCNF-✓₂ bitsᶜ nᵛ nᶜ f₄ (P.measure wr₄) ⟩
-      P.fromCNF bitsᶜ f₄                                               ≡⟨⟩
-      transform₅ f₀                                                    ∎
-    where open ≡-Reasoning
-
-  printParse-✓ : ∀ ps rd₅′ p → P.parse bitsᶜ wr₄ ps ≡ just (rd₅′ , p) → transform₅ f₀ ≡ just rd₅′
-  printParse-✓ ps rd₅′ p eq₁
-    rewrite sym write₄Read₅
-    with rd₅
-  ... | just (rd₅″ , t)
-    with P.proof bitsᶜ ps t
-  ... | just _
-    with eq₁
-  ... | refl = refl
