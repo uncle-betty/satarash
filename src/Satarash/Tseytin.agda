@@ -1,10 +1,11 @@
 -- XXX - fix duplication in rewrite-based proofs (e.g., makeTrue-✓₁ or roundtrip)
+-- XXX - fix duplication in each and between all foldConst₂-*-✓ proofs
 
 module Satarash.Tseytin where
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_ ; if_then_else_ ; _≟_)
 open import Data.Bool.Properties
-  using (∧-identityʳ ; ∧-idem ; ∨-identityʳ ; ∧-assoc ; ∧-distribʳ-∨ ; ∧-comm)
+  using (∧-identityʳ ; ∧-idem ; ∨-identityʳ ; ∧-assoc ; ∧-distribʳ-∨ ; ∧-comm ; ∨-comm)
 open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
@@ -18,7 +19,7 @@ open import Data.Nat.Properties using (
   )
 open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂)
 open import Data.Unit using (⊤ ; tt)
-open import Function using (_∘_ ; case_of_ ; flip)
+open import Function using (_∘_ ; case_of_ ; flip ; _$_)
 open import Relation.Binary.PropositionalEquality using (
     _≡_ ; refl ; sym ; cong ; cong₂ ; trans ; _≢_ ; ≢-sym ;
     ≡-≟-identity ; ≢-≟-identity ; module ≡-Reasoning
@@ -158,6 +159,269 @@ Formula₇ = V.Formula
 
 eval₇ : (ℕ → Bool) → Formula₇ → Bool
 eval₇ = V.eval
+
+transform₁ : Formula₀ → Formula₁
+transform₁ (con₀ x)     = con₁ x
+transform₁ (var₀ x)     = var₁ x
+transform₁ (and₀ x y)   = and₁ (transform₁ x) (transform₁ y)
+transform₁ (or₀ x y)    = or₁ (transform₁ x) (transform₁ y)
+transform₁ (not₀ x)     = not₁ (transform₁ x)
+transform₁ (xor₀ x y)   = xor₁ (transform₁ x) (transform₁ y)
+transform₁ (iff₀ x y)   = not₁ (xor₁ (transform₁ x) (transform₁ y))
+transform₁ (imp₀ x y)   = or₁ (not₁ (transform₁ x)) (transform₁ y)
+transform₁ (ite₀ x y z) =
+  let x₁ = transform₁ x in
+  or₁ (and₁ x₁ (transform₁ y)) (and₁ (not₁ x₁) (transform₁ z))
+
+transform₁-✓ : ∀ v f → eval₁ v (transform₁ f) ≡ eval₀ v f
+transform₁-✓ v (con₀ x)     = refl
+transform₁-✓ v (var₀ x)     = refl
+transform₁-✓ v (and₀ x y)   = cong₂ _∧_ (transform₁-✓ v x) (transform₁-✓ v y)
+transform₁-✓ v (or₀ x y)    = cong₂ _∨_ (transform₁-✓ v x) (transform₁-✓ v y)
+transform₁-✓ v (not₀ x)     = cong not (transform₁-✓ v x)
+transform₁-✓ v (xor₀ x y)   = cong₂ _xor_ (transform₁-✓ v x) (transform₁-✓ v y)
+transform₁-✓ v (iff₀ x y)
+  rewrite transform₁-✓ v x
+  rewrite transform₁-✓ v y
+  with eval₀ v x | eval₀ v y
+...  | false     | false     = refl
+...  | false     | true      = refl
+...  | true      | false     = refl
+...  | true      | true      = refl
+transform₁-✓ v (imp₀ x y)
+  rewrite transform₁-✓ v x
+  rewrite transform₁-✓ v y
+  with eval₀ v x | eval₀ v y
+...  | false     | false     = refl
+...  | false     | true      = refl
+...  | true      | false     = refl
+...  | true      | true      = refl
+transform₁-✓ v (ite₀ x y z)
+  rewrite transform₁-✓ v x
+  rewrite transform₁-✓ v y
+  rewrite transform₁-✓ v z
+  with eval₀ v x
+...  | false = refl
+...  | true  = ∨-identityʳ (eval₀ v y)
+
+data ConOrNot : Set where
+  isCon : Bool → ConOrNot
+  isNot : ConOrNot
+
+conOrNot : Formula₁ → ConOrNot
+conOrNot (con₁ x) = isCon x
+conOrNot _        = isNot
+
+conOrNot-✓ : ∀ v {f b} → conOrNot f ≡ isCon b → eval₁ v f ≡ b
+conOrNot-✓ v {con₁ .b} {b} refl = refl
+
+record FoldRules₁ : Set where
+  field
+    rule₁ : Formula₁
+    rule₂ : Formula₁
+
+foldRules-not : FoldRules₁
+foldRules-not = record {
+    rule₁ = con₁ false ;
+    rule₂ = con₁ true
+  }
+
+record FoldRules₂ : Set where
+  field
+    rule₁ : (bˣ bʸ : Bool) → Formula₁
+    rule₂ : (y′ : Formula₁) → Formula₁
+    rule₃ : (y′ : Formula₁) → Formula₁
+    rule₄ : (x′ : Formula₁) → Formula₁
+    rule₅ : (x′ : Formula₁) → Formula₁
+
+foldRules-∧ : FoldRules₂
+foldRules-∧ = record {
+    rule₁ = λ bˣ bʸ → con₁ (bˣ ∧ bʸ) ;
+    rule₂ = λ y′ → y′ ;
+    rule₃ = λ y′ → con₁ false ;
+    rule₄ = λ x′ → x′  ;
+    rule₅ = λ x′ → con₁ false
+  }
+
+foldRules-∨ : FoldRules₂
+foldRules-∨ = record {
+    rule₁ = λ bˣ bʸ → con₁ (bˣ ∨ bʸ) ;
+    rule₂ = λ y′ → con₁ true ;
+    rule₃ = λ y′ → y′ ;
+    rule₄ = λ x′ → con₁ true ;
+    rule₅ = λ x′ → x′
+  }
+
+foldRules-xor : FoldRules₂
+foldRules-xor = record {
+    rule₁ = λ bˣ bʸ → con₁ (bˣ xor bʸ) ;
+    rule₂ = λ y′ → not₁ y′ ;
+    rule₃ = λ y′ → y′ ;
+    rule₄ = λ x′ → not₁ x′ ;
+    rule₅ = λ x′ → x′
+  }
+
+foldConst : Formula₁ → Formula₁
+foldConst₁ : (Formula₁ → Formula₁) → Formula₁ → FoldRules₁ → Formula₁
+foldConst₂ : (Formula₁ → Formula₁ → Formula₁) → Formula₁ → Formula₁ → FoldRules₂ → Formula₁
+
+foldConst₁ c x r =
+  let x′ = foldConst x in
+  case conOrNot x′ of λ where
+    (isCon true)  → rule₁ r
+    (isCon false) → rule₂ r
+    isNot         → c x′
+  where open FoldRules₁
+
+foldConst₂ c x y r =
+  let x′ = foldConst x in
+  let y′ = foldConst y in
+  case conOrNot x′ , conOrNot y′ of λ where
+    (isCon bˣ    , isCon bʸ)    → rule₁ r bˣ bʸ
+    (isCon true  , isNot)       → rule₂ r y′
+    (isCon false , isNot)       → rule₃ r y′
+    (isNot       , isCon true)  → rule₄ r x′
+    (isNot       , isCon false) → rule₅ r x′
+    (isNot       , isNot)       → c x′ y′
+  where open FoldRules₂
+
+foldConst (con₁ x)   = con₁ x
+foldConst (var₁ x)   = var₁ x
+foldConst (and₁ x y) = foldConst₂ and₁ x y foldRules-∧
+foldConst (or₁ x y)  = foldConst₂ or₁ x y foldRules-∨
+foldConst (not₁ x)   = foldConst₁ not₁ x foldRules-not
+foldConst (xor₁ x y) = foldConst₂ xor₁ x y foldRules-xor
+
+foldConst-✓ : ∀ v f → eval₁ v (foldConst f) ≡ eval₁ v f
+
+foldConst₁-not-✓ : ∀ v x → eval₁ v (foldConst₁ not₁ x foldRules-not) ≡ eval₁ v (not₁ x)
+foldConst₁-not-✓ v x
+  with conOrNot (foldConst x) in eq
+...  | isCon true  = cong not (trans (sym (conOrNot-✓ v eq)) (foldConst-✓ v x))
+...  | isCon false = cong not (trans (sym (conOrNot-✓ v eq)) (foldConst-✓ v x))
+...  | isNot       = cong not (foldConst-✓ v x)
+
+foldConst₂-∧-✓ : ∀ v x y → eval₁ v (foldConst₂ and₁ x y foldRules-∧) ≡ eval₁ v (and₁ x y)
+foldConst₂-∧-✓ v x y
+  with conOrNot (foldConst x) in eqˣ | conOrNot (foldConst y) in eqʸ
+...  | isCon bˣ                      | isCon bʸ                      =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _∧_ pˣ pʸ
+...  | isCon true                    | isNot                         =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  cong₂ _∧_ pˣ (foldConst-✓ v y)
+...  | isCon false                   | isNot                         =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  cong₂ _∧_ pˣ (foldConst-✓ v y)
+...  | isNot                         | isCon true                    =
+  flip trans (∧-comm (eval₁ v y) (eval₁ v x)) $
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _∧_ pʸ (foldConst-✓ v x)
+...  | isNot                         | isCon false                   =
+  flip trans (∧-comm (eval₁ v y) (eval₁ v x)) $
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _∧_ pʸ (foldConst-✓ v x)
+...  | isNot                         | isNot                         =
+  cong₂ _∧_ (foldConst-✓ v x) (foldConst-✓ v y)
+
+foldConst₂-∨-✓ : ∀ v x y → eval₁ v (foldConst₂ or₁ x y foldRules-∨) ≡ eval₁ v (or₁ x y)
+foldConst₂-∨-✓ v x y
+  with conOrNot (foldConst x) in eqˣ | conOrNot (foldConst y) in eqʸ
+...  | isCon bˣ                      | isCon bʸ                      =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _∨_ pˣ pʸ
+...  | isCon true                    | isNot                         =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  cong₂ _∨_ pˣ (foldConst-✓ v y)
+...  | isCon false                   | isNot                         =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  cong₂ _∨_ pˣ (foldConst-✓ v y)
+...  | isNot                         | isCon true                    =
+  flip trans (∨-comm (eval₁ v y) (eval₁ v x)) $
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _∨_ pʸ (foldConst-✓ v x)
+...  | isNot                         | isCon false                   =
+  flip trans (∨-comm (eval₁ v y) (eval₁ v x)) $
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _∨_ pʸ (foldConst-✓ v x)
+...  | isNot                         | isNot                         =
+  cong₂ _∨_ (foldConst-✓ v x) (foldConst-✓ v y)
+
+xor-comm : ∀ x y → x xor y ≡ y xor x
+xor-comm false false = refl
+xor-comm false true  = refl
+xor-comm true  false = refl
+xor-comm true  true  = refl
+
+foldConst₂-xor-✓ : ∀ v x y → eval₁ v (foldConst₂ xor₁ x y foldRules-xor) ≡ eval₁ v (xor₁ x y)
+foldConst₂-xor-✓ v x y
+  with conOrNot (foldConst x) in eqˣ | conOrNot (foldConst y) in eqʸ
+...  | isCon bˣ                      | isCon bʸ                      =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _xor_ pˣ pʸ
+...  | isCon true                    | isNot                         =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  cong₂ _xor_ pˣ (foldConst-✓ v y)
+...  | isCon false                   | isNot                         =
+  let pˣ = trans (sym (conOrNot-✓ v eqˣ)) (foldConst-✓ v x) in
+  cong₂ _xor_ pˣ (foldConst-✓ v y)
+...  | isNot                         | isCon true                    =
+  flip trans (xor-comm (eval₁ v y) (eval₁ v x)) $
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _xor_ pʸ (foldConst-✓ v x)
+...  | isNot                         | isCon false                   =
+  flip trans (xor-comm (eval₁ v y) (eval₁ v x)) $
+  let pʸ = trans (sym (conOrNot-✓ v eqʸ)) (foldConst-✓ v y) in
+  cong₂ _xor_ pʸ (foldConst-✓ v x)
+...  | isNot                         | isNot                         =
+  cong₂ _xor_ (foldConst-✓ v x) (foldConst-✓ v y)
+
+foldConst-✓ v (con₁ x)   = refl
+foldConst-✓ v (var₁ x)   = refl
+foldConst-✓ v (and₁ x y) = foldConst₂-∧-✓ v x y
+foldConst-✓ v (or₁ x y)  = foldConst₂-∨-✓ v x y
+foldConst-✓ v (not₁ x)   = foldConst₁-not-✓ v x
+foldConst-✓ v (xor₁ x y) = foldConst₂-xor-✓ v x y
+
+remConst : Formula₁ → Formula₂
+remConst (con₁ true)  = or₂ (var₂ 0) (not₂ (var₂ 0))
+remConst (con₁ false) = and₂ (var₂ 0) (not₂ (var₂ 0))
+remConst (var₁ x)     = var₂ x
+remConst (and₁ x y)   = and₂ (remConst x) (remConst y)
+remConst (or₁ x y)    = or₂ (remConst x) (remConst y)
+remConst (not₁ x)     = not₂ (remConst x)
+remConst (xor₁ x y)   = xor₂ (remConst x) (remConst y)
+
+remConst-✓ : ∀ v f → eval₂ v (remConst f) ≡ eval₁ v f
+remConst-✓ v (con₁ true)
+  with v 0
+...  | true  = refl
+...  | false = refl
+remConst-✓ v (con₁ false)
+  with v 0
+...  | true  = refl
+...  | false = refl
+remConst-✓ v (var₁ x)     = refl
+remConst-✓ v (and₁ x y)   = cong₂ _∧_ (remConst-✓ v x) (remConst-✓ v y)
+remConst-✓ v (or₁ x y)    = cong₂ _∨_ (remConst-✓ v x) (remConst-✓ v y)
+remConst-✓ v (not₁ x)     = cong not (remConst-✓ v x)
+remConst-✓ v (xor₁ x y)   = cong₂ _xor_ (remConst-✓ v x) (remConst-✓ v y)
+
+transform₂ : Formula₀ → Formula₂
+transform₂ = remConst ∘ foldConst ∘ transform₁
+
+transform₂-✓ : ∀ v f → eval₂ v (transform₂ f) ≡ eval₀ v f
+transform₂-✓ v f =
+  begin
+    eval₂ v (transform₂ f)                        ≡⟨⟩
+    eval₂ v (remConst (foldConst (transform₁ f))) ≡⟨ remConst-✓ v (foldConst (transform₁ f)) ⟩
+    eval₁ v (foldConst (transform₁ f))            ≡⟨ foldConst-✓ v (transform₁ f) ⟩
+    eval₁ v (transform₁ f)                        ≡⟨ transform₁-✓ v f ⟩
+    eval₀ v f                                     ∎
+  where open ≡-Reasoning
 
 x⇔x : ∀ x → (x ⇔ x) ≡ true
 x⇔x false = refl
@@ -345,14 +609,15 @@ makeTrue₃-✓₂ v (or₂ x y)  rewrite makeTrue₃-✓₂ v x | makeTrue₃-�
 makeTrue₃-✓₂ v (not₂ x)   rewrite makeTrue₃-✓₂ v x = refl
 makeTrue₃-✓₂ v (xor₂ x y) rewrite makeTrue₃-✓₂ v x | makeTrue₃-✓₂ v y = refl
 
-transform₃ : Formula₂ → Formula₃ 0
-transform₃ f = and₃ (tmp₃ []) (flatten [] f)
+transform₃ : Formula₀ → Formula₃ 0
+transform₃ f = and₃ (tmp₃ []) (flatten [] (transform₂ f))
 
-transform₃-✓ : ∀ v f → eval₃ v (makeTrue₃ v f) (transform₃ f) ≡ eval₂ v f
+transform₃-✓ : ∀ v f → eval₃ v (makeTrue₃ v (transform₂ f)) (transform₃ f) ≡ eval₀ v f
 transform₃-✓ v f
-  rewrite makeTrue₃-✓₁ v f
-  rewrite makeTrue₃-✓₂ v f
-  = ∧-identityʳ (eval₂ v f)
+  rewrite makeTrue₃-✓₁ v (transform₂ f)
+  rewrite makeTrue₃-✓₂ v (transform₂ f)
+  rewrite transform₂-✓ v f
+  = ∧-identityʳ (eval₀ v f)
 
 ≡⇒≡? : ∀ {x y} → (p : x ≡ y) → x ≡? y ≡ yes p
 ≡⇒≡? = ≡-≟-identity _≡?_
@@ -623,19 +888,20 @@ assign-≡ {t₁} {t₂} v (and₃ x y) p = cong₂ _∧_ (assign-≡ v x p) (as
 assign-≡ {t₁} {t₂} v (or₃ x y)  p = cong₂ _∨_ (assign-≡ v x p) (assign-≡ v y p)
 assign-≡ {t₁} {t₂} v (not₃ x)   p = cong not (assign-≡ v x p)
 
-makeTrue₄ : (ℕ → Bool) → Formula₂ → (ℕ → Bool)
-makeTrue₄ v f = makeTrue₃ v f ∘ proj₂ (ℕ→bin 0 f)
+makeTrue₄ : (ℕ → Bool) → Formula₀ → (ℕ → Bool)
+makeTrue₄ v f = makeTrue₃ v (transform₂ f) ∘ proj₂ (ℕ→bin 0 (transform₂ f))
 
-transform₄ : Formula₂ → Formula₄ 0
-transform₄ f = remap₃ (proj₂ (bin→ℕ 0 f)) (transform₃ f)
+transform₄ : Formula₀ → Formula₄ 0
+transform₄ f = remap₃ (proj₂ (bin→ℕ 0 (transform₂ f))) (transform₃ f)
 
-transform₄-✓ : ∀ v f → eval₄ v (makeTrue₄ v f) (transform₄ f) ≡ eval₂ v f
+transform₄-✓ : ∀ v f → eval₄ v (makeTrue₄ v f) (transform₄ f) ≡ eval₀ v f
 transform₄-✓ v f
-  rewrite roundtrip 0 v f []
-  rewrite evalRemap₃ [] v (makeTrue₃ v f ∘ proj₂ (ℕ→bin 0 f)) (proj₂ (bin→ℕ 0 f)) f
-  rewrite assign-≡ v (flatten [] f) (roundtrip 0 v f)
-  rewrite sym (transform₃-✓ v f)
-  = refl
+  with t₃-✓ ← transform₃-✓ v f
+  with f₂ ← transform₂ f
+  rewrite roundtrip 0 v f₂ []
+  rewrite evalRemap₃ [] v (makeTrue₃ v f₂ ∘ proj₂ (ℕ→bin 0 f₂)) (proj₂ (bin→ℕ 0 f₂)) f₂
+  rewrite assign-≡ v (flatten [] f₂) (roundtrip 0 v f₂)
+  = t₃-✓
 
 nextVar : {l : ℕ} → Formula₄ l → ℕ
 nextVar (var₄ x)   = suc x
@@ -677,14 +943,14 @@ mergeRemap {b} v t (not₄ x)   p
   rewrite mergeRemap v t x p
   = refl
 
-makeTrue₅ : (ℕ → Bool) → Formula₂ → (ℕ → Bool)
+makeTrue₅ : (ℕ → Bool) → Formula₀ → (ℕ → Bool)
 makeTrue₅ v f = merge (nextVar (transform₄ f)) v (makeTrue₄ v f)
 
-transform₅ : Formula₂ → Formula₅ 0
+transform₅ : Formula₀ → Formula₅ 0
 -- XXX - more efficient than "let"?
 transform₅ f = (λ f₄ → remap₄ (nextVar f₄) f₄) (transform₄ f)
 
-transform₅-✓ : ∀ v f → eval₅ (makeTrue₅ v f) (transform₅ f) ≡ eval₂ v f
+transform₅-✓ : ∀ v f → eval₅ (makeTrue₅ v f) (transform₅ f) ≡ eval₀ v f
 transform₅-✓ v f
   rewrite mergeRemap v (makeTrue₄ v f) (transform₄ f) ≤-refl
   rewrite sym (transform₄-✓ v f)
@@ -738,27 +1004,27 @@ to-∷-∧-✓ v (and₅ {suc m} {suc n} x y)
   rewrite ∧-identityʳ (V.evalᶜ v (to-∷-∨ x))
   = refl
 
-transform₆ : Formula₂ → Formula₆
+transform₆ : Formula₀ → Formula₆
 transform₆ f = to-∷-∧ (transform₅ f)
 
-transform₆-✓ : ∀ v f → eval₆ (makeTrue₅ v f) (transform₆ f) ≡ eval₂ v f
+transform₆-✓ : ∀ v f → eval₆ (makeTrue₅ v f) (transform₆ f) ≡ eval₀ v f
 transform₆-✓ v f
  rewrite to-∷-∧-✓ (makeTrue₅ v f) (transform₅ f)
  rewrite sym (transform₅-✓ v f)
  = refl
 
-unsat₆-✓ : ∀ f → (∀ v → eval₆ v (transform₆ f) ≡ false) → (∀ v → eval₂ v f ≡ false)
+unsat₆-✓ : ∀ f → (∀ v → eval₆ v (transform₆ f) ≡ false) → (∀ v → eval₀ v f ≡ false)
 unsat₆-✓ f p v = sym (trans (sym (p (makeTrue₅ v f))) (transform₆-✓ v f))
 
-transform₇ : Formula₂ → Maybe Formula₇
+transform₇ : Formula₀ → Maybe Formula₇
 transform₇ f = P.from-∷ (transform₆ f)
 
-transform₇-✓ : ∀ v f₂ f₇ → transform₇ f₂ ≡ just f₇ → eval₇ (makeTrue₅ v f₂) f₇ ≡ eval₂ v f₂
-transform₇-✓ v f₂ f₇ p
-  rewrite P.from-∷-✓ (makeTrue₅ v f₂) (transform₆ f₂) f₇ p
-  rewrite sym (transform₆-✓ v f₂)
+transform₇-✓ : ∀ v f₀ f₇ → transform₇ f₀ ≡ just f₇ → eval₇ (makeTrue₅ v f₀) f₇ ≡ eval₀ v f₀
+transform₇-✓ v f₀ f₇ p
+  rewrite P.from-∷-✓ (makeTrue₅ v f₀) (transform₆ f₀) f₇ p
+  rewrite sym (transform₆-✓ v f₀)
   = refl
 
-unsat₇-✓ : ∀ f₂ f₇ → transform₇ f₂ ≡ just f₇ → (∀ v → eval₇ v f₇ ≡ false) →
-  (∀ v → eval₂ v f₂ ≡ false)
-unsat₇-✓ f₂ f₇ p₁ p₂ v = sym (trans (sym (p₂ (makeTrue₅ v f₂))) (transform₇-✓ v f₂ f₇ p₁))
+unsat₇-✓ : ∀ f₀ f₇ → transform₇ f₀ ≡ just f₇ → (∀ v → eval₇ v f₇ ≡ false) →
+  (∀ v → eval₀ v f₀ ≡ false)
+unsat₇-✓ f₀ f₇ p₁ p₂ v = sym (trans (sym (p₂ (makeTrue₅ v f₀))) (transform₇-✓ v f₀ f₇ p₁))
