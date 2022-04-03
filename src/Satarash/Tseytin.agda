@@ -17,7 +17,9 @@ open import Data.Nat.Properties using (
     <⇒≢ ; <⇒≯ ; <⇒≤ ; ≤⇒≯ ; <-irrelevant ; module ≤-Reasoning ;
     m+n∸m≡n
   )
+open import Data.Nat.Show using () renaming (show to showⁿ)
 open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂)
+open import Data.String using (String) renaming (_++_ to _++ˢ_)
 open import Data.Unit using (⊤ ; tt)
 open import Function using (_∘_ ; case_of_ ; flip ; _$_)
 open import Relation.Binary.PropositionalEquality using (
@@ -59,6 +61,18 @@ data Formula₀ : Set where
   iff₀ : Formula₀ → Formula₀ → Formula₀
   imp₀ : Formula₀ → Formula₀ → Formula₀
   ite₀ : Formula₀ → Formula₀ → Formula₀ → Formula₀
+
+show₀ : Formula₀ → String
+show₀ (con₀ true)  = "(con true)"
+show₀ (con₀ false) = "(con false)"
+show₀ (var₀ x)     = "(var " ++ˢ showⁿ x ++ˢ ")"
+show₀ (and₀ x y)   = "(and " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (or₀ x y)    = "(or " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (not₀ x)     = "(not " ++ˢ show₀ x ++ˢ ")"
+show₀ (xor₀ x y)   = "(xor " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (iff₀ x y)   = "(iff " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (imp₀ x y)   = "(imp " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (ite₀ x y z) = "(ite " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ show₀ z ++ˢ ")"
 
 eval₀ : (ℕ → Bool) → Formula₀ → Bool
 eval₀ v (con₀ x)     = x
@@ -1015,6 +1029,15 @@ transform₆-✓ v f
 
 unsat₆-✓ : ∀ f → (∀ v → eval₆ v (transform₆ f) ≡ false) → (∀ v → eval₀ v f ≡ false)
 unsat₆-✓ f p v = sym (trans (sym (p (makeTrue₅ v f))) (transform₆-✓ v f))
+
+maxVar : Formula₆ → ℕ
+maxVar []       = 0
+maxVar (k ∷ ks) = doKlause k ⊔ maxVar ks
+  where
+  doKlause : V.Clause → ℕ
+  doKlause []             = 0
+  doKlause (V.pos x ∷ ls) = suc x ⊔ doKlause ls
+  doKlause (V.neg x ∷ ls) = suc x ⊔ doKlause ls
 
 transform₇ : Formula₀ → Maybe Formula₇
 transform₇ f = P.from-∷ (transform₆ f)
