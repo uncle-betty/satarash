@@ -134,7 +134,8 @@ translateFormula n (def (quote _⇒_) (arg _ t₁ ∷ arg _ t₂ ∷ [])) = do
   f₀₁ ← translateFormula n t₁
   f₀₂ ← translateFormula n t₂
   pure (imp₀ f₀₁ f₀₂)
-translateFormula n (def (quote if_then_else_) (arg _ t₁ ∷ arg _ t₂ ∷ arg _ t₃ ∷ [])) = do
+-- XXX - don't assume that there are two implicits
+translateFormula n (def (quote if_then_else_) (_ ∷ _ ∷ arg _ t₁ ∷ arg _ t₂ ∷ arg _ t₃ ∷ [])) = do
   f₀₁ ← translateFormula n t₁
   f₀₂ ← translateFormula n t₂
   f₀₃ ← translateFormula n t₃
