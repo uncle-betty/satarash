@@ -577,43 +577,49 @@ evalCons m n v t (xor₂ x y)
   rewrite sym (evalCons m (n ++ [ true ]) v t y)
   = refl
 
-makeTrue₃-✓₁ : ∀ v f → eval₃ v (makeTrue₃ v f) (flatten [] f) ≡ true
-makeTrue₃-✓₁ v (var₂ x)
-  rewrite sym (var-pat-✓ (v x) (v x))
-  = x⇔x (v x)
-makeTrue₃-✓₁ v (and₂ x y)
-  rewrite sym (∧-pat-✓ (makeTrue₃ v (and₂ x y) [ false ]) (makeTrue₃ v (and₂ x y) [ true ])
-    (makeTrue₃ v (and₂ x y) []))
-  rewrite evalCons false [] v (makeTrue₃ v (and₂ x y)) x
-  rewrite evalCons true [] v (makeTrue₃ v (and₂ x y)) y
-  rewrite makeTrue₃-✓₁ v x
-  rewrite makeTrue₃-✓₁ v y
-  rewrite x⇔x (makeTrue₃ v x [] ∧ makeTrue₃ v y [])
-  = refl
-makeTrue₃-✓₁ v (or₂ x y)
-  rewrite sym (∨-pat-✓ (makeTrue₃ v (or₂ x y) [ false ]) (makeTrue₃ v (or₂ x y) [ true ])
-    (makeTrue₃ v (or₂ x y) []))
-  rewrite evalCons false [] v (makeTrue₃ v (or₂ x y)) x
-  rewrite evalCons true [] v (makeTrue₃ v (or₂ x y)) y
-  rewrite makeTrue₃-✓₁ v x
-  rewrite makeTrue₃-✓₁ v y
-  rewrite x⇔x (makeTrue₃ v x [] ∨ makeTrue₃ v y [])
-  = refl
-makeTrue₃-✓₁ v (not₂ x)
-  rewrite sym (not-pat-✓ (makeTrue₃ v (not₂ x) [ false ]) (makeTrue₃ v (not₂ x) []))
-  rewrite evalCons false [] v (makeTrue₃ v (not₂ x)) x
-  rewrite makeTrue₃-✓₁ v x
-  rewrite x⇔x (not (makeTrue₃ v x []))
-  = refl
-makeTrue₃-✓₁ v (xor₂ x y)
-  rewrite sym (xor-pat-✓ (makeTrue₃ v (xor₂ x y) [ false ]) (makeTrue₃ v (xor₂ x y) [ true ])
-    (makeTrue₃ v (xor₂ x y) []))
-  rewrite evalCons false [] v (makeTrue₃ v (xor₂ x y)) x
-  rewrite evalCons true [] v (makeTrue₃ v (xor₂ x y)) y
-  rewrite makeTrue₃-✓₁ v x
-  rewrite makeTrue₃-✓₁ v y
-  rewrite x⇔x (makeTrue₃ v x [] xor makeTrue₃ v y [])
-  = refl
+module _ where
+  makeTrue₃-✓₁ : ∀ v f → eval₃ v (makeTrue₃ v f) (flatten [] f) ≡ true
+
+  private
+    aux₁ : ∀ v op x →
+      (op (makeTrue₃ v x []) ⇔ op (makeTrue₃ v x [])) ∧
+      eval₃ v (⟨makeTrue₃⟩.aux₁ v op x) (flatten [ false ] x) ≡ true
+    aux₁ v op x
+      rewrite x⇔x (op (makeTrue₃ v x []))
+      rewrite evalCons false [] v (⟨makeTrue₃⟩.aux₁ v op x) x
+      rewrite makeTrue₃-✓₁ v x
+      = refl
+
+    aux₂ : ∀ v op x y →
+      ((op (makeTrue₃ v x []) (makeTrue₃ v y []) ⇔ op (makeTrue₃ v x []) (makeTrue₃ v y [])) ∧
+      eval₃ v (⟨makeTrue₃⟩.aux₂ v op x y) (flatten [ false ] x)) ∧
+      eval₃ v (⟨makeTrue₃⟩.aux₂ v op x y) (flatten [ true ] y) ≡ true
+    aux₂ v op x y
+      rewrite x⇔x (op (makeTrue₃ v x []) (makeTrue₃ v y []))
+      rewrite evalCons false [] v (⟨makeTrue₃⟩.aux₂ v op x y) x
+      rewrite evalCons true [] v (⟨makeTrue₃⟩.aux₂ v op x y) y
+      rewrite makeTrue₃-✓₁ v x
+      rewrite makeTrue₃-✓₁ v y
+      = refl
+
+  makeTrue₃-✓₁ v (var₂ x)
+    rewrite sym (var-pat-✓ (v x) (v x))
+    = x⇔x (v x)
+  makeTrue₃-✓₁ v (and₂ x y)
+    rewrite sym (∧-pat-✓ (makeTrue₃ v (and₂ x y) [ false ]) (makeTrue₃ v (and₂ x y) [ true ])
+      (makeTrue₃ v (and₂ x y) []))
+    = aux₂ v _∧_ x y
+  makeTrue₃-✓₁ v (or₂ x y)
+    rewrite sym (∨-pat-✓ (makeTrue₃ v (or₂ x y) [ false ]) (makeTrue₃ v (or₂ x y) [ true ])
+      (makeTrue₃ v (or₂ x y) []))
+    = aux₂ v _∨_ x y
+  makeTrue₃-✓₁ v (not₂ x)
+    rewrite sym (not-pat-✓ (makeTrue₃ v (not₂ x) [ false ]) (makeTrue₃ v (not₂ x) []))
+    = aux₁ v not x
+  makeTrue₃-✓₁ v (xor₂ x y)
+    rewrite sym (xor-pat-✓ (makeTrue₃ v (xor₂ x y) [ false ]) (makeTrue₃ v (xor₂ x y) [ true ])
+      (makeTrue₃ v (xor₂ x y) []))
+    = aux₂ v _xor_ x y
 
 makeTrue₃-✓₂ : ∀ v f → makeTrue₃ v f [] ≡ eval₂ v f
 makeTrue₃-✓₂ v (var₂ x)   = refl
