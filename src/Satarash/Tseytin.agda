@@ -1,6 +1,3 @@
--- XXX - fix duplication in rewrite-based proofs (e.g., makeTrue-✓₁ or roundtrip)
--- XXX - fix duplication in each and between all foldConst₂-*-✓ proofs
-
 module Satarash.Tseytin where
 
 open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_ ; if_then_else_ ; _≟_)
@@ -10,10 +7,10 @@ open import Data.Empty using (⊥)
 open import Data.List using (List ; _∷_ ; [] ; [_] ; _++_ ; length)
 open import Data.List.Relation.Binary.Equality.DecPropositional (_≟_) using (_≡?_)
 open import Data.Maybe using (Maybe ; nothing ; just ; _>>=_ ; map)
-open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; _+_ ; _∸_ ; _⊔_)
+open import Data.Nat using (ℕ ; zero ; suc ; _≤_ ; z≤n ; s≤s ; _<_ ; _≮_ ; _+_ ; _∸_ ; _⊔_)
   renaming (_≟_ to _≟ⁿ_ ; _<?_ to _<?ⁿ_)
 open import Data.Nat.Properties using (
-    ≤-refl ; <-irrefl ; <-trans ; <-transˡ ; n<1+n ; m≤m+n ; m⊔n≤o⇒m≤o ; m⊔n≤o⇒n≤o ;
+    ≤-refl ; <-irrefl ; <-asym ; <-trans ; <-transˡ ; n<1+n ; m≤m+n ; m⊔n≤o⇒m≤o ; m⊔n≤o⇒n≤o ;
     <⇒≢ ; <⇒≯ ; <⇒≤ ; ≤⇒≯ ; <-irrelevant ; module ≤-Reasoning ;
     m+n∸m≡n
   )
@@ -509,28 +506,30 @@ xor-pat-✓ true  true  r = trans (x⇔f≡¬x r) (sym (∧-identityʳ (not r)))
 ⇔-pat-✓ true  false r = trans (x⇔f≡¬x r) (sym (∧-identityʳ (not r)))
 ⇔-pat-✓ true  true  r = trans (x⇔t≡x r) (sym (∧-identityʳ r))
 
-flatten : List Bool → Formula₂ → Formula₃ 0
+module _ where
+  flatten : List Bool → Formula₂ → Formula₃ 0
 
-flatten₀ : List Bool → ℕ → Formula₃ 0
-flatten₀ n x = var-pat (tmp₃ n) (var₃ x)
+  private
+    aux₀ : List Bool → ℕ → Formula₃ 0
+    aux₀ n x = var-pat (tmp₃ n) (var₃ x)
 
-flatten₁ : List Bool → (Formula₃ 3 → Formula₃ 3 → Formula₃ 0) → Formula₂ → Formula₃ 0
-flatten₁ n p x =
-  let s = flatten (n ++ [ false ]) x in
-  and₃ (p (tmp₃ (n ++ [ false ])) (tmp₃ n)) s
+    aux₁ : List Bool → (Formula₃ 3 → Formula₃ 3 → Formula₃ 0) → Formula₂ → Formula₃ 0
+    aux₁ n p x =
+      let s = flatten (n ++ [ false ]) x in
+      and₃ (p (tmp₃ (n ++ [ false ])) (tmp₃ n)) s
 
-flatten₂ : List Bool → (Formula₃ 3 → Formula₃ 3 → Formula₃ 3 → Formula₃ 0) → Formula₂ → Formula₂ →
-  Formula₃ 0
-flatten₂ n p x y =
-  let sˡ = flatten (n ++ [ false ]) x in
-  let sʳ = flatten (n ++ [ true ]) y in
-  (and₃ (and₃ (p (tmp₃ (n ++ [ false ])) (tmp₃ (n ++ [ true ])) (tmp₃ n)) sˡ) sʳ)
+    aux₂ : List Bool → (Formula₃ 3 → Formula₃ 3 → Formula₃ 3 → Formula₃ 0) → Formula₂ → Formula₂ →
+      Formula₃ 0
+    aux₂ n p x y =
+      let sˡ = flatten (n ++ [ false ]) x in
+      let sʳ = flatten (n ++ [ true ]) y in
+      (and₃ (and₃ (p (tmp₃ (n ++ [ false ])) (tmp₃ (n ++ [ true ])) (tmp₃ n)) sˡ) sʳ)
 
-flatten n (var₂ x)   = flatten₀ n x
-flatten n (and₂ x y) = flatten₂ n ∧-pat x y
-flatten n (or₂ x y)  = flatten₂ n ∨-pat x y
-flatten n (not₂ x)   = flatten₁ n not-pat x
-flatten n (xor₂ x y) = flatten₂ n xor-pat x y
+  flatten n (var₂ x)   = aux₀ n x
+  flatten n (and₂ x y) = aux₂ n ∧-pat x y
+  flatten n (or₂ x y)  = aux₂ n ∨-pat x y
+  flatten n (not₂ x)   = aux₁ n not-pat x
+  flatten n (xor₂ x y) = aux₂ n xor-pat x y
 
 module _ where
   makeTrue₃ : (ℕ → Bool) → Formula₂ → (List Bool → Bool)
@@ -665,9 +664,9 @@ module _ where
     aux₂ : ℕ → (x y : Formula₂) → ℕ × (List Bool → ℕ)
     aux₂ n x y =
       let nˡ , mˡ = bin→ℕ n x in
-      let nʳ , mʳ = bin→ℕ nˡ y in
-      suc nʳ , λ where
-        []          → nʳ
+      let nʳ , mʳ = bin→ℕ (suc nˡ) y in
+      nʳ , λ where
+        []          → nˡ
         (false ∷ a) → mˡ a
         (true ∷ a)  → mʳ a
 
@@ -694,12 +693,12 @@ module _ where
     aux₂ : ℕ → (x y : Formula₂) → ℕ × (ℕ → List Bool)
     aux₂ n x y =
       let nˡ , mˡ = ℕ→bin n x in
-      let nʳ , mʳ = ℕ→bin nˡ y in
-      suc nʳ , λ a →
+      let nʳ , mʳ = ℕ→bin (suc nˡ) y in
+      nʳ , λ a →
         case a <?ⁿ nˡ of λ where
           (yes _) → false ∷ mˡ a
           (no  _) →
-            case a <?ⁿ nʳ of λ where
+            case nˡ <?ⁿ a of λ where
               (yes _) → true ∷ mʳ a
               (no  _) → []
 
@@ -711,164 +710,156 @@ module _ where
   ℕ→bin n (not₂ x)   = aux₁ n x
   ℕ→bin n (xor₂ x y) = aux₂ n x y
 
+<-≡ : ∀ {x y z} → x < y → y ≡ z → x < z
+<-≡ p refl = p
+
+≮-≡ : ∀ {x y z} → x ≮ y → y ≡ z → x ≮ z
+≮-≡ p refl = p
+
+≡-< : ∀ {x y z} → x ≡ y → y < z → x < z
+≡-< refl p = p
+
 module _ where
-  n<fw₁ : ∀ n f → n < proj₁ (bin→ℕ n f)
+  roundtrip : ∀ n v f a → (makeTrue₃ v f ∘ proj₂ (ℕ→bin n f) ∘ proj₂ (bin→ℕ n f)) a ≡ makeTrue₃ v f a
 
-  module ⟨n<fw₁⟩ where
-    aux₁ : ∀ n x → n < suc (proj₁ (bin→ℕ n x))
-    aux₁ n x = <-trans (n<fw₁ n x) ≤-refl
+  private
+    module _ where
+      p₁≡p₁ : ∀ n f → proj₁ (ℕ→bin n f) ≡ proj₁ (bin→ℕ n f)
 
-    aux₂ : ∀ n x y → n < suc (proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y))
-    aux₂ n x y = <-trans (n<fw₁ n x) (<-trans (n<fw₁ (proj₁ (bin→ℕ n x)) y) ≤-refl)
+      private
+        aux₂ : ∀ n x y →
+          proj₁ (ℕ→bin (suc (proj₁ (ℕ→bin n x))) y) ≡ proj₁ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y)
+        aux₂ n x y rewrite p₁≡p₁ n x | p₁≡p₁ (suc (proj₁ (bin→ℕ n x))) y = refl
 
-  open ⟨n<fw₁⟩
+      p₁≡p₁ n (var₂ x)   = refl
+      p₁≡p₁ n (and₂ x y) = aux₂ n x y
+      p₁≡p₁ n (or₂ x y)  = aux₂ n x y
+      p₁≡p₁ n (not₂ x)   = cong suc (p₁≡p₁ n x)
+      p₁≡p₁ n (xor₂ x y) = aux₂ n x y
 
-  n<fw₁ n (var₂ x)   = ≤-refl
-  n<fw₁ n (and₂ x y) = aux₂ n x y
-  n<fw₁ n (or₂ x y)  = aux₂ n x y
-  n<fw₁ n (not₂ x)   = aux₁ n x
-  n<fw₁ n (xor₂ x y) = aux₂ n x y
+    module _ where
+      n<p₁ : ∀ n f → n < proj₁ (bin→ℕ n f)
 
-fw₁<fw₁fw₁ : ∀ n x y → proj₁ (bin→ℕ n x) < proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y)
-fw₁<fw₁fw₁ n x y = n<fw₁ (proj₁ (bin→ℕ n x)) y
+      private
+        aux₁ : ∀ n x → n < proj₁ (⟨bin→ℕ⟩.aux₁ n x)
+        aux₁ n x = <-trans (n<p₁ n x) (n<1+n (proj₁ (bin→ℕ n x)))
 
-n<fw₁fw₁ : ∀ n x y → n < proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y)
-n<fw₁fw₁ n x y = <-trans (n<fw₁ n x) (fw₁<fw₁fw₁ n x y)
+        aux₂ : ∀ n x y → n < proj₁ (⟨bin→ℕ⟩.aux₂ n x y)
+        aux₂ n x y =
+          begin-strict
+            n                                         <⟨ n<p₁ n x ⟩
+            proj₁ (bin→ℕ n x)                         <⟨ n<1+n (proj₁ (bin→ℕ n x)) ⟩
+            suc (proj₁ (bin→ℕ n x))                   <⟨ n<p₁ (suc (proj₁ (bin→ℕ n x))) y ⟩
+            proj₁ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) ∎
+          where open ≤-Reasoning
 
-n≤fw₂ : ∀ n f a → n ≤ proj₂ (bin→ℕ n f) a
-n≤fw₂ n (var₂ x)   a            = ≤-refl
-n≤fw₂ n (and₂ x y) []           = <⇒≤ (n<fw₁fw₁ n x y)
-n≤fw₂ n (and₂ x y) (false ∷ as) = n≤fw₂ n x as
-n≤fw₂ n (and₂ x y) (true ∷ as)  = <⇒≤ (<-transˡ (n<fw₁ n x) (n≤fw₂ (proj₁ (bin→ℕ n x)) y as))
-n≤fw₂ n (or₂ x y) []            = <⇒≤ (n<fw₁fw₁ n x y)
-n≤fw₂ n (or₂ x y) (false ∷ as)  = n≤fw₂ n x as
-n≤fw₂ n (or₂ x y) (true ∷ as)   = <⇒≤ (<-transˡ (n<fw₁ n x) (n≤fw₂ (proj₁ (bin→ℕ n x)) y as))
-n≤fw₂ n (not₂ x) []             = <⇒≤ (n<fw₁ n x)
-n≤fw₂ n (not₂ x) (a ∷ as)       = n≤fw₂ n x as
-n≤fw₂ n (xor₂ x y) []           = <⇒≤ (n<fw₁fw₁ n x y)
-n≤fw₂ n (xor₂ x y) (false ∷ as) = n≤fw₂ n x as
-n≤fw₂ n (xor₂ x y) (true ∷ as)  = <⇒≤ (<-transˡ (n<fw₁ n x) (n≤fw₂ (proj₁ (bin→ℕ n x)) y as))
+      n<p₁ n (var₂ x)   = n<1+n n
+      n<p₁ n (and₂ x y) = aux₂ n x y
+      n<p₁ n (or₂ x y)  = aux₂ n x y
+      n<p₁ n (not₂ x)   = aux₁ n x
+      n<p₁ n (xor₂ x y) = aux₂ n x y
 
-fw₁≤fw₂fw₁ : ∀ n x y a → proj₁ (bin→ℕ n x) ≤ proj₂ (bin→ℕ (proj₁ (bin→ℕ n x)) y) a
-fw₁≤fw₂fw₁ n x y a = n≤fw₂ (proj₁ (bin→ℕ n x)) y a
+    module _ where
+      n≤p₂ : ∀ n f a → n ≤ proj₂ (bin→ℕ n f) a
 
-fw₂<fw₁ : ∀ n f a → proj₂ (bin→ℕ n f) a < proj₁ (bin→ℕ n f)
-fw₂<fw₁ n (var₂ x)   a            = ≤-refl
-fw₂<fw₁ n (and₂ x y) []           = ≤-refl
-fw₂<fw₁ n (and₂ x y) (false ∷ as) = <-trans (fw₂<fw₁ n x as ) (<-trans (fw₁<fw₁fw₁ n x y) ≤-refl)
-fw₂<fw₁ n (and₂ x y) (true ∷ as)  = <-trans (fw₂<fw₁ (proj₁ (bin→ℕ n x)) y as) ≤-refl
-fw₂<fw₁ n (or₂ x y)  []           = ≤-refl
-fw₂<fw₁ n (or₂ x y)  (false ∷ as) = <-trans (fw₂<fw₁ n x as ) (<-trans (fw₁<fw₁fw₁ n x y) ≤-refl)
-fw₂<fw₁ n (or₂ x y)  (true ∷ as)  = <-trans (fw₂<fw₁ (proj₁ (bin→ℕ n x)) y as) ≤-refl
-fw₂<fw₁ n (not₂ x)   []           = ≤-refl
-fw₂<fw₁ n (not₂ x)   (a ∷ as)     = <-trans (fw₂<fw₁ n x as) ≤-refl
-fw₂<fw₁ n (xor₂ x y) []           = ≤-refl
-fw₂<fw₁ n (xor₂ x y) (false ∷ as) = <-trans (fw₂<fw₁ n x as ) (<-trans (fw₁<fw₁fw₁ n x y) ≤-refl)
-fw₂<fw₁ n (xor₂ x y) (true ∷ as)  = <-trans (fw₂<fw₁ (proj₁ (bin→ℕ n x)) y as) ≤-refl
+      private
+        aux₁ : ∀ n x a → n ≤ proj₂ (⟨bin→ℕ⟩.aux₁ n x) a
+        aux₁ n x []      = <⇒≤ (n<p₁ n x)
+        aux₁ n x (_ ∷ a) = n≤p₂ n x a
 
-fw₂fw₁<fw₁fw₁ : ∀ n x y a →
-  proj₂ (bin→ℕ (proj₁ (bin→ℕ n x)) y) a < proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y)
-fw₂fw₁<fw₁fw₁ n x y a = fw₂<fw₁ (proj₁ (bin→ℕ n x)) y a
+        aux₂ : ∀ n x y a → n ≤ proj₂ (⟨bin→ℕ⟩.aux₂ n x y) a
+        aux₂ n x y []          = <⇒≤ (n<p₁ n x)
+        aux₂ n x y (false ∷ a) = n≤p₂ n x a
+        aux₂ n x y (true  ∷ a) =
+          begin
+            n                                           <⟨ n<p₁ n x ⟩
+            proj₁ (bin→ℕ n x)                           <⟨ n<1+n (proj₁ (bin→ℕ n x)) ⟩
+            suc (proj₁ (bin→ℕ n x))                     ≤⟨ n≤p₂ (suc (proj₁ (bin→ℕ n x))) y a ⟩
+            proj₂ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) a ∎
+          where open ≤-Reasoning
 
-fw₁≡bw₁ : ∀ n f → proj₁ (bin→ℕ n f) ≡ proj₁ (ℕ→bin n f)
-fw₁≡bw₁ n (var₂ x) = refl
-fw₁≡bw₁ n (and₂ x y)
-  rewrite fw₁≡bw₁ n x
-  rewrite fw₁≡bw₁ (proj₁ (ℕ→bin n x)) y
-  = refl
-fw₁≡bw₁ n (or₂ x y)
-  rewrite fw₁≡bw₁ n x
-  rewrite fw₁≡bw₁ (proj₁ (ℕ→bin n x)) y
-  = refl
-fw₁≡bw₁ n (not₂ x) = cong suc (fw₁≡bw₁ n x)
-fw₁≡bw₁ n (xor₂ x y)
-  rewrite fw₁≡bw₁ n x
-  rewrite fw₁≡bw₁ (proj₁ (ℕ→bin n x)) y
-  = refl
+      n≤p₂ n (var₂ x)   a = ≤-refl
+      n≤p₂ n (and₂ x y) a = aux₂ n x y a
+      n≤p₂ n (or₂ x y)  a = aux₂ n x y a
+      n≤p₂ n (not₂ x)   a = aux₁ n x a
+      n≤p₂ n (xor₂ x y) a = aux₂ n x y a
 
-fw₁fw₁≡bw₁bw₁ : ∀ n x y →
-  proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y) ≡ proj₁ (ℕ→bin (proj₁ (ℕ→bin n x)) y)
-fw₁fw₁≡bw₁bw₁ n x y = begin
-  proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y) ≡⟨ cong (λ # → proj₁ (bin→ℕ # y)) (fw₁≡bw₁ n x) ⟩
-  proj₁ (bin→ℕ (proj₁ (ℕ→bin n x)) y) ≡⟨ fw₁≡bw₁ (proj₁ (ℕ→bin n x)) y ⟩
-  proj₁ (ℕ→bin (proj₁ (ℕ→bin n x)) y) ∎
-  where open ≡-Reasoning
+    module _ where
+      p₂<p₁ : ∀ n f a → proj₂ (bin→ℕ n f) a < proj₁ (bin→ℕ n f)
 
-fw₂<bw₁ : ∀ n f a → proj₂ (bin→ℕ n f) a < proj₁ (ℕ→bin n f)
-fw₂<bw₁ n f a = begin-strict
-  proj₂ (bin→ℕ n f) a <⟨ fw₂<fw₁ n f a ⟩
-  proj₁ (bin→ℕ n f)   ≡⟨ fw₁≡bw₁ n f ⟩
-  proj₁ (ℕ→bin n f)   ∎
-  where open ≤-Reasoning
+      private
+        aux₁ : ∀ n x a → proj₂ (⟨bin→ℕ⟩.aux₁ n x) a < proj₁ (⟨bin→ℕ⟩.aux₁ n x)
+        aux₁ n x []      = n<1+n (proj₁ (bin→ℕ n x))
+        aux₁ n x (_ ∷ a) = <-trans (p₂<p₁ n x a) (n<1+n (proj₁ (bin→ℕ n x)))
 
-bw₁<fw₁fw₁ : ∀ n x y → proj₁ (ℕ→bin n x) < proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y)
-bw₁<fw₁fw₁ n x y  = begin-strict
-  proj₁ (ℕ→bin n x)                   ≡⟨ sym (fw₁≡bw₁ n x) ⟩
-  proj₁ (bin→ℕ n x)                   <⟨ fw₁<fw₁fw₁ n x y ⟩
-  proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y) ∎
-  where open ≤-Reasoning
+        aux₂ : ∀ n x y a → proj₂ (⟨bin→ℕ⟩.aux₂ n x y) a < proj₁ (⟨bin→ℕ⟩.aux₂ n x y)
+        aux₂ n x y [] =
+          begin-strict
+            proj₁ (bin→ℕ n x)                         <⟨ n<1+n (proj₁ (bin→ℕ n x)) ⟩
+            suc (proj₁ (bin→ℕ n x))                   <⟨ n<p₁ (suc (proj₁ (bin→ℕ n x))) y ⟩
+            proj₁ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) ∎
+          where open ≤-Reasoning
+        aux₂ n x y (false ∷ a) =
+          begin-strict
+            proj₂ (bin→ℕ n x) a                       <⟨ p₂<p₁ n x a ⟩
+            proj₁ (bin→ℕ n x)                         <⟨ n<1+n (proj₁ (bin→ℕ n x)) ⟩
+            suc (proj₁ (bin→ℕ n x))                   <⟨ n<p₁ (suc (proj₁ (bin→ℕ n x))) y ⟩
+            proj₁ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) ∎
+          where open ≤-Reasoning
+        aux₂ n x y (true  ∷ a) = p₂<p₁ (suc (proj₁ (bin→ℕ n x))) y a
 
-bw₁≤fw₂fw₁ : ∀ n x y a → proj₁ (ℕ→bin n x) ≤ proj₂ (bin→ℕ (proj₁ (bin→ℕ n x)) y) a
-bw₁≤fw₂fw₁ n x y a = begin
-  proj₁ (ℕ→bin n x)                     ≡⟨ sym (fw₁≡bw₁ n x) ⟩
-  proj₁ (bin→ℕ n x)                     ≤⟨ fw₁≤fw₂fw₁ n x y a ⟩
-  proj₂ (bin→ℕ (proj₁ (bin→ℕ n x)) y) a ∎
-  where open ≤-Reasoning
+      p₂<p₁ n (var₂ x)   a = n<1+n n
+      p₂<p₁ n (and₂ x y) a = aux₂ n x y a
+      p₂<p₁ n (or₂ x y)  a = aux₂ n x y a
+      p₂<p₁ n (not₂ x)   a = aux₁ n x a
+      p₂<p₁ n (xor₂ x y) a = aux₂ n x y a
 
-fw₂fw₁<bw₁bw₁ : ∀ n x y a →
-  proj₂ (bin→ℕ (proj₁ (bin→ℕ n x)) y) a < proj₁ (ℕ→bin (proj₁ (ℕ→bin n x)) y)
-fw₂fw₁<bw₁bw₁ n x y a = begin-strict
-  proj₂ (bin→ℕ (proj₁ (bin→ℕ n x)) y) a <⟨ fw₂fw₁<fw₁fw₁ n x y a ⟩
-  proj₁ (bin→ℕ (proj₁ (bin→ℕ n x)) y)   ≡⟨ cong (λ # → proj₁ (bin→ℕ # y)) (fw₁≡bw₁ n x) ⟩
-  proj₁ (bin→ℕ (proj₁ (ℕ→bin n x)) y)   ≡⟨ fw₁≡bw₁ (proj₁ (ℕ→bin n x)) y ⟩
-  proj₁ (ℕ→bin (proj₁ (ℕ→bin n x)) y)   ∎
-  where open ≤-Reasoning
+    aux₁ : ∀ n v op x a →
+      (⟨makeTrue₃⟩.aux₁ v op x ∘ proj₂ (⟨ℕ→bin⟩.aux₁ n x) ∘
+        proj₂ (⟨bin→ℕ⟩.aux₁ n x)) a ≡ ⟨makeTrue₃⟩.aux₁ v op x a
+    aux₁ n v op x []      with proj₁ (bin→ℕ n x) ≟ⁿ proj₁ (ℕ→bin n x)
+    aux₁ n v op x []         | yes _ = refl
+    aux₁ n v op x []         | no ¬p = contradiction (sym (p₁≡p₁ n x)) ¬p
+    aux₁ n v op x (_ ∷ a) with proj₂ (bin→ℕ n x) a ≟ⁿ proj₁ (ℕ→bin n x)
+    aux₁ n v op x (_ ∷ a)    | yes p = contradiction p ¬p
+      where
+      ¬p : proj₂ (bin→ℕ n x) a ≢ proj₁ (ℕ→bin n x)
+      ¬p = <⇒≢ (<-≡ (p₂<p₁ n x a) (sym (p₁≡p₁ n x)))
+    aux₁ n v op x (_ ∷ a)    | no _  = roundtrip n v x a
 
-roundtrip : ∀ n v f a →
-  (makeTrue₃ v f ∘ proj₂ (ℕ→bin n f)) (proj₂ (bin→ℕ n f) a) ≡ makeTrue₃ v f a
-roundtrip n v (var₂ x)   a = refl
-roundtrip n v (and₂ x y) []
-  rewrite (≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
-  rewrite ≮⇒<? (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
-  = refl
-roundtrip n v (and₂ x y) (false ∷ as)
-  rewrite <⇒<? (fw₂<bw₁ n x as)
-  = roundtrip n v x as
-roundtrip n v (and₂ x y) (true ∷ as)
-  rewrite (≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
-  rewrite <⇒<? (fw₂fw₁<bw₁bw₁ n x y as)
-  rewrite sym (fw₁≡bw₁ n x)
-  = roundtrip (proj₁ (bin→ℕ n x)) v y as
-roundtrip n v (or₂ x y) []
-  rewrite (≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
-  rewrite ≮⇒<? (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
-  = refl
-roundtrip n v (or₂ x y) (false ∷ as)
-  rewrite <⇒<? (fw₂<bw₁ n x as)
-  = roundtrip n v x as
-roundtrip n v (or₂ x y) (true ∷ as)
-  rewrite (≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
-  rewrite <⇒<? (fw₂fw₁<bw₁bw₁ n x y as)
-  rewrite sym (fw₁≡bw₁ n x)
-  = roundtrip (proj₁ (bin→ℕ n x)) v y as
-roundtrip n v (not₂ x)   []
-  rewrite ≡⇒≟ⁿ (fw₁≡bw₁ n x)
-  = refl
-roundtrip n v (not₂ x)   (a ∷ as)
-  rewrite (≢⇒≟ⁿ ∘ <⇒≢) (fw₂<bw₁ n x as)
-  = roundtrip n v x as
-roundtrip n v (xor₂ x y) []
-  rewrite (≮⇒<? ∘ <⇒≯) (bw₁<fw₁fw₁ n x y)
-  rewrite ≮⇒<? (<-irrefl (fw₁fw₁≡bw₁bw₁ n x y))
-  = refl
-roundtrip n v (xor₂ x y) (false ∷ as)
-  rewrite <⇒<? (fw₂<bw₁ n x as)
-  = roundtrip n v x as
-roundtrip n v (xor₂ x y) (true ∷ as)
-  rewrite (≮⇒<? ∘ ≤⇒≯) (bw₁≤fw₂fw₁ n x y as)
-  rewrite <⇒<? (fw₂fw₁<bw₁bw₁ n x y as)
-  rewrite sym (fw₁≡bw₁ n x)
-  = roundtrip (proj₁ (bin→ℕ n x)) v y as
+    aux₂ : ∀ n v op x y a →
+      (⟨makeTrue₃⟩.aux₂ v op x y ∘ proj₂ (⟨ℕ→bin⟩.aux₂ n x y) ∘
+        proj₂ (⟨bin→ℕ⟩.aux₂ n x y)) a ≡ ⟨makeTrue₃⟩.aux₂ v op x y a
+    aux₂ n v op x y []          with proj₁ (bin→ℕ n x) <?ⁿ proj₁ (ℕ→bin n x)
+    aux₂ n v op x y []             | yes p = contradiction p (<-irrefl (sym (p₁≡p₁ n x)))
+    aux₂ n v op x y []             | no _  with proj₁ (ℕ→bin n x) <?ⁿ proj₁ (bin→ℕ n x)
+    aux₂ n v op x y []             | no _     | yes p = contradiction p (<-irrefl (p₁≡p₁ n x))
+    aux₂ n v op x y []             | no _     | no ¬p = refl
+    aux₂ n v op x y (false ∷ a) with proj₂ (bin→ℕ n x) a <?ⁿ proj₁ (ℕ→bin n x)
+    aux₂ n v op x y (false ∷ a)    | yes _ = roundtrip n v x a
+    aux₂ n v op x y (false ∷ a)    | no ¬p = contradiction p ¬p
+      where
+      p : proj₂ (bin→ℕ n x) a < proj₁ (ℕ→bin n x)
+      p = <-≡ (p₂<p₁ n x a) (sym (p₁≡p₁ n x))
+    aux₂ n v op x y (true ∷ a)  with proj₂ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) a <?ⁿ proj₁ (bin→ℕ n x)
+    aux₂ n v op x y (true ∷ a)     | yes p = contradiction p ¬p
+      where
+      ¬p : proj₂ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) a ≮ proj₁ (bin→ℕ n x)
+      ¬p = <-asym (n≤p₂ (suc (proj₁ (bin→ℕ n x))) y a)
+    aux₂ n v op x y (true ∷ a)     | no ¬p₁ with proj₂ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) a <?ⁿ proj₁ (ℕ→bin n x)
+    aux₂ n v op x y (true ∷ a)     | no ¬p₁     | yes p₂ = flip contradiction (≮-≡ ¬p₁ (sym (p₁≡p₁ n x))) p₂
+    aux₂ n v op x y (true ∷ a)     | no ¬p₁     | no ¬p₂ with proj₁ (ℕ→bin n x) <?ⁿ proj₂ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) a
+    aux₂ n v op x y (true ∷ a)     | no ¬p₁     | no ¬p₂    | yes p₃ rewrite sym (p₁≡p₁ n x) = roundtrip (suc (proj₁ (ℕ→bin n x))) v y a
+    aux₂ n v op x y (true ∷ a)     | no ¬p₁     | no ¬p₂    | no ¬p₃ = contradiction p₃ ¬p₃
+      where
+      p₃ : proj₁ (ℕ→bin n x) < proj₂ (bin→ℕ (suc (proj₁ (bin→ℕ n x))) y) a
+      p₃ = ≡-< (p₁≡p₁ n x) (n≤p₂ (suc (proj₁ (bin→ℕ n x))) y a)
+
+  roundtrip n v (var₂ x)   a = refl
+  roundtrip n v (and₂ x y) a = aux₂ n v _∧_ x y a
+  roundtrip n v (or₂ x y)  a = aux₂ n v _∨_ x y a
+  roundtrip n v (not₂ x)   a = aux₁ n v not x a
+  roundtrip n v (xor₂ x y) a = aux₂ n v _xor_ x y a
 
 remap₃ : {l : ℕ} → (List Bool → ℕ) → Formula₃ l → Formula₄ l
 remap₃ r (var₃ x)   = var₄ x
@@ -961,7 +952,6 @@ makeTrue₅ : (ℕ → Bool) → Formula₀ → (ℕ → Bool)
 makeTrue₅ v f = merge (nextVar (transform₄ f)) v (makeTrue₄ v f)
 
 transform₅ : Formula₀ → Formula₅ 0
--- XXX - more efficient than "let"?
 transform₅ f = (λ f₄ → remap₄ (nextVar f₄) f₄) (transform₄ f)
 
 transform₅-✓ : ∀ v f → eval₅ (makeTrue₅ v f) (transform₅ f) ≡ eval₀ v f
