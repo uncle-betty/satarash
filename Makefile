@@ -30,6 +30,9 @@ checker:		checker.o
 Checker:		$(ALL)
 				agda --ghc $(GHC_FLAGS) --compile-dir=. $(TOP)
 
+check:
+				agda -isrc src/Everything.agda
+
 clean:
 				rm -f checker checker.o
 				rm -f Checker

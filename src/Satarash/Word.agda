@@ -2,11 +2,16 @@ open import Algebra.Bundles using (CommutativeRing)
 open import Algebra.Structures using (
     IsMagma ; IsSemigroup ; IsMonoid ; IsGroup ; IsAbelianGroup ; IsRing ; IsCommutativeRing
   )
-open import Data.Bool using (Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_) renaming (_≟_ to _≟ᵇ_)
-open import Data.Bool.Properties using (∧-zeroʳ ; ∧-identityʳ)
+open import Data.Bool using (
+    Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_ ; if_then_else_
+  ) renaming (
+    _≟_ to _≟ᵇ_
+  )
+open import Data.Bool.Properties using (∧-zeroʳ ; ∧-identityʳ ; not-injective)
 open import Data.Maybe using (Maybe ; nothing ; just)
 open import Data.Nat using (
-    ℕ ; zero ; suc ; pred ; _+_ ; _*_ ; _∸_ ; _^_ ; _≤_ ; z≤n ; s≤s ; _<_ ; NonZero ; ≢-nonZero⁻¹
+    ℕ ; zero ; suc ; pred ; _+_ ; _*_ ; _∸_ ; _^_ ; _≤_ ; _≰_ ; z≤n ; s≤s ; _<_ ; _≮_ ; _>_ ; _≯_ ;
+    _≥_ ; _≱_ ; NonZero ; ≢-nonZero⁻¹
   ) renaming (
     _≟_ to _≟ⁿ_
   )
@@ -15,15 +20,16 @@ open import Data.Nat.DivMod using (
     m≤n⇒m%n≡m ; [m+kn]%n≡m%n ; +-distrib-/
   )
 open import Data.Nat.Properties using (
-    ≤-refl ; <⇒≢ ; <⇒≤ ; +-identityʳ ; +-comm ; +-assoc ; +-monoˡ-≤ ; +-monoʳ-≤ ;  +-monoˡ-< ;
-    +-monoʳ-< ; n<1+n ; m+n∸n≡m ; m∸n+n≡m ; *-suc ; *-zeroʳ ; *-identityˡ ; *-identityʳ ; *-comm ;
-    *-assoc ; *-monoˡ-≤ ; *-monoʳ-≤ ; *-distribˡ-+ ; module ≤-Reasoning
+    ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ; +-identityʳ ; +-comm ; +-assoc ; +-monoˡ-≤ ;
+    +-monoʳ-≤ ; +-monoˡ-< ; +-monoʳ-< ; n<1+n ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ; *-suc ; *-zeroʳ ;
+    *-identityˡ ; *-identityʳ ; *-comm ; *-assoc ; *-monoˡ-≤ ; *-monoʳ-≤ ; *-distribˡ-+ ;
+    module ≤-Reasoning
   )
 open import Data.Nat.Tactic.RingSolver using (solve-∀)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂)
 open import Data.Vec using (Vec ; [] ; _∷_ ; replicate ; _++_ ; splitAt ; take ; drop)
-open import Data.Vec.Properties using (≡-dec)
-open import Function using (_$_ ; case_of_)
+open import Data.Vec.Properties using (≡-dec ; ∷-injectiveʳ)
+open import Function using (_$_ ; case_of_ ; _∘_)
 open import Function.Reasoning
 open import Level using (0ℓ)
 open import Relation.Binary.PropositionalEquality using (
@@ -250,9 +256,9 @@ _+ᵇ_+_ x y c = (x ∧ y ∨ x ∧ c ∨ y ∧ c) ∷ (x xor y xor c) ∷ []
 
 --- logical operations -----------------------------------------------------------------------------
 
-notʷ : {i : ℕ} → (xs : Word i) → Word i
-notʷ []       = []
-notʷ (x ∷ xs) = not x ∷ notʷ xs
+~ : {i : ℕ} → (xs : Word i) → Word i
+~ []       = []
+~ (x ∷ xs) = not x ∷ ~ xs
 
 infixl 6 _∧ʷ_
 
@@ -455,43 +461,43 @@ _⊞_ {i} xs ys = (xs +ʷ ys + false) %ʷ2^ i
 ↕′-✓ : ∀ {i} xs → bits (↕′ xs) ≡ 2 ^ i ∸ bits {i} xs
 ↕′-✓ {i} xs =
   begin
-    bits (↕′ xs)                             ≡⟨ lemma₂ xs ⟩
-    bits (notʷ xs) + 1                       ≡˘⟨ m+n∸n≡m (bits (notʷ xs) + 1) (bits xs) ⟩
-    bits (notʷ xs) + 1 + bits xs ∸ bits xs   ≡⟨ kong (+-comm (bits (notʷ xs) + 1) (bits xs)) ⟩
-    bits xs + (bits (notʷ xs) + 1) ∸ bits xs ≡⟨ kong (lemma₄ xs) ⟩
-    d ∸ bits xs                              ∎
+    bits (↕′ xs)                          ≡⟨ lemma₂ xs ⟩
+    bits (~ xs) + 1                       ≡˘⟨ m+n∸n≡m (bits (~ xs) + 1) (bits xs) ⟩
+    bits (~ xs) + 1 + bits xs ∸ bits xs   ≡⟨ kong (+-comm (bits (~ xs) + 1) (bits xs)) ⟩
+    bits xs + (bits (~ xs) + 1) ∸ bits xs ≡⟨ kong (lemma₄ xs) ⟩
+    d ∸ bits xs                           ∎
   where
   open ≡-Reasoning
 
   d = 2 ^ i
 
-  lemma₁ : ∀ {i} xs → ↕′ xs ≡ replicate {n = i} false +ʷ notʷ xs + true
+  lemma₁ : ∀ {i} xs → ↕′ xs ≡ replicate {n = i} false +ʷ ~ xs + true
   lemma₁ {zero}  []       = refl
-  lemma₁ {suc i} (x ∷ xs) with ↕′ xs  | replicate false +ʷ notʷ xs + true | lemma₁ xs
-  lemma₁ {suc i} (x ∷ xs)    | z ∷ zs | z ∷ zs                         | refl     = refl
+  lemma₁ {suc i} (x ∷ xs) with ↕′ xs  | replicate false +ʷ ~ xs + true | lemma₁ xs
+  lemma₁ {suc i} (x ∷ xs)    | z ∷ zs | z ∷ zs                         | refl      = refl
 
-  lemma₂ : ∀ {i} xs → bits (↕′ xs) ≡ bits {i} (notʷ xs) + 1
+  lemma₂ : ∀ {i} xs → bits (↕′ xs) ≡ bits {i} (~ xs) + 1
   lemma₂ {i} xs =
     begin
-      bits (↕′ xs)                                        ≡⟨ kong (lemma₁ xs) ⟩
-      bits (replicate false +ʷ (notʷ xs) + true)          ≡⟨ +ʷ+-✓ (replicate false) (notʷ xs) true ⟩
-      bits (replicate {n = i} false) + bits (notʷ xs) + 1 ≡⟨ kong (bits≡0 i) ⟩
-      bits (notʷ xs) + 1                                  ∎
+      bits (↕′ xs)                                     ≡⟨ kong (lemma₁ xs) ⟩
+      bits (replicate false +ʷ (~ xs) + true)          ≡⟨ +ʷ+-✓ (replicate false) (~ xs) true ⟩
+      bits (replicate {n = i} false) + bits (~ xs) + 1 ≡⟨ kong (bits≡0 i) ⟩
+      bits (~ xs) + 1                                  ∎
 
-  lemma₃ : ∀ {i} xs → xs +ʷ notʷ xs + true ≡ true ∷ replicate {n = i} false
+  lemma₃ : ∀ {i} xs → xs +ʷ ~ xs + true ≡ true ∷ replicate {n = i} false
   lemma₃ {zero}  []           = refl
-  lemma₃ {suc i} (x ∷ xs)     with xs +ʷ notʷ xs + true | lemma₃ xs
+  lemma₃ {suc i} (x ∷ xs)     with xs +ʷ ~ xs + true | lemma₃ xs
   lemma₃ {suc i} (true ∷ xs)     | z ∷ zs            | refl      = refl
   lemma₃ {suc i} (false ∷ xs)    | z ∷ zs            | refl      = refl
 
-  lemma₄ : ∀ {i} xs → bits {i} xs + (bits (notʷ xs) + 1) ≡ 2 ^ i
+  lemma₄ : ∀ {i} xs → bits {i} xs + (bits (~ xs) + 1) ≡ 2 ^ i
   lemma₄ {i} xs =
     begin
-      bits {i} xs + (bits (notʷ xs) + 1)       ≡˘⟨ +-assoc (bits xs) (bits (notʷ xs)) 1 ⟩
-      bits {i} xs + bits (notʷ xs) + 1         ≡˘⟨ +ʷ+-✓ xs (notʷ xs) true ⟩
-      bits (xs +ʷ (notʷ xs) + true)            ≡⟨ cong bits (lemma₃ xs) ⟩
-      bits (true ∷ replicate {n = i} false)    ≡⟨ bits≡2^i i ⟩
-      2 ^ i                                    ∎
+      bits {i} xs + (bits (~ xs) + 1)       ≡˘⟨ +-assoc (bits xs) (bits (~ xs)) 1 ⟩
+      bits {i} xs + bits (~ xs) + 1         ≡˘⟨ +ʷ+-✓ xs (~ xs) true ⟩
+      bits (xs +ʷ (~ xs) + true)            ≡⟨ cong bits (lemma₃ xs) ⟩
+      bits (true ∷ replicate {n = i} false) ≡⟨ bits≡2^i i ⟩
+      2 ^ i                                 ∎
 
 infix 8 ↕_
 
@@ -607,6 +613,175 @@ _⊠_ {i} {k} xs ys = xs *ʷ ys %ʷ2^ i
   open ≡-Reasoning
 
   d = 2 ^ i
+
+--- equal ------------------------------------------------------------------------------------------
+
+infix 4 _≡ʷ_
+
+_≡ʷ_ : {i : ℕ} → Word i → Word i → Bool
+[]     ≡ʷ []     = true
+x ∷ xs ≡ʷ y ∷ ys = not (x xor y) ∧ (xs ≡ʷ ys)
+
+≡ʷ-✓₁ : ∀ {i} {x y : Word i} → (x ≡ʷ y) ≡ true → x ≡ y
+≡ʷ-✓₁ {zero}  {[]}         {[]}         refl = refl
+≡ʷ-✓₁ {suc i} {false ∷ xs} {false ∷ ys} p    = cong (false ∷_) (≡ʷ-✓₁ p)
+≡ʷ-✓₁ {suc i} {false ∷ xs} {true ∷ ys}  ()
+≡ʷ-✓₁ {suc i} {true ∷ xs}  {false ∷ ys} ()
+≡ʷ-✓₁ {suc i} {true ∷ xs}  {true ∷ ys}  p    = cong (true ∷_) (≡ʷ-✓₁ p)
+
+≡ʷ-✓₂ : ∀ {i} {x y : Word i} → (x ≡ʷ y) ≡ false → x ≢ y
+≡ʷ-✓₂ {zero}  {[]}         {[]}         ()
+≡ʷ-✓₂ {suc i} {false ∷ xs} {false ∷ ys} p    = ≡ʷ-✓₂ p ∘ ∷-injectiveʳ
+≡ʷ-✓₂ {suc i} {false ∷ xs} {true ∷ ys}  refl = λ ()
+≡ʷ-✓₂ {suc i} {true ∷ xs}  {false ∷ ys} refl = λ ()
+≡ʷ-✓₂ {suc i} {true ∷ xs}  {true ∷ ys}  p    = ≡ʷ-✓₂ p ∘ ∷-injectiveʳ
+
+--- not equal --------------------------------------------------------------------------------------
+
+infix 4 _≢ʷ_
+
+_≢ʷ_ : {i : ℕ} → Word i → Word i → Bool
+x ≢ʷ y = not (x ≡ʷ y)
+
+≢ʷ-✓₁ : ∀ {i} {x y : Word i} → (x ≢ʷ y) ≡ true → x ≢ y
+≢ʷ-✓₁ p = ≡ʷ-✓₂ (not-injective p)
+
+≢ʷ-✓₂ : ∀ {i} {x y : Word i} → (x ≢ʷ y) ≡ false → x ≡ y
+≢ʷ-✓₂ p = ≡ʷ-✓₁ (not-injective p)
+
+--- less than --------------------------------------------------------------------------------------
+
+infix 4 _<ʷ_
+
+_<ʷ_ : {i : ℕ} → Word i → Word i → Bool
+x <ʷ y =
+  case (false ∷ x) ⊞ ↕′ y of λ where
+    (c ∷ _) → not c
+
+module _ where
+  private
+    lem₁ : ∀ {i} x y → bits {i} x + (2 ^ i ∸ bits {i} y) < 2 ^ suc i
+    lem₁ {i} x y =
+      begin-strict
+        bits x + (2 ^ i ∸ bits y) <⟨ +-monoˡ-< (2 ^ i ∸ bits y) (bits<2^i x) ⟩
+        2 ^ i  + (2 ^ i ∸ bits y) ≤⟨ +-monoʳ-≤ (2 ^ i) (m∸n≤m (2 ^ i) (bits y)) ⟩
+        2 ^ i  + 2 ^ i            ≡⟨ reorg (2 ^ i) ⟩
+        2 ^ suc i                 ∎
+      where
+      open ≤-Reasoning
+
+      reorg : ∀ 2^i → 2^i + 2^i ≡ 2^i + (2^i + 0)
+      reorg = solve-∀
+
+    lem₂ : ∀ {i} x y → .⦃ _ : NonZero (2 ^ suc i) ⦄ →
+      bits {suc i} ((false ∷ x) ⊞ ↕′ y) ≡ bits x + (2 ^ i ∸ bits y)
+    lem₂ {i} x y =
+      begin
+        bits ((false ∷ x) ⊞ ↕′ y)                    ≡⟨ ⊞-✓ (false ∷ x) (↕′ y) ⟩
+        (bits (false ∷ x) + bits (↕′ y)) % 2 ^ suc i ≡⟨⟩
+        (bits x + bits (↕′ y)) % 2 ^ suc i           ≡⟨ kong (↕′-✓ y) ⟩
+        (bits x + (2 ^ i ∸ bits y)) % 2 ^ suc i      ≡⟨ x<m⇒x%m≡x (lem₁ x y) ⟩
+        bits x + (2 ^ i ∸ bits y)                    ∎
+      where open ≡-Reasoning
+
+    lem₃ : ∀ i {n x} → n ≡ bits {i} x → n < 2 ^ i
+    lem₃ i {n} {x} refl = bits<2^i x
+
+    lem₄ : ∀ i {n x} → n ≡ bits {suc i} (true ∷ x) → 2 ^ i ≤ n
+    lem₄ i {n} {x} refl =
+      begin
+        2 ^ i              ≡⟨⟩
+        0 + 2 ^ i          ≤⟨ +-monoˡ-≤ (2 ^ i) z≤n ⟩
+        bits x + 2 ^ i     ≡˘⟨ kong (*-identityʳ (2 ^ i)) ⟩
+        bits x + 2 ^ i * 1 ≡˘⟨ bits′SplitAcc x 0 1 ⟩
+        bits′ x 1          ≡⟨⟩
+        bits (true ∷ x)    ∎
+      where open ≤-Reasoning
+
+    lem₅ : ∀ {m n o} → o < m → m ≤ n + (m ∸ o) → o ≤ n
+    lem₅ {m}     {n}     {zero}  p₁       p₂       = z≤n
+    lem₅ {suc m} {zero}  {suc o} p₁       p₂       = contradiction p₂ (≤⇒≯ (m∸n≤m m o))
+    lem₅ {suc m} {suc n} {suc o} (s≤s p₁) (s≤s p₂) = s≤s (lem₅ p₁ p₂)
+
+    lem₆ : ∀ {m n o} → n + (m ∸ o) < m → n < o
+    lem₆ {suc m} {n}     {zero}  (s≤s p) = contradiction p (<⇒≱ loc)
+      where
+      loc : m < n + suc m
+      loc =
+        begin-strict
+          m         <⟨ n<1+n m ⟩
+          suc m     ≤⟨ +-monoˡ-≤ (suc m) z≤n ⟩
+          n + suc m ∎
+        where open ≤-Reasoning
+    lem₆ {suc m} {zero}  {suc o} p       = s≤s z≤n
+    lem₆ {suc m} {suc n} {suc o} (s≤s p) = s≤s (lem₆ p)
+
+  <ʷ-✓₁ : ∀ {i x y} → (x <ʷ y) ≡ true → bits {i} x < bits y
+  <ʷ-✓₁ {i} {x} {y} p    with (false ∷ x) ⊞ ↕′ y in eq
+  <ʷ-✓₁ {i} {x} {y} ()      | (true ∷ _)
+  <ʷ-✓₁ {i} {x} {y} refl    | (false ∷ r) = loc₃
+    where
+    loc₁ : bits x + (2 ^ i ∸ bits y) ≡ bits r
+    loc₁ = trans (sym (lem₂ x y ⦃ 2^i≢0 {suc i} ⦄)) (cong bits eq)
+
+    loc₂ : bits x + (2 ^ i ∸ bits y) < 2 ^ i
+    loc₂ = lem₃ i loc₁
+
+    loc₃ : bits x < bits y
+    loc₃ = lem₆ loc₂
+
+  <ʷ-✓₂ : ∀ {i} {x} {y} → (x <ʷ y) ≡ false → bits {i} x ≮ bits y
+  <ʷ-✓₂ {i} {x} {y} p    with (false ∷ x) ⊞ ↕′ y in eq
+  <ʷ-✓₂ {i} {x} {y} ()      | (false ∷ _)
+  <ʷ-✓₂ {i} {x} {y} refl    | (true ∷ r)  = ≤⇒≯ loc₃
+    where
+    loc₁ : bits x + (2 ^ i ∸ bits y) ≡ bits (true ∷ r)
+    loc₁ = trans (sym (lem₂ x y ⦃ 2^i≢0 {suc i} ⦄)) (cong bits eq)
+
+    loc₂ : 2 ^ i ≤ bits x + (2 ^ i ∸ bits y)
+    loc₂ = lem₄ i loc₁
+
+    loc₃ : bits y ≤ bits x
+    loc₃ = lem₅ (bits<2^i y) loc₂
+
+--- less than or equal to --------------------------------------------------------------------------
+
+infix 4 _≤ʷ_
+
+_≤ʷ_ : {i : ℕ} → Word i → Word i → Bool
+x ≤ʷ y = not (y <ʷ x)
+
+≤ʷ-✓₁ : ∀ {i} {x} {y} → (x ≤ʷ y) ≡ true → bits {i} x ≤ bits y
+≤ʷ-✓₁ {i} {x} {y} p = ≮⇒≥ (<ʷ-✓₂ {i} (not-injective p))
+
+≤ʷ-✓₂ : ∀ {i} {x} {y} → (x ≤ʷ y) ≡ false → bits {i} x ≰ bits y
+≤ʷ-✓₂ {i} {x} {y} p = <⇒≱ (<ʷ-✓₁ {i} (not-injective p))
+
+--- greater than -----------------------------------------------------------------------------------
+
+infix 4 _>ʷ_
+
+_>ʷ_ : {i : ℕ} → Word i → Word i → Bool
+x >ʷ y = y <ʷ x
+
+>ʷ-✓₁ : ∀ {i} {x} {y} → (x >ʷ y) ≡ true → bits {i} x > bits y
+>ʷ-✓₁ {i} {x} {y} p = <ʷ-✓₁ {i} p
+
+>ʷ-✓₂ : ∀ {i} {x} {y} → (x >ʷ y) ≡ false → bits {i} x ≯ bits y
+>ʷ-✓₂ {i} {x} {y} p = <ʷ-✓₂ {i} p
+
+--- greater than or equal to -----------------------------------------------------------------------
+
+infix 4 _≥ʷ_
+
+_≥ʷ_ : {i : ℕ} → Word i → Word i → Bool
+x ≥ʷ y = y ≤ʷ x
+
+≥ʷ-✓₁ : ∀ {i} {x} {y} → (x ≥ʷ y) ≡ true → bits {i} x ≥ bits y
+≥ʷ-✓₁ {i} {x} {y} p = ≤ʷ-✓₁ {i} p
+
+≥ʷ-✓₂ : ∀ {i} {x} {y} → (x ≥ʷ y) ≡ false → bits {i} x ≱ bits y
+≥ʷ-✓₂ {i} {x} {y} p = ≤ʷ-✓₂ {i} p
 
 --- ring solver ------------------------------------------------------------------------------------
 
@@ -805,3 +980,29 @@ module Solver (i : ℕ) .⦃ d≢0 : NonZero (2 ^ i) ⦄ where
         (no  x≢0) → nothing
 
   open NR almostCommutativeRing public
+
+--- SAT solver -------------------------------------------------------------------------------------
+
+data Formulaᵇ (i : ℕ) : Set
+data Formulaʷ (i : ℕ) : Set
+
+data Formulaᵇ i where
+  eqᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  neᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  ltᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  leᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  gtᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  geᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+
+data Formulaʷ i where
+  conʷ : Word i → Formulaʷ i
+  varʷ : ℕ → Formulaʷ i
+  notʷ : Formulaʷ i → Formulaʷ i
+  andʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  orʷ  : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  xorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  negʷ : Formulaʷ i → Formulaʷ i
+  addʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  subʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  mulʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  iteʷ : Formulaᵇ i → Formulaʷ i → Formulaʷ i → Formulaʷ i
