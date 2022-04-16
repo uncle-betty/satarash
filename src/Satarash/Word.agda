@@ -10,8 +10,8 @@ open import Data.Bool using (
 open import Data.Bool.Properties using (∧-zeroʳ ; ∧-identityʳ ; not-injective)
 open import Data.Maybe using (Maybe ; nothing ; just)
 open import Data.Nat using (
-    ℕ ; zero ; suc ; pred ; _+_ ; _*_ ; _∸_ ; _^_ ; _≤_ ; _≰_ ; z≤n ; s≤s ; _<_ ; _≮_ ; _>_ ; _≯_ ;
-    _≥_ ; _≱_ ; NonZero ; ≢-nonZero⁻¹
+    ℕ ; zero ; suc ; pred ; _+_ ; _*_ ; _∸_ ; _^_ ; _≤_ ; _≰_ ; z≤n ; s≤s ; z<s ; _<_ ; _≮_ ; _>_ ;
+    _≯_ ; _≥_ ; _≱_ ; NonZero ; ≢-nonZero⁻¹
   ) renaming (
     _≟_ to _≟ⁿ_
   )
@@ -20,20 +20,26 @@ open import Data.Nat.DivMod using (
     m≤n⇒m%n≡m ; [m+kn]%n≡m%n ; +-distrib-/
   )
 open import Data.Nat.Properties using (
-    ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ; +-identityʳ ; +-comm ; +-assoc ; +-monoˡ-≤ ;
-    +-monoʳ-≤ ; +-monoˡ-< ; +-monoʳ-< ; n<1+n ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ; *-suc ; *-zeroʳ ;
-    *-identityˡ ; *-identityʳ ; *-comm ; *-assoc ; *-monoˡ-≤ ; *-monoʳ-≤ ; *-distribˡ-+ ;
+    ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ;
+    +-identityʳ ; +-comm ; +-assoc ; +-suc ; +-monoˡ-≤ ; +-monoʳ-≤ ; +-monoˡ-< ; +-monoʳ-< ;
+    n<1+n ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ;
+    *-suc ; *-zeroʳ ; *-identityˡ ; *-identityʳ ; *-comm ; *-assoc ; *-monoˡ-≤ ; *-monoʳ-≤ ;
+    *-distribˡ-+ ;
     module ≤-Reasoning
   )
 open import Data.Nat.Tactic.RingSolver using (solve-∀)
-open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂)
-open import Data.Vec using (Vec ; [] ; _∷_ ; replicate ; _++_ ; splitAt ; take ; drop)
-open import Data.Vec.Properties using (≡-dec ; ∷-injectiveʳ)
-open import Function using (_$_ ; case_of_ ; _∘_)
+open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; uncurry) renaming (map to mapᵖ)
+open import Data.Vec using (
+    Vec ; [] ; _∷_ ; replicate ; _++_ ; splitAt ; take ; drop ; map ; zip ; foldr
+  )
+open import Data.Vec.Properties using (
+    ≡-dec ; ∷-injectiveʳ ; ∷-injective ; map-id ; map-∘ ; map-zip ; map-cong
+  )
+open import Function using (_$_ ; case_of_ ; _∘_ ; id ; const)
 open import Function.Reasoning
 open import Level using (0ℓ)
 open import Relation.Binary.PropositionalEquality using (
-    _≡_ ; _≢_ ; refl ; sym ; ≢-sym ; cong ; trans ; subst ; module ≡-Reasoning
+    _≡_ ; _≢_ ; refl ; sym ; ≢-sym ; cong ; cong₂ ; trans ; subst ; _≗_ ; module ≡-Reasoning
   )
 open import Relation.Binary using (DecidableEquality)
 open import Relation.Binary.PropositionalEquality.Algebra using (isMagma)
@@ -41,6 +47,8 @@ open import Relation.Nullary using (yes ; no)
 open import Relation.Nullary.Negation using (contradiction)
 
 open import Kong.Tactic using (kong)
+
+open import Satarash.Tseytin as T using (Formula₀ ; con₀ ; var₀ ; and₀ ; not₀ ; xor₀ ; eval₀)
 
 module Satarash.Word where
 
@@ -55,6 +63,11 @@ _≟ʷ_ : {i : ℕ} → DecidableEquality (Word i)
 _≟ʷ_ {i} = ≡-dec _≟ᵇ_
 
 --- useful helpers ---------------------------------------------------------------------------------
+
+lookup′ : {i : ℕ} → Word i → ℕ → Bool
+lookup′ []       n       = false
+lookup′ (b ∷ bs) zero    = b
+lookup′ (b ∷ bs) (suc n) = lookup′ bs n
 
 mn≢0 : ∀ m n → .⦃ NonZero m ⦄ → .⦃ NonZero n ⦄ → NonZero (m * n)
 mn≢0 (suc m) (suc n) = _
@@ -257,14 +270,12 @@ _+ᵇ_+_ x y c = (x ∧ y ∨ x ∧ c ∨ y ∧ c) ∷ (x xor y xor c) ∷ []
 --- logical operations -----------------------------------------------------------------------------
 
 ~ : {i : ℕ} → (xs : Word i) → Word i
-~ []       = []
-~ (x ∷ xs) = not x ∷ ~ xs
+~ xs = map not xs
 
 infixl 6 _∧ʷ_
 
 _∧ʷ_ : {i : ℕ} → (xs ys : Word i) → Word i
-_∧ʷ_ []       []       = []
-_∧ʷ_ (x ∷ xs) (y ∷ ys) = x ∧ y ∷ xs ∧ʷ ys
+xs ∧ʷ ys = map (uncurry _∧_) (zip xs ys)
 
 ∧ʷ-zeroʳ : ∀ {i} xs → xs ∧ʷ (replicate {n = i} false) ≡ replicate false
 ∧ʷ-zeroʳ {zero}  []       = refl
@@ -285,14 +296,12 @@ _∧ʷ_ (x ∷ xs) (y ∷ ys) = x ∧ y ∷ xs ∧ʷ ys
 infixl 5 _∨ʷ_
 
 _∨ʷ_ : {i : ℕ} → (xs ys : Word i) → Word i
-_∨ʷ_ []       []       = []
-_∨ʷ_ (x ∷ xs) (y ∷ ys) = (x ∨ y) ∷ (xs ∨ʷ ys)
+xs ∨ʷ ys = map (uncurry _∨_) (zip xs ys)
 
 infixl 5 _xorʷ_
 
 _xorʷ_ : {i : ℕ} → (xs ys : Word i) → Word i
-_xorʷ_ []       []       = []
-_xorʷ_ (x ∷ xs) (y ∷ ys) = (x xor y) ∷ (xs xorʷ ys)
+xs xorʷ ys = map (uncurry _xor_) (zip xs ys)
 
 --- truncation -------------------------------------------------------------------------------------
 
@@ -618,9 +627,14 @@ _⊠_ {i} {k} xs ys = xs *ʷ ys %ʷ2^ i
 
 infix 4 _≡ʷ_
 
+≡ʷ-fold : (Bool × Bool) → Bool → Bool
+≡ʷ-fold (x , y) a = not (x xor y) ∧ a
+
+≡ʷ-fold′ : (Formula₀ × Formula₀) → Formula₀ → Formula₀
+≡ʷ-fold′ (x , y) a = and₀ (not₀ (xor₀ x y)) a
+
 _≡ʷ_ : {i : ℕ} → Word i → Word i → Bool
-[]     ≡ʷ []     = true
-x ∷ xs ≡ʷ y ∷ ys = not (x xor y) ∧ (xs ≡ʷ ys)
+xs ≡ʷ ys = foldr _ ≡ʷ-fold true (zip xs ys)
 
 ≡ʷ-✓₁ : ∀ {i} {x y : Word i} → (x ≡ʷ y) ≡ true → x ≡ y
 ≡ʷ-✓₁ {zero}  {[]}         {[]}         refl = refl
@@ -988,21 +1002,231 @@ data Formulaʷ (i : ℕ) : Set
 
 data Formulaᵇ i where
   eqᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  {-
   neᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
   ltᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
   leᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
   gtᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
   geᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  -}
 
 data Formulaʷ i where
   conʷ : Word i → Formulaʷ i
   varʷ : ℕ → Formulaʷ i
   notʷ : Formulaʷ i → Formulaʷ i
   andʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  {-
   orʷ  : Formulaʷ i → Formulaʷ i → Formulaʷ i
-  xorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  eorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   negʷ : Formulaʷ i → Formulaʷ i
   addʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   subʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   mulʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   iteʷ : Formulaᵇ i → Formulaʷ i → Formulaʷ i → Formulaʷ i
+  -}
+
+evalᵇ : {i : ℕ} → (ℕ → Word i) → Formulaᵇ i → Bool
+evalʷ : {i : ℕ} → (ℕ → Word i) → Formulaʷ i → Word i
+
+evalᵇ v (eqᵇ x y) = evalʷ v x ≡ʷ evalʷ v y
+{-
+evalᵇ v (neᵇ x y) = evalʷ v x ≢ʷ evalʷ v y
+evalᵇ v (ltᵇ x y) = evalʷ v x <ʷ evalʷ v y
+evalᵇ v (leᵇ x y) = evalʷ v x ≤ʷ evalʷ v y
+evalᵇ v (gtᵇ x y) = evalʷ v x >ʷ evalʷ v y
+evalᵇ v (geᵇ x y) = evalʷ v x ≥ʷ evalʷ v y
+-}
+
+evalʷ v (conʷ x)     = x
+evalʷ v (varʷ x)     = v x
+evalʷ v (notʷ x)     = ~ (evalʷ v x)
+evalʷ v (andʷ x y)   = evalʷ v x ∧ʷ evalʷ v y
+{-
+evalʷ v (orʷ x y)    = evalʷ v x ∨ʷ evalʷ v y
+evalʷ v (eorʷ x y)   = evalʷ v x xorʷ evalʷ v y
+evalʷ v (negʷ x)     = ↕ (evalʷ v x)
+evalʷ v (addʷ x y)   = evalʷ v x ⊞ evalʷ v y
+evalʷ v (subʷ x y)   = evalʷ v x ⊟ evalʷ v y
+evalʷ v (mulʷ x y)   = evalʷ v x ⊠ evalʷ v y
+evalʷ v (iteʷ x y z) = if evalᵇ v x then evalʷ v y else evalʷ v z
+-}
+
+makeSeq : (k↑ k↓ : ℕ) → Vec ℕ k↓
+makeSeq k↑ zero     = []
+makeSeq k↑ (suc k↓) = k↑ ∷ makeSeq (suc k↑) k↓
+
+transformᵇ : {i : ℕ} → Formulaᵇ i → Formula₀
+transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
+
+transformᵇ {i} (eqᵇ x y) = foldr _ ≡ʷ-fold′ (con₀ true) (zip (transformʷ x) (transformʷ y))
+
+transformʷ {i} (conʷ x)   = map con₀ x
+transformʷ {i} (varʷ x)   = map var₀ (makeSeq (x * i) i)
+transformʷ {i} (notʷ x)   = map not₀ (transformʷ x)
+transformʷ {i} (andʷ x y) = map (uncurry and₀) (zip (transformʷ x) (transformʷ y))
+
+transformᵛ : {i : ℕ} → (ℕ → Word i) → ℕ → Bool
+transformᵛ {zero}  v n = false
+transformᵛ {suc i} v n = lookup′ (v (n / suc i)) (n % suc i)
+
+≡ʷ-eval : ∀ {i} v (x y : Vec Formula₀ i) →
+  eval₀ v (foldr _ ≡ʷ-fold′ (con₀ true) (zip x y)) ≡
+           foldr _ ≡ʷ-fold  true        (zip (map (eval₀ v) x) (map (eval₀ v) y))
+≡ʷ-eval {zero}  v []       []       = refl
+≡ʷ-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (≡ʷ-eval v xs ys)
+
+andʷEval : ∀ {i} v (x y : Vec Formula₀ i) →
+  map (eval₀ v) (map (uncurry and₀) (zip x y)) ≡
+                 map (uncurry _∧_)  (zip (map (eval₀ v) x) (map (eval₀ v) y))
+andʷEval {zero}  v []       []       = refl
+andʷEval {suc i} v (x ∷ xs) (y ∷ ys) = kong (andʷEval v xs ys)
+
+transformᵇ-✓ : ∀ {i} v f → eval₀ (transformᵛ {i} v) (transformᵇ f) ≡ evalᵇ v f
+transformʷ-✓ : ∀ {i} v f → map (eval₀ (transformᵛ {i} v)) (transformʷ f) ≡ evalʷ v f
+
+transformᵇ-✓ {i} v (eqᵇ x y) =
+  begin
+    eval₀ tv (foldr _ ≡ʷ-fold′ (con₀ true) (zip tx ty))                ≡⟨ kong (≡ʷ-eval tv tx ty) ⟩
+    foldr _ ≡ʷ-fold true (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty)) ≡⟨ kong (transformʷ-✓ v x) ⟩
+    foldr _ ≡ʷ-fold true (zip (evalʷ v x) (map (eval₀ tv) ty))         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    foldr _ ≡ʷ-fold true (zip (evalʷ v x) (evalʷ v y))                 ≡⟨⟩
+    evalʷ v x ≡ʷ evalʷ v y                                             ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+  ty = transformʷ y
+
+transformʷ-✓ {i} v (conʷ x) =
+  begin
+    map (eval₀ (transformᵛ v)) (map con₀ x) ≡˘⟨ map-∘ (eval₀ (transformᵛ v)) con₀ x ⟩
+    map id x                                ≡⟨ map-id x ⟩
+    x                                       ∎
+  where open ≡-Reasoning
+
+transformʷ-✓ {zero}  v (varʷ x) with [] ← v x = refl
+transformʷ-✓ {suc i} v (varʷ x) =
+  begin
+    map ev (transformʷ (varʷ x))                      ≡⟨⟩
+    map ev (map var₀ (makeSeq (x * suc i) (suc i)))   ≡˘⟨ map-∘ ev var₀ (makeSeq (x * suc i) (suc i)) ⟩
+    map (ev ∘ var₀) (makeSeq (x * suc i) (suc i))     ≡˘⟨ kong (+-identityʳ (x * suc i)) ⟩
+    map (ev ∘ var₀) (makeSeq (x * suc i + 0) (suc i)) ≡⟨ evalLookup (suc i) 0 (suc i) v x refl ⟩
+    map (lookup′ (v x)) (makeSeq 0 (suc i))           ≡⟨ mapLookup (v x) ⟩
+    v x                                               ∎
+  where
+  ev = eval₀ (transformᵛ v)
+
+  %-simp : ∀ i k x → k < suc i → (x * suc i + k) % suc i ≡ k
+  %-simp i k x k<i =
+    begin
+      (x * suc i + k) % suc i ≡⟨ kong (+-comm (x * suc i) k) ⟩
+      (k + x * suc i) % suc i ≡⟨ kong ([m+kn]%n≡m%n k x (suc i) ⦃ _ ⦄) ⟩
+      k % suc i               ≡⟨ x<m⇒x%m≡x k<i ⦃ _ ⦄ ⟩
+      k                       ∎
+    where open ≡-Reasoning
+
+  /-simp : ∀ i k x → k < suc i → (x * suc i + k) / suc i ≡ x
+  /-simp i k x k<i =
+    begin
+      (x * suc i + k) / suc i       ≡⟨ +-distrib-/ (x * suc i) k <-lem ⟩
+      x * suc i / suc i + k / suc i ≡⟨ kong (m*n/n≡m x (suc i) ⦃ _ ⦄) ⟩
+      x + k / suc i                 ≡⟨ kong (m<n⇒m/n≡0 k<i) ⟩
+      x + 0                         ≡⟨ +-identityʳ x ⟩
+      x                             ∎
+    where
+    <-lem : x * suc i % suc i + k % suc i < suc i
+    <-lem =
+      begin-strict
+        x * suc i % suc i + k % suc i ≡⟨ kong (m*n%n≡0 x (suc i) ⦃ _ ⦄) ⟩
+        k % suc i                     <⟨ m%n<n k (suc i) ⟩
+        suc i                         ∎
+      where open ≤-Reasoning
+
+    open ≡-Reasoning
+
+  evalLookup′ : ∀ i k v x → k < i → (eval₀ (transformᵛ {i} v) ∘ var₀) (x * i + k) ≡ lookup′ (v x) k
+  evalLookup′ (suc i) k v x k<i =
+    begin
+      lookup′ (v ((x * suc i + k) / suc i)) ((x * suc i + k) % suc i) ≡⟨ kong (%-simp i k x k<i) ⟩
+      lookup′ (v ((x * suc i + k) / suc i)) k                         ≡⟨ kong (/-simp i k x k<i) ⟩
+      lookup′ (v x) k                                                 ∎
+    where open ≡-Reasoning
+
+  evalLookup : ∀ i k↑ k↓ v x → i ≡ k↑ + k↓ →
+    map (eval₀ (transformᵛ {i} v) ∘ var₀) (makeSeq (x * i + k↑) k↓) ≡
+    map (lookup′ (v x)) (makeSeq k↑ k↓)
+  evalLookup i k↑ zero     v x i≡k↑+k↓ = refl
+  evalLookup i k↑ (suc k↓) v x i≡k↑+k↓ = cong₂ _∷_ (evalLookup′ i k↑ v x <-lem) recLem
+    where
+    <-lem : k↑ < i
+    <-lem =
+      begin-strict
+        k↑          ≡˘⟨ +-identityʳ k↑ ⟩
+        k↑ + 0      <⟨ +-monoʳ-< k↑ z<s ⟩
+        k↑ + suc k↓ ≡˘⟨ i≡k↑+k↓ ⟩
+        i           ∎
+      where open ≤-Reasoning
+
+    ≡-lem : i ≡ suc (k↑ + k↓)
+    ≡-lem = trans i≡k↑+k↓ (+-suc k↑ k↓)
+
+    recLem : map (eval₀ (transformᵛ v) ∘ var₀) (makeSeq (suc (x * i + k↑)) k↓) ≡
+      map (lookup′ (v x)) (makeSeq (suc k↑) k↓)
+    recLem =
+      begin
+        map (eval₀ (transformᵛ v) ∘ var₀) (makeSeq (suc (x * i + k↑)) k↓) ≡˘⟨ kong (+-suc (x * i) k↑) ⟩
+        map (eval₀ (transformᵛ v) ∘ var₀) (makeSeq (x * i + suc k↑) k↓)   ≡⟨ evalLookup i (suc k↑) k↓ v x ≡-lem ⟩
+        map (lookup′ (v x)) (makeSeq (suc k↑) k↓)                         ∎
+      where open ≡-Reasoning
+
+  seqSuc : ∀ k↑ k↓ → makeSeq (suc k↑) k↓ ≡ map suc (makeSeq k↑ k↓)
+  seqSuc k↑ zero     = refl
+  seqSuc k↑ (suc k↓) = cong (suc k↑ ∷_) (seqSuc (suc k↑) k↓)
+
+  mapLookup : ∀ {i} (w : Word i) → map (lookup′ w) (makeSeq 0 i) ≡ w
+  mapLookup {zero}  []       = refl
+  mapLookup {suc i} (b ∷ bs) = cong (b ∷_) (trans step (mapLookup bs))
+    where
+    step : map (lookup′ (b ∷ bs)) (makeSeq 1 i) ≡ map (lookup′ bs) (makeSeq 0 i)
+    step =
+      begin
+        map (lookup′ (b ∷ bs)) (makeSeq 1 i)           ≡⟨ kong (seqSuc 0 i) ⟩
+        map (lookup′ (b ∷ bs)) (map suc (makeSeq 0 i)) ≡˘⟨ map-∘ (lookup′ (b ∷ bs)) suc (makeSeq 0 i) ⟩
+        map (lookup′ (b ∷ bs) ∘ suc) (makeSeq 0 i)     ≡⟨⟩
+        map (lookup′ bs) (makeSeq 0 i)                 ∎
+      where open ≡-Reasoning
+
+  open ≡-Reasoning
+
+transformʷ-✓ {i} v (notʷ x) =
+  begin
+    map ev (transformʷ (notʷ x)) ≡⟨⟩
+    map ev (map not₀ tx)         ≡˘⟨ map-∘ ev not₀ tx ⟩
+    map (not ∘ ev) tx            ≡⟨ map-∘ not ev tx ⟩
+    map not (map ev tx)          ≡⟨ kong (transformʷ-✓ v x) ⟩
+    map not (evalʷ v x)          ≡⟨⟩
+    ~ (evalʷ v x)                ∎
+  where
+  open ≡-Reasoning
+
+  tx = transformʷ x
+  ev = eval₀ (transformᵛ v)
+
+transformʷ-✓ {i} v (andʷ x y) =
+  begin
+    map (eval₀ tv) (transformʷ (andʷ x y))                           ≡⟨⟩
+    map (eval₀ tv) (map (uncurry and₀) (zip tx ty))                  ≡⟨ andʷEval tv tx ty ⟩
+    map (uncurry _∧_) (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty))  ≡⟨ kong (transformʷ-✓ v x) ⟩
+    map (uncurry _∧_) (zip (evalʷ v x) (map (eval₀ tv) ty))          ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (uncurry _∧_) (zip (evalʷ v x) (evalʷ v y))                  ≡⟨⟩
+    evalʷ v x ∧ʷ evalʷ v y                                           ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+  ty = transformʷ y
+
+unsatʷ-✓ : ∀ {i} f → (∀ v → eval₀ v (transformᵇ {i} f) ≡ false) → (∀ v → evalᵇ v f ≡ false)
+unsatʷ-✓ f p v = trans (sym (transformᵇ-✓ v f)) (p (transformᵛ v))
