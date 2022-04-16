@@ -1,3 +1,5 @@
+module Satarash.Word where
+
 open import Algebra.Bundles using (CommutativeRing)
 open import Algebra.Structures using (
     IsMagma ; IsSemigroup ; IsMonoid ; IsGroup ; IsAbelianGroup ; IsRing ; IsCommutativeRing
@@ -50,8 +52,6 @@ open import Kong.Tactic using (kong)
 
 open import Satarash.Tseytin as T using (Formula₀ ; con₀ ; var₀ ; and₀ ; not₀ ; xor₀ ; eval₀)
 
-module Satarash.Word where
-
 --- words ------------------------------------------------------------------------------------------
 
 Word : ℕ → Set
@@ -61,6 +61,18 @@ infix 4 _≟ʷ_
 
 _≟ʷ_ : {i : ℕ} → DecidableEquality (Word i)
 _≟ʷ_ {i} = ≡-dec _≟ᵇ_
+
+Boolⁿ : (n : ℕ) → (S : Word n → Set) → Word 0 → Set
+Boolⁿ zero    S = S
+Boolⁿ (suc n) S = Boolⁿ n (λ w → (b : Bool) → S (b ∷ w))
+
+curryʷ : {n : ℕ} → {S : Word n → Set} → (∀ w → S w) → Boolⁿ n S []
+curryʷ {zero}  p = p []
+curryʷ {suc n} p = curryʷ (λ w b → p (b ∷ w))
+
+uncurryʷ : {n : ℕ} → {S : Word n → Set} → Boolⁿ n S [] → ∀ w → S w
+uncurryʷ {zero}  p []      = p
+uncurryʷ {suc n} p (b ∷ w) = uncurryʷ p w b
 
 --- useful helpers ---------------------------------------------------------------------------------
 
