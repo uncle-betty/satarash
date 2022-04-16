@@ -4,7 +4,7 @@ module Satarash.Tactic where
 
 open import Data.Bool using (Bool ; false ; true ; _∧_ ; _∨_ ; not ; _xor_ ; if_then_else_)
 open import Data.Char using (Char)
-open import Function using (_∘_ ; _$_ ; case_of_ ; const)
+open import Function using (_∘_ ; _$_ ; _$!_ ; case_of_ ; const)
 open import Data.List using (List ; [] ; _∷_ ; [_] ; length ; map ; _++_ ; _∷ʳ_)
 open import Data.Maybe using (Maybe ; nothing ; just ; fromMaybe)
 open import Data.Nat using (ℕ ; zero ; suc ; _+_ ; _∸_)
@@ -17,7 +17,7 @@ open import Relation.Binary.PropositionalEquality using (
     _≡_ ; refl ; cong ; trans ; module ≡-Reasoning
   )
 open import Reflection using (
-    TC ; typeError ; inferType ; quoteTC ; unify ; debugPrint ;
+    TC ; typeError ; inferType ; quoteTC ; normalise ; unify ; debugPrint ;
     ErrorPart ; strErr ; termErr ; nameErr
   )
 open import Reflection.AST using (
@@ -48,6 +48,7 @@ printParse-✓ nᵛ nᶜ f₀ ps f₇ p p₁ = P.printParse-✓ nᵛ nᶜ (trans
 
 postulate
   trust : (f₀ : Formula₀) → ∃[ f₇ ] transform₇ (not₀ f₀) ≡ just f₇ × ∀ v → eval₇ v f₇ ≡ false
+  trust′ : (S : Set) → S
 
 runSatarash : (f₀ : Formula₀) →
   TC (∃[ f₇ ] transform₇ (not₀ f₀) ≡ just f₇ × ∀ v → eval₇ v f₇ ≡ false)
@@ -174,7 +175,7 @@ translateGoal : Term → TC (List String × List String × List RelType × Formu
 translateGoal t = do
   vs , t′ ← collectVariables t
   let as = collectParts 1 t′
-  rs , f₀ ← translateParts (length vs) t′
+  rs , f₀ ← (translateParts $! length vs) t′
   pure (vs , as , rs , f₀)
 
 makeArgument : Term → Arg Term
@@ -232,8 +233,9 @@ macro
   satarash-∀ : Term → TC ⊤
   satarash-∀ hole = do
     goal ← inferType hole
+    goal′ ← normalise goal
 
-    vs , as , rs , f₀ ← translateGoal goal
+    vs , as , rs , f₀ ← translateGoal goal′
 
     debugPrint "satarash" 5 (strErr "vs =" ∷ map (strErr ∘ (" " ++ˢ_)) vs)
     debugPrint "satarash" 5 (strErr "as =" ∷ map (strErr ∘ (" " ++ˢ_)) as)
@@ -252,3 +254,16 @@ macro
     debugPrint "satarash" 10 (strErr "proof = " ∷ termErr proof ∷ [])
 
     unify hole proof
+
+  satarash-∀′ : Term → TC ⊤
+  satarash-∀′ hole = do
+    goal ← inferType hole
+    goal′ ← normalise goal
+
+    _ , _ , _ , f₀ ← translateGoal goal′
+
+    debugPrint "satarash" 5 (strErr "f₀ = " ∷ strErr (show₀ f₀) ∷ [])
+
+    _ ← runSatarash f₀
+
+    unify hole (def (quote trust′) (makeArgument goal ∷ []))
