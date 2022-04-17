@@ -15,7 +15,7 @@ open import Data.Nat.Properties using (
     m+n∸m≡n
   )
 open import Data.Nat.Show using () renaming (show to showⁿ)
-open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂)
+open import Data.Product using (∃-syntax ; _×_ ; _,_ ; proj₁ ; proj₂ ; map₁ ; map₂)
 open import Data.String using (String) renaming (_++_ to _++ˢ_)
 open import Data.Unit using (⊤ ; tt)
 open import Function using (_∘_ ; case_of_ ; flip ; _$_)
@@ -58,18 +58,6 @@ data Formula₀ : Set where
   iff₀ : Formula₀ → Formula₀ → Formula₀
   imp₀ : Formula₀ → Formula₀ → Formula₀
   ite₀ : Formula₀ → Formula₀ → Formula₀ → Formula₀
-
-show₀ : Formula₀ → String
-show₀ (con₀ true)  = "(con true)"
-show₀ (con₀ false) = "(con false)"
-show₀ (var₀ x)     = "(var " ++ˢ showⁿ x ++ˢ ")"
-show₀ (and₀ x y)   = "(and " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
-show₀ (or₀ x y)    = "(or " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
-show₀ (not₀ x)     = "(not " ++ˢ show₀ x ++ˢ ")"
-show₀ (xor₀ x y)   = "(xor " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
-show₀ (iff₀ x y)   = "(iff " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
-show₀ (imp₀ x y)   = "(imp " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
-show₀ (ite₀ x y z) = "(ite " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ show₀ z ++ˢ ")"
 
 eval₀ : (ℕ → Bool) → Formula₀ → Bool
 eval₀ v (con₀ x)     = x
@@ -170,6 +158,48 @@ Formula₇ = V.Formula
 
 eval₇ : (ℕ → Bool) → Formula₇ → Bool
 eval₇ = V.eval
+
+show₀ : Formula₀ → String
+show₀ (con₀ true)  = "(con true)"
+show₀ (con₀ false) = "(con false)"
+show₀ (var₀ x)     = "(var " ++ˢ showⁿ x ++ˢ ")"
+show₀ (and₀ x y)   = "(and " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (or₀ x y)    = "(or " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (not₀ x)     = "(not " ++ˢ show₀ x ++ˢ ")"
+show₀ (xor₀ x y)   = "(xor " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (iff₀ x y)   = "(iff " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (imp₀ x y)   = "(imp " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ ")"
+show₀ (ite₀ x y z) = "(ite " ++ˢ show₀ x ++ˢ " " ++ˢ show₀ y ++ˢ show₀ z ++ˢ ")"
+
+module _ where
+  stats₀ : Formula₀ → ℕ × ℕ
+
+  private
+    one : Formula₀ → ℕ × ℕ
+    one x = map₁ suc (stats₀ x)
+
+    two : Formula₀ → Formula₀ → ℕ × ℕ
+    two x y =
+      let nˣ , vˣ = stats₀ x in
+      let nʸ , vʸ = stats₀ y in
+      1 + nˣ + nʸ , vˣ ⊔ vʸ
+
+    three : Formula₀ → Formula₀ → Formula₀ → ℕ × ℕ
+    three x y z =
+      let nˣ , vˣ = stats₀ x in
+      let nʸ , vʸ = stats₀ y in
+      let nᶻ , vᶻ = stats₀ z in
+      1 + nˣ + nʸ + nᶻ , vˣ ⊔ vʸ ⊔ vᶻ
+
+  stats₀ (con₀ x)     = 1 , 0
+  stats₀ (var₀ x)     = 1 , suc x
+  stats₀ (and₀ x y)   = two x y
+  stats₀ (or₀ x y)    = two x y
+  stats₀ (not₀ x)     = one x
+  stats₀ (xor₀ x y)   = two x y
+  stats₀ (iff₀ x y)   = two x y
+  stats₀ (imp₀ x y)   = two x y
+  stats₀ (ite₀ x y z) = three x y z
 
 transform₁ : Formula₀ → Formula₁
 transform₁ (con₀ x)     = con₁ x
