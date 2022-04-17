@@ -544,7 +544,7 @@ module _ {i n : ℕ} (xs : Word i) (n≤i : n ≤ i) where
 +ʷ+-core′ {i} (x , y) (z ∷ zs) = +ᵇ+-core′ x y z ++ zs
 
 _+ʷ_+_ : {i : ℕ} → (xs ys : Word i) → (c : Bool) → Word (suc i)
-xs +ʷ ys + c = foldr (Word ∘ suc) +ʷ+-core (c ∷ []) (zip xs ys)
+xs +ʷ ys + c = foldr (Word ∘ suc) +ʷ+-core [ c ] (zip xs ys)
 
 +ʷ+-✓ : ∀ {i} xs ys c → bits (xs +ʷ ys + c) ≡ bits {i} xs + bits ys + bit c
 +ʷ+-✓ {zero}  []       []       c = refl
@@ -586,11 +586,14 @@ _⊞_ {i} xs ys = (xs +ʷ ys + false) %ʷ2^ i
 
 --- negation ---------------------------------------------------------------------------------------
 
-↕′_ : {i : ℕ} → (xs : Word i) → Word (suc i)
-↕′_ {zero}  []       = true ∷ []
-↕′_ {suc i} (x ∷ xs) =
-  case ↕′ xs of λ where
-    (z ∷ zs) → false +ᵇ not x + z ++ zs
+↕′-core : {i : ℕ} → Bool → Word (suc i) → Word (suc (suc i))
+↕′-core {i} x (z ∷ zs) = false +ᵇ not x + z ++ zs
+
+↕′-core′ : {i : ℕ} → Formula₀ → Vec Formula₀ (suc i) → Vec Formula₀ (suc (suc i))
+↕′-core′ {i} x (z ∷ zs) = +ᵇ+-core′ (con₀ false) (not₀ x) z ++ zs
+
+↕′ : {i : ℕ} → (xs : Word i) → Word (suc i)
+↕′ xs = foldr (Word ∘ suc) ↕′-core [ true ] xs
 
 ↕′-✓ : ∀ {i} xs → bits (↕′ xs) ≡ 2 ^ i ∸ bits {i} xs
 ↕′-✓ {i} xs =
@@ -633,10 +636,8 @@ _⊞_ {i} xs ys = (xs +ʷ ys + false) %ʷ2^ i
       bits (true ∷ replicate {n = i} false) ≡⟨ bits≡2^i i ⟩
       2 ^ i                                 ∎
 
-infix 8 ↕_
-
-↕_ : {i : ℕ} → (xs : Word i) → Word i
-↕_ {i} xs = ↕′ xs %ʷ2^ i
+↕ : {i : ℕ} → (xs : Word i) → Word i
+↕ {i} xs = ↕′ xs %ʷ2^ i
 
 ↕-✓ : ∀ {i} xs → .⦃ _ : NonZero (2 ^ i) ⦄ → bits {i} (↕ xs) ≡ (2 ^ i ∸ bits xs) % 2 ^ i
 ↕-✓  {i} xs =
@@ -1068,20 +1069,20 @@ module Solver (i : ℕ) .⦃ d≢0 : NonZero (2 ^ i) ⦄ where
       identity    = ⊞-identityˡ , ⊞-identityʳ
     }
 
-  isGroup : IsGroup _≡_ _⊞_ elem₀ ↕_
+  isGroup : IsGroup _≡_ _⊞_ elem₀ ↕
   isGroup = record {
       isMonoid = isMonoid ;
       inverse  = ⊞-inverseˡ , ⊞-inverseʳ ;
       ⁻¹-cong  = λ { refl → refl }
     }
 
-  isAbelianGroup : IsAbelianGroup _≡_ _⊞_ elem₀ ↕_
+  isAbelianGroup : IsAbelianGroup _≡_ _⊞_ elem₀ ↕
   isAbelianGroup = record {
       isGroup = isGroup ;
       comm    = ⊞-comm
     }
 
-  isRing : IsRing _≡_ _⊞_ _⊠_ ↕_ elem₀ (elem₁ i)
+  isRing : IsRing _≡_ _⊞_ _⊠_ ↕ elem₀ (elem₁ i)
   isRing = record {
       +-isAbelianGroup = isAbelianGroup ;
       *-cong           = λ { refl refl → refl } ;
@@ -1091,7 +1092,7 @@ module Solver (i : ℕ) .⦃ d≢0 : NonZero (2 ^ i) ⦄ where
       zero             = ⊠-zeroˡ , ⊠-zeroʳ
     }
 
-  isCommutativeRing : IsCommutativeRing _≡_ _⊞_ _⊠_ ↕_ elem₀ (elem₁ i)
+  isCommutativeRing : IsCommutativeRing _≡_ _⊞_ _⊠_ ↕ elem₀ (elem₁ i)
   isCommutativeRing = record {
       isRing = isRing ;
       *-comm = ⊠-comm
@@ -1103,7 +1104,7 @@ module Solver (i : ℕ) .⦃ d≢0 : NonZero (2 ^ i) ⦄ where
       _≈_               = _≡_ ;
       _+_               = _⊞_ ;
       _*_               = _⊠_ ;
-      -_                = ↕_ ;
+      -_                = ↕ ;
       0#                = elem₀ ;
       1#                = elem₁ i ;
       isCommutativeRing = isCommutativeRing
@@ -1146,8 +1147,8 @@ data Formulaʷ i where
   {-
   orʷ  : Formulaʷ i → Formulaʷ i → Formulaʷ i
   eorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
-  negʷ : Formulaʷ i → Formulaʷ i
   -}
+  negʷ : Formulaʷ i → Formulaʷ i
   addʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   {-
   subʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
@@ -1174,8 +1175,8 @@ evalʷ v (andʷ x y)   = evalʷ v x ∧ʷ evalʷ v y
 {-
 evalʷ v (orʷ x y)    = evalʷ v x ∨ʷ evalʷ v y
 evalʷ v (eorʷ x y)   = evalʷ v x xorʷ evalʷ v y
-evalʷ v (negʷ x)     = ↕ (evalʷ v x)
 -}
+evalʷ v (negʷ x)     = ↕ (evalʷ v x)
 evalʷ v (addʷ x y)   = evalʷ v x ⊞ evalʷ v y
 {-
 evalʷ v (subʷ x y)   = evalʷ v x ⊟ evalʷ v y
@@ -1196,8 +1197,10 @@ transformʷ {i} (conʷ x)   = map con₀ x
 transformʷ {i} (varʷ x)   = map var₀ (makeSeq (x * i) i)
 transformʷ {i} (notʷ x)   = map not₀ (transformʷ x)
 transformʷ {i} (andʷ x y) = map (uncurry and₀) (zip (transformʷ x) (transformʷ y))
+transformʷ {i} (negʷ x)   = drop 1
+  (foldr (Vec Formula₀ ∘ suc) ↕′-core′  [ con₀ true ] (transformʷ x))
 transformʷ {i} (addʷ x y) = drop 1
-  (foldr (Vec Formula₀ ∘ suc) +ʷ+-core′ (con₀ false ∷ []) (zip (transformʷ x) (transformʷ y)))
+  (foldr (Vec Formula₀ ∘ suc) +ʷ+-core′ [ con₀ false ] (zip (transformʷ x) (transformʷ y)))
 
 transformᵛ : {i : ℕ} → (ℕ → Word i) → ℕ → Bool
 transformᵛ {zero}  v n = false
@@ -1214,6 +1217,18 @@ andʷEval : ∀ {i} v (x y : Vec Formula₀ i) →
                  map (uncurry _∧_)  (zip (map (eval₀ v) x) (map (eval₀ v) y))
 andʷEval {zero}  v []       []       = refl
 andʷEval {suc i} v (x ∷ xs) (y ∷ ys) = kong (andʷEval v xs ys)
+
+↕′-eval : ∀ {i} v (x : Formula₀) (z : Vec Formula₀ (suc i)) →
+  map (eval₀ v) (↕′-core′ x z) ≡ ↕′-core (eval₀ v x) (map (eval₀ v) z)
+↕′-eval {i} v x (z ∷ zs) = refl
+
+negʷEval : ∀ {i} v (x : Vec Formula₀ i) →
+    map (eval₀ v) (foldr (Vec Formula₀ ∘ suc) ↕′-core′ [ con₀ true ] x) ≡
+                   foldr (Word ∘ suc)         ↕′-core  [ true ]      (map (eval₀ v) x)
+negʷEval {zero}  v []       = refl
+negʷEval {suc i} v (x ∷ xs)
+  rewrite ↕′-eval v x (foldr (Vec Formula₀ ∘ suc) ↕′-core′ [ con₀ true ] xs)
+  = kong (negʷEval v xs)
 
 +ʷ+-eval : ∀ {i} v (x y : Formula₀) (z : Vec Formula₀ (suc i)) →
   map (eval₀ v) (+ʷ+-core′ (x , y) z) ≡ +ʷ+-core (eval₀ v x , eval₀ v y) (map (eval₀ v) z)
@@ -1373,6 +1388,26 @@ transformʷ-✓ {i} v (andʷ x y) =
   tv = transformᵛ v
   tx = transformʷ x
   ty = transformʷ y
+
+transformʷ-✓ {i} v (negʷ x) =
+  begin
+    map (eval₀ tv) (transformʷ (negʷ x))                ≡⟨⟩
+    map (eval₀ tv) (drop 1 (foldr Sn′ ↕′-core′ a₀′ tx)) ≡˘⟨ drop-distr-map (eval₀ tv) 1 (foldr Sn′ ↕′-core′ a₀′ tx) ⟩
+    drop 1 (map (eval₀ tv) (foldr Sn′ ↕′-core′ a₀′ tx)) ≡⟨ kong (negʷEval tv tx) ⟩
+    drop 1 (foldr Sn ↕′-core a₀ (map (eval₀ tv) tx))    ≡⟨ kong (transformʷ-✓ v x) ⟩
+    drop 1 (foldr Sn ↕′-core a₀ (evalʷ v x))            ≡⟨⟩
+    ↕ (evalʷ v x)                                       ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+
+  a₀′ = [ con₀ true ]
+  a₀ = [ true ]
+
+  Sn′ = Vec Formula₀ ∘ suc
+  Sn = Word ∘ suc
 
 transformʷ-✓ {i} v (addʷ x y) =
   begin
