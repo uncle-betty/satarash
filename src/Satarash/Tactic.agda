@@ -17,7 +17,7 @@ open import Relation.Binary.PropositionalEquality using (
     _≡_ ; refl ; cong ; trans ; module ≡-Reasoning
   )
 open import Reflection using (
-    TC ; typeError ; inferType ; quoteTC ; normalise ; unify ; debugPrint ;
+    TC ; typeError ; inferType ; quoteTC ; unify ; debugPrint ;
     ErrorPart ; strErr ; termErr ; nameErr
   )
 open import Reflection.AST using (
@@ -233,9 +233,8 @@ macro
   satarash-∀ : Term → TC ⊤
   satarash-∀ hole = do
     goal ← inferType hole
-    goal′ ← normalise goal
 
-    vs , as , rs , f₀ ← translateGoal goal′
+    vs , as , rs , f₀ ← translateGoal goal
 
     debugPrint "satarash" 5 (strErr "vs =" ∷ map (strErr ∘ (" " ++ˢ_)) vs)
     debugPrint "satarash" 5 (strErr "as =" ∷ map (strErr ∘ (" " ++ˢ_)) as)
@@ -258,9 +257,8 @@ macro
   satarash-∀′ : Term → TC ⊤
   satarash-∀′ hole = do
     goal ← inferType hole
-    goal′ ← normalise goal
 
-    _ , _ , _ , f₀ ← translateGoal goal′
+    _ , _ , _ , f₀ ← translateGoal goal
 
     debugPrint "satarash" 5 (strErr "f₀ = " ∷ strErr (show₀ f₀) ∷ [])
 
