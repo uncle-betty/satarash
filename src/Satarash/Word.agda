@@ -24,9 +24,9 @@ open import Data.Nat.DivMod using (
 open import Data.Nat.Properties using (
     ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ;
     +-identityʳ ; +-comm ; +-assoc ; +-suc ; +-monoˡ-≤ ; +-monoʳ-≤ ; +-monoˡ-< ; +-monoʳ-< ;
-    n<1+n ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ;
+    n<1+n ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ; m+[n∸m]≡n ;
     *-suc ; *-zeroʳ ; *-identityˡ ; *-identityʳ ; *-comm ; *-assoc ; *-monoˡ-≤ ; *-monoʳ-≤ ;
-    *-distribˡ-+ ;
+    *-monoˡ-< ; *-distribˡ-+ ; *-distribʳ-+ ; ^-distribˡ-+-* ;
     module ≤-Reasoning
   )
 open import Data.Nat.Tactic.RingSolver using (solve-∀)
@@ -62,6 +62,9 @@ infix 4 _≟ʷ_
 _≟ʷ_ : {i : ℕ} → DecidableEquality (Word i)
 _≟ʷ_ {i} = ≡-dec _≟ᵇ_
 
+substʷ : {i k : ℕ} → i ≡ k → Word i → Word k
+substʷ = subst Word
+
 Boolⁿ : (n : ℕ) → (S : Word n → Set) → Word 0 → Set
 Boolⁿ zero    S = S
 Boolⁿ (suc n) S = Boolⁿ n (λ w → (b : Bool) → S (b ∷ w))
@@ -83,6 +86,13 @@ lookup′ (b ∷ bs) (suc n) = lookup′ bs n
 
 mn≢0 : ∀ m n → .⦃ NonZero m ⦄ → .⦃ NonZero n ⦄ → NonZero (m * n)
 mn≢0 (suc m) (suc n) = _
+
+2^i≢0 : ∀ i → NonZero (2 ^ i)
+2^i≢0 zero    = _
+2^i≢0 (suc i) = mn≢0 2 (2 ^ i) ⦃ _ ⦄ ⦃ 2^i≢0 i ⦄
+
+%-congʳ : ∀ x {y z} .⦃ _ : NonZero y ⦄ .⦃ _ : NonZero z ⦄ → y ≡ z → x % y ≡ x % z
+%-congʳ x {y} {z} refl = refl
 
 x<m⇒x%m≡x : ∀ {x m} → x < m → .⦃ _ : NonZero m ⦄ → x % m ≡ x
 x<m⇒x%m≡x {x} {suc m} (s≤s x≤m-1) = m≤n⇒m%n≡m x≤m-1
@@ -127,6 +137,22 @@ x<m⇒x%m≡x {x} {suc m} (s≤s x≤m-1) = m≤n⇒m%n≡m x≤m-1
   (y * x)     % m ≡⟨ kong (*-comm y x) ⟩
   (x * y)     % m ∎
   where open ≡-Reasoning
+
+%-* : ∀ x m n .⦃ _ : NonZero m ⦄ .⦃ _ : NonZero n ⦄ .⦃ _ : NonZero (m * n) ⦄ →
+  x % m * n ≡ x * n % (m * n)
+%-* x m n ⦃ m≢0 ⦄ ⦃ m*n≢0 ⦄ =
+  begin
+    x % m * n                               ≡˘⟨ x<m⇒x%m≡x <-lem ⟩
+    x % m * n                     % (m * n) ≡˘⟨ [m+kn]%n≡m%n (x % m * n) (x / m) (m * n) ⟩
+    (x % m * n + x / m * (m * n)) % (m * n) ≡˘⟨ kong (*-assoc (x / m) m n) ⟩
+    (x % m * n + x / m * m * n)   % (m * n) ≡˘⟨ kong (*-distribʳ-+ n (x % m) (x / m * m)) ⟩
+    (x % m + x / m * m) * n       % (m * n) ≡˘⟨ kong (m≡m%n+[m/n]*n x m ⦃ m≢0 ⦄) ⟩
+    x * n                         % (m * n) ∎
+  where
+  open ≡-Reasoning
+
+  <-lem : x % m * n < m * n
+  <-lem = *-monoˡ-< n (m%n<n x m)
 
 --- evaluation -------------------------------------------------------------------------------------
 
@@ -231,6 +257,9 @@ bits′SplitWord : ∀ {i k} xs ys a → bits′ (xs ++ ys) a ≡ bits′ {k} ys
 bits′SplitWord {zero}  {k} []       ys a = refl
 bits′SplitWord {suc i} {k} (x ∷ xs) ys a = bits′SplitWord xs ys (2 * a + bit x)
 
+bitsSubstʷ : ∀ {i k} (p : i ≡ k) xs → bits (substʷ p xs) ≡ bits xs
+bitsSubstʷ {i} {k} refl xs = refl
+
 module _ where
   private
     lemma₁ : ∀ {i} xs ys {ax ay} → ax < ay → bits′ {i} xs ax < bits′ {i} ys ay
@@ -317,11 +346,6 @@ xs xorʷ ys = map (uncurry _xor_) (zip xs ys)
 
 --- truncation -------------------------------------------------------------------------------------
 
-instance
-  2^i≢0 : ∀ {i} → NonZero (2 ^ i)
-  2^i≢0 {zero}  = _
-  2^i≢0 {suc i} = mn≢0 2 (2 ^ i) ⦃ _ ⦄ ⦃ 2^i≢0 {i} ⦄
-
 bits-/ : ∀ {i k} xs ys → .⦃ _ : NonZero (2 ^ k) ⦄ → bits {i + k} (xs ++ ys) / 2 ^ k ≡ bits {i} xs
 bits-/ {i} {k} xs ys ⦃ d≢0 ⦄ =
   begin-equality
@@ -382,9 +406,9 @@ syntax %ʷ2^′ k xs = xs %ʷ2^ k
   with hs , ls , refl ← splitAt i xs
   = sym (bits-% hs ls)
 
-modDiv : ∀ {i k} xs ys → .⦃ _ : NonZero (2 ^ k) ⦄ →
+modDiv : ∀ {i k} xs ys →
   bits (xs ++ ys) ≡ bits {k} ys + bits {i} xs * 2 ^ k
-modDiv {i} {k} xs ys ⦃ d≢0 ⦄ =
+modDiv {i} {k} xs ys =
   begin
     bits (xs ++ ys)                               ≡⟨ m≡m%n+[m/n]*n (bits (xs ++ ys)) d ⟩
     bits (xs ++ ys) % d + bits (xs ++ ys) / d * d ≡⟨ kong (bits-% xs ys ⦃ d≢0 ⦄) ⟩
@@ -392,6 +416,9 @@ modDiv {i} {k} xs ys ⦃ d≢0 ⦄ =
     bits ys + bits xs * d                         ∎
   where
   d = 2 ^ k
+
+  instance
+    d≢0 = 2^i≢0 k
 
   open ≡-Reasoning
 
@@ -405,13 +432,13 @@ _*ʷ2^_ xs k = xs ++ replicate false
 *ʷ2^-✓ : ∀ {i} xs k → bits (xs *ʷ2^ k) ≡ bits {i} xs * 2 ^ k
 *ʷ2^-✓ {i} xs k =
   begin
-    bits (xs *ʷ2^ k)                              ≡⟨ modDiv xs (replicate false) ⦃ 2^i≢0 {k} ⦄ ⟩
+    bits (xs *ʷ2^ k)                              ≡⟨ modDiv xs (replicate false) ⟩
     bits (replicate {n = k} false) + bits xs * d  ≡⟨ kong (bits≡0 k) ⟩
     bits xs * d                                   ∎
   where
-  d = 2 ^ k
-
   open ≡-Reasoning
+
+  d = 2 ^ k
 
 _0⋯_ : (i : ℕ) → {k : ℕ} → (xs : Word k) → Word (i + k)
 _0⋯_ i {k} xs = replicate false ++ xs
@@ -419,11 +446,89 @@ _0⋯_ i {k} xs = replicate false ++ xs
 0⋯-✓ : ∀ i {k} xs → bits (i 0⋯ xs) ≡ bits {k} xs
 0⋯-✓ i {k} xs =
   begin
-    bits (i 0⋯ xs)                                   ≡⟨ modDiv (replicate {n = i} false) xs ⦃ 2^i≢0 {k} ⦄ ⟩
+    bits (i 0⋯ xs)                                   ≡⟨ modDiv (replicate {n = i} false) xs ⟩
     bits xs + bits (replicate {n = i} false) * 2 ^ k ≡⟨ kong (bits≡0 i) ⟩
     bits xs + 0                                      ≡⟨ +-identityʳ (bits xs) ⟩
     bits xs                                          ∎
-  where open ≡-Reasoning
+  where
+  open ≡-Reasoning
+
+--- shift operations -------------------------------------------------------------------------------
+
+module _ {i n : ℕ} (xs : Word i) (n≤i : n ≤ i) where
+  open ≡-Reasoning
+
+  i≡[i∸n]+n : i ≡ (i ∸ n) + n
+  i≡[i∸n]+n =
+    begin
+      i           ≡˘⟨ m+[n∸m]≡n n≤i ⟩
+      n + (i ∸ n) ≡⟨ +-comm n (i ∸ n) ⟩
+      (i ∸ n) + n ∎
+
+  [i∸n]+n≡i : (i ∸ n) + n ≡ i
+  [i∸n]+n≡i = sym i≡[i∸n]+n
+
+  n+[i∸n]≡i : n + (i ∸ n) ≡ i
+  n+[i∸n]≡i =
+    begin
+      n + (i ∸ n) ≡⟨ +-comm n (i ∸ n) ⟩
+      (i ∸ n) + n ≡⟨ m∸n+n≡m n≤i ⟩
+      i           ∎
+
+  i≡n+[i∸n] : i ≡ n + (i ∸ n)
+  i≡n+[i∸n] = sym n+[i∸n]≡i
+
+  instance
+    _ = 2^i≢0 i
+    _ = 2^i≢0 n
+    _ = 2^i≢0 (i ∸ n)
+    _ = 2^i≢0 (i ∸ n + n)
+    _ = mn≢0 (2 ^ (i ∸ n)) (2 ^ n)
+
+  infix 7 _⟫_
+
+  _⟫_ : Word i
+  _⟫_ = substʷ n+[i∸n]≡i (n 0⋯ (substʷ i≡[i∸n]+n xs /ʷ2^ n))
+
+  ⟫-✓ : bits _⟫_ ≡ bits xs / 2 ^ n
+  ⟫-✓ =
+    begin
+      bits _⟫_                            ≡⟨⟩
+      bits (sub₁ (n 0⋯ (sub₂ xs /ʷ2^ n))) ≡⟨ bitsSubstʷ n+[i∸n]≡i (n 0⋯ (sub₂ xs /ʷ2^ n)) ⟩
+      bits (n 0⋯ (sub₂ xs /ʷ2^ n))        ≡⟨ 0⋯-✓ n (sub₂ xs /ʷ2^ n) ⟩
+      bits (sub₂ xs /ʷ2^ n)               ≡⟨ /ʷ2^-✓ n (sub₂ xs) ⟩
+      bits (sub₂ xs) / 2 ^ n              ≡⟨ cong (_/ 2 ^ n) (bitsSubstʷ i≡[i∸n]+n xs) ⟩
+      bits xs / 2 ^ n                     ∎
+    where
+    sub₁ = substʷ n+[i∸n]≡i
+    sub₂ = substʷ i≡[i∸n]+n
+
+  infix 7 _⟪_
+
+  _⟪_ : Word i
+  _⟪_ = substʷ [i∸n]+n≡i (substʷ i≡n+[i∸n] xs %ʷ2^ (i ∸ n) *ʷ2^ n)
+
+  ⟪-✓ : bits _⟪_ ≡ bits xs * 2 ^ n % 2 ^ i
+  ⟪-✓ =
+    begin
+      bits _⟪_                                  ≡⟨⟩
+      bits (sub₁ (sub₂ xs %ʷ2^ (i ∸ n) *ʷ2^ n)) ≡⟨ bitsSubstʷ [i∸n]+n≡i (sub₂ xs %ʷ2^ (i ∸ n) *ʷ2^ n) ⟩
+      bits (sub₂ xs %ʷ2^ (i ∸ n) *ʷ2^ n)        ≡⟨ *ʷ2^-✓ (sub₂ xs %ʷ2^ (i ∸ n)) n ⟩
+      bits (sub₂ xs %ʷ2^ (i ∸ n)) * 2 ^ n       ≡⟨ cong (_* 2 ^ n) (%ʷ2^-✓ (i ∸ n) (sub₂ xs)) ⟩
+      bits (sub₂ xs) % 2 ^ (i ∸ n) * 2 ^ n      ≡⟨ cong (λ # → # % 2 ^ (i ∸ n) * 2 ^ n) (bitsSubstʷ i≡n+[i∸n] xs) ⟩
+      bits xs % 2 ^ (i ∸ n) * 2 ^ n             ≡⟨ %-* (bits xs) (2 ^ (i ∸ n)) (2 ^ n) ⟩
+      bits xs * 2 ^ n % (2 ^ (i ∸ n) * 2 ^ n)   ≡⟨ %-congʳ (bits xs * 2 ^ n) expLem ⟩
+      bits xs * 2 ^ n % 2 ^ i                   ∎
+    where
+    sub₁ = substʷ [i∸n]+n≡i
+    sub₂ = substʷ i≡n+[i∸n]
+
+    expLem : 2 ^ (i ∸ n) * 2 ^ n ≡ 2 ^ i
+    expLem =
+      begin
+        2 ^ (i ∸ n) * 2 ^ n ≡˘⟨ ^-distribˡ-+-* 2 (i ∸ n) n ⟩
+        2 ^ (i ∸ n + n)     ≡⟨ kong (m∸n+n≡m n≤i) ⟩
+        2 ^ i               ∎
 
 --- addition ---------------------------------------------------------------------------------------
 
@@ -545,12 +650,12 @@ _⊟_ {i} xs ys = xs ⊞ (↕ ys)
 
 ⊟-✓ : ∀ {i} xs ys → .⦃ _ : NonZero (2 ^ i) ⦄ →
   bits {i} (xs ⊟ ys) ≡ (bits xs + (2 ^ i ∸ bits ys)) % 2 ^ i
-⊟-✓ {i} xs ys ⦃ 2^i≢0 ⦄ =
+⊟-✓ {i} xs ys =
   begin
     bits (xs ⊟ ys)                    ≡⟨ %ʷ2^-✓ i (xs ⊞ (↕ ys)) ⟩
-    bits (xs ⊞ (↕ ys)) % d            ≡⟨ kong (⊞-✓ xs (↕ ys) ⦃ 2^i≢0 ⦄) ⟩
+    bits (xs ⊞ (↕ ys)) % d            ≡⟨ kong (⊞-✓ xs (↕ ys) ⦃ 2^i≢0 i ⦄) ⟩
     (bits xs + bits (↕ ys)) % d % d   ≡⟨ m%n%n≡m%n (bits xs + bits (↕ ys)) d ⟩
-    (bits xs + bits (↕ ys)) % d       ≡⟨ kong (↕-✓ ys ⦃ 2^i≢0 ⦄) ⟩
+    (bits xs + bits (↕ ys)) % d       ≡⟨ kong (↕-✓ ys ⦃ 2^i≢0 i ⦄) ⟩
     (bits xs + (d ∸ bits ys) % d) % d ≡⟨ %-%-+ʳ (bits xs) (d ∸ bits ys) d ⟩
     (bits xs + (d ∸ bits ys)) % d     ∎
   where
@@ -561,7 +666,7 @@ _⊟_ {i} xs ys = xs ⊞ (↕ ys)
 --- multiplication ---------------------------------------------------------------------------------
 
 ++-swap : (i k : ℕ) → (xs : Word (i + k)) → Word (k + i)
-++-swap i k = subst (Word) (+-comm i k)
+++-swap i k = substʷ (+-comm i k)
 
 ++-swap-✓ : ∀ i k xs → bits (++-swap i k xs) ≡ bits xs
 ++-swap-✓ i k xs rewrite +-comm i k = refl
@@ -699,8 +804,7 @@ module _ where
       reorg : ∀ 2^i → 2^i + 2^i ≡ 2^i + (2^i + 0)
       reorg = solve-∀
 
-    lem₂ : ∀ {i} x y → .⦃ _ : NonZero (2 ^ suc i) ⦄ →
-      bits {suc i} ((false ∷ x) ⊞ ↕′ y) ≡ bits x + (2 ^ i ∸ bits y)
+    lem₂ : ∀ {i} x y → bits {suc i} ((false ∷ x) ⊞ ↕′ y) ≡ bits x + (2 ^ i ∸ bits y)
     lem₂ {i} x y =
       begin
         bits ((false ∷ x) ⊞ ↕′ y)                    ≡⟨ ⊞-✓ (false ∷ x) (↕′ y) ⟩
@@ -708,7 +812,11 @@ module _ where
         (bits x + bits (↕′ y)) % 2 ^ suc i           ≡⟨ kong (↕′-✓ y) ⟩
         (bits x + (2 ^ i ∸ bits y)) % 2 ^ suc i      ≡⟨ x<m⇒x%m≡x (lem₁ x y) ⟩
         bits x + (2 ^ i ∸ bits y)                    ∎
-      where open ≡-Reasoning
+      where
+      open ≡-Reasoning
+
+      instance
+        _ = 2^i≢0 (suc i)
 
     lem₃ : ∀ i {n x} → n ≡ bits {i} x → n < 2 ^ i
     lem₃ i {n} {x} refl = bits<2^i x
@@ -748,7 +856,7 @@ module _ where
   <ʷ-✓₁ {i} {x} {y} refl    | (false ∷ r) = loc₃
     where
     loc₁ : bits x + (2 ^ i ∸ bits y) ≡ bits r
-    loc₁ = trans (sym (lem₂ x y ⦃ 2^i≢0 {suc i} ⦄)) (cong bits eq)
+    loc₁ = trans (sym (lem₂ x y)) (cong bits eq)
 
     loc₂ : bits x + (2 ^ i ∸ bits y) < 2 ^ i
     loc₂ = lem₃ i loc₁
@@ -762,7 +870,7 @@ module _ where
   <ʷ-✓₂ {i} {x} {y} refl    | (true ∷ r)  = ≤⇒≯ loc₃
     where
     loc₁ : bits x + (2 ^ i ∸ bits y) ≡ bits (true ∷ r)
-    loc₁ = trans (sym (lem₂ x y ⦃ 2^i≢0 {suc i} ⦄)) (cong bits eq)
+    loc₁ = trans (sym (lem₂ x y)) (cong bits eq)
 
     loc₂ : 2 ^ i ≤ bits x + (2 ^ i ∸ bits y)
     loc₂ = lem₄ i loc₁
