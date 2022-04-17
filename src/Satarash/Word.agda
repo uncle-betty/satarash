@@ -32,10 +32,10 @@ open import Data.Nat.Properties using (
 open import Data.Nat.Tactic.RingSolver using (solve-∀)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; uncurry) renaming (map to mapᵖ)
 open import Data.Vec using (
-    Vec ; [] ; _∷_ ; replicate ; _++_ ; splitAt ; take ; drop ; map ; zip ; foldr
+    Vec ; [] ; _∷_ ; [_] ; replicate ; _++_ ; splitAt ; take ; drop ; map ; zip ; foldr
   )
 open import Data.Vec.Properties using (
-    ≡-dec ; ∷-injectiveʳ ; ∷-injective ; map-id ; map-∘ ; map-zip ; map-cong
+    ≡-dec ; ∷-injectiveʳ ; ∷-injective ; map-id ; map-∘ ; map-zip ; map-cong ; drop-distr-map
   )
 open import Function using (_$_ ; case_of_ ; _∘_ ; id ; const)
 open import Function.Reasoning
@@ -50,7 +50,7 @@ open import Relation.Nullary.Negation using (contradiction)
 
 open import Kong.Tactic using (kong)
 
-open import Satarash.Tseytin as T using (Formula₀ ; con₀ ; var₀ ; and₀ ; not₀ ; xor₀ ; eval₀)
+open import Satarash.Tseytin as T using (Formula₀ ; con₀ ; var₀ ; and₀ ; or₀ ; not₀ ; xor₀ ; eval₀)
 
 --- words ------------------------------------------------------------------------------------------
 
@@ -295,8 +295,14 @@ bitsInjective = bits′Injective
 
 --- adder ------------------------------------------------------------------------------------------
 
++ᵇ+-core : (x y c : Bool) → Word 2
++ᵇ+-core x y c = (x ∧ y ∨ x ∧ c ∨ y ∧ c) ∷ (x xor y xor c) ∷ []
+
++ᵇ+-core′ : (x y c : Formula₀) → Vec Formula₀ 2
++ᵇ+-core′ x y c = or₀ (and₀ x y) (or₀ (and₀ x c) (and₀ y c)) ∷ xor₀ x (xor₀ y c) ∷ []
+
 _+ᵇ_+_ : (x y c : Bool) → Word 2
-_+ᵇ_+_ x y c = (x ∧ y ∨ x ∧ c ∨ y ∧ c) ∷ (x xor y xor c) ∷ []
+_+ᵇ_+_ x y c = +ᵇ+-core x y c
 
 +ᵇ+-✓ : ∀ x y c → bits (x +ᵇ y + c) ≡ bit x + bit y + bit c
 +ᵇ+-✓ false false false = refl
@@ -406,8 +412,7 @@ syntax %ʷ2^′ k xs = xs %ʷ2^ k
   with hs , ls , refl ← splitAt i xs
   = sym (bits-% hs ls)
 
-modDiv : ∀ {i k} xs ys →
-  bits (xs ++ ys) ≡ bits {k} ys + bits {i} xs * 2 ^ k
+modDiv : ∀ {i k} xs ys → bits (xs ++ ys) ≡ bits {k} ys + bits {i} xs * 2 ^ k
 modDiv {i} {k} xs ys =
   begin
     bits (xs ++ ys)                               ≡⟨ m≡m%n+[m/n]*n (bits (xs ++ ys)) d ⟩
@@ -532,11 +537,14 @@ module _ {i n : ℕ} (xs : Word i) (n≤i : n ≤ i) where
 
 --- addition ---------------------------------------------------------------------------------------
 
++ʷ+-core : {i : ℕ} → Bool × Bool → Word (suc i) → Word (suc (suc i))
++ʷ+-core {i} (x , y) (z ∷ zs) = x +ᵇ y + z ++ zs
+
++ʷ+-core′ : {i : ℕ} → Formula₀ × Formula₀ → Vec Formula₀ (suc i) → Vec Formula₀ (suc (suc i))
++ʷ+-core′ {i} (x , y) (z ∷ zs) = +ᵇ+-core′ x y z ++ zs
+
 _+ʷ_+_ : {i : ℕ} → (xs ys : Word i) → (c : Bool) → Word (suc i)
-_+ʷ_+_ {zero}  []       []       c = c ∷ []
-_+ʷ_+_ {suc i} (x ∷ xs) (y ∷ ys) c =
-  case xs +ʷ ys + c of λ where
-    (z ∷ zs) → x +ᵇ y + z ++ zs
+xs +ʷ ys + c = foldr (Word ∘ suc) +ʷ+-core (c ∷ []) (zip xs ys)
 
 +ʷ+-✓ : ∀ {i} xs ys c → bits (xs +ʷ ys + c) ≡ bits {i} xs + bits ys + bit c
 +ʷ+-✓ {zero}  []       []       c = refl
@@ -744,14 +752,14 @@ _⊠_ {i} {k} xs ys = xs *ʷ ys %ʷ2^ i
 
 infix 4 _≡ʷ_
 
-≡ʷ-fold : (Bool × Bool) → Bool → Bool
-≡ʷ-fold (x , y) a = not (x xor y) ∧ a
+≡ʷ-core : (Bool × Bool) → Bool → Bool
+≡ʷ-core (x , y) a = not (x xor y) ∧ a
 
-≡ʷ-fold′ : (Formula₀ × Formula₀) → Formula₀ → Formula₀
-≡ʷ-fold′ (x , y) a = and₀ (not₀ (xor₀ x y)) a
+≡ʷ-core′ : (Formula₀ × Formula₀) → Formula₀ → Formula₀
+≡ʷ-core′ (x , y) a = and₀ (not₀ (xor₀ x y)) a
 
 _≡ʷ_ : {i : ℕ} → Word i → Word i → Bool
-xs ≡ʷ ys = foldr _ ≡ʷ-fold true (zip xs ys)
+xs ≡ʷ ys = foldr _ ≡ʷ-core true (zip xs ys)
 
 ≡ʷ-✓₁ : ∀ {i} {x y : Word i} → (x ≡ʷ y) ≡ true → x ≡ y
 ≡ʷ-✓₁ {zero}  {[]}         {[]}         refl = refl
@@ -1139,7 +1147,9 @@ data Formulaʷ i where
   orʷ  : Formulaʷ i → Formulaʷ i → Formulaʷ i
   eorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   negʷ : Formulaʷ i → Formulaʷ i
+  -}
   addʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  {-
   subʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   mulʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   iteʷ : Formulaᵇ i → Formulaʷ i → Formulaʷ i → Formulaʷ i
@@ -1165,7 +1175,9 @@ evalʷ v (andʷ x y)   = evalʷ v x ∧ʷ evalʷ v y
 evalʷ v (orʷ x y)    = evalʷ v x ∨ʷ evalʷ v y
 evalʷ v (eorʷ x y)   = evalʷ v x xorʷ evalʷ v y
 evalʷ v (negʷ x)     = ↕ (evalʷ v x)
+-}
 evalʷ v (addʷ x y)   = evalʷ v x ⊞ evalʷ v y
+{-
 evalʷ v (subʷ x y)   = evalʷ v x ⊟ evalʷ v y
 evalʷ v (mulʷ x y)   = evalʷ v x ⊠ evalʷ v y
 evalʷ v (iteʷ x y z) = if evalᵇ v x then evalʷ v y else evalʷ v z
@@ -1178,20 +1190,22 @@ makeSeq k↑ (suc k↓) = k↑ ∷ makeSeq (suc k↑) k↓
 transformᵇ : {i : ℕ} → Formulaᵇ i → Formula₀
 transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
 
-transformᵇ {i} (eqᵇ x y) = foldr _ ≡ʷ-fold′ (con₀ true) (zip (transformʷ x) (transformʷ y))
+transformᵇ {i} (eqᵇ x y) = foldr _ ≡ʷ-core′ (con₀ true) (zip (transformʷ x) (transformʷ y))
 
 transformʷ {i} (conʷ x)   = map con₀ x
 transformʷ {i} (varʷ x)   = map var₀ (makeSeq (x * i) i)
 transformʷ {i} (notʷ x)   = map not₀ (transformʷ x)
 transformʷ {i} (andʷ x y) = map (uncurry and₀) (zip (transformʷ x) (transformʷ y))
+transformʷ {i} (addʷ x y) = drop 1
+  (foldr (Vec Formula₀ ∘ suc) +ʷ+-core′ (con₀ false ∷ []) (zip (transformʷ x) (transformʷ y)))
 
 transformᵛ : {i : ℕ} → (ℕ → Word i) → ℕ → Bool
 transformᵛ {zero}  v n = false
 transformᵛ {suc i} v n = lookup′ (v (n / suc i)) (n % suc i)
 
 ≡ʷ-eval : ∀ {i} v (x y : Vec Formula₀ i) →
-  eval₀ v (foldr _ ≡ʷ-fold′ (con₀ true) (zip x y)) ≡
-           foldr _ ≡ʷ-fold  true        (zip (map (eval₀ v) x) (map (eval₀ v) y))
+  eval₀ v (foldr _ ≡ʷ-core′ (con₀ true) (zip x y)) ≡
+           foldr _ ≡ʷ-core  true        (zip (map (eval₀ v) x) (map (eval₀ v) y))
 ≡ʷ-eval {zero}  v []       []       = refl
 ≡ʷ-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (≡ʷ-eval v xs ys)
 
@@ -1201,15 +1215,27 @@ andʷEval : ∀ {i} v (x y : Vec Formula₀ i) →
 andʷEval {zero}  v []       []       = refl
 andʷEval {suc i} v (x ∷ xs) (y ∷ ys) = kong (andʷEval v xs ys)
 
++ʷ+-eval : ∀ {i} v (x y : Formula₀) (z : Vec Formula₀ (suc i)) →
+  map (eval₀ v) (+ʷ+-core′ (x , y) z) ≡ +ʷ+-core (eval₀ v x , eval₀ v y) (map (eval₀ v) z)
++ʷ+-eval {i} v x y (z ∷ zs) = refl
+
+addʷEval : ∀ {i} v (x y : Vec Formula₀ i) →
+    map (eval₀ v) (foldr (Vec Formula₀ ∘ suc) +ʷ+-core′ [ con₀ false ] (zip x y)) ≡
+                   foldr (Word ∘ suc)         +ʷ+-core  [ false ]      (zip (map (eval₀ v) x) (map (eval₀ v) y))
+addʷEval {zero}  v []       []       = refl
+addʷEval {suc i} v (x ∷ xs) (y ∷ ys)
+  rewrite +ʷ+-eval v x y (foldr (Vec Formula₀ ∘ suc) +ʷ+-core′ [ con₀ false ] (zip xs ys))
+  = kong (addʷEval v xs ys)
+
 transformᵇ-✓ : ∀ {i} v f → eval₀ (transformᵛ {i} v) (transformᵇ f) ≡ evalᵇ v f
 transformʷ-✓ : ∀ {i} v f → map (eval₀ (transformᵛ {i} v)) (transformʷ f) ≡ evalʷ v f
 
 transformᵇ-✓ {i} v (eqᵇ x y) =
   begin
-    eval₀ tv (foldr _ ≡ʷ-fold′ (con₀ true) (zip tx ty))                ≡⟨ kong (≡ʷ-eval tv tx ty) ⟩
-    foldr _ ≡ʷ-fold true (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty)) ≡⟨ kong (transformʷ-✓ v x) ⟩
-    foldr _ ≡ʷ-fold true (zip (evalʷ v x) (map (eval₀ tv) ty))         ≡⟨ kong (transformʷ-✓ v y) ⟩
-    foldr _ ≡ʷ-fold true (zip (evalʷ v x) (evalʷ v y))                 ≡⟨⟩
+    eval₀ tv (foldr _ ≡ʷ-core′ (con₀ true) (zip tx ty))                ≡⟨ kong (≡ʷ-eval tv tx ty) ⟩
+    foldr _ ≡ʷ-core true (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty)) ≡⟨ kong (transformʷ-✓ v x) ⟩
+    foldr _ ≡ʷ-core true (zip (evalʷ v x) (map (eval₀ tv) ty))         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    foldr _ ≡ʷ-core true (zip (evalʷ v x) (evalʷ v y))                 ≡⟨⟩
     evalʷ v x ≡ʷ evalʷ v y                                             ∎
   where
   open ≡-Reasoning
@@ -1347,6 +1373,28 @@ transformʷ-✓ {i} v (andʷ x y) =
   tv = transformᵛ v
   tx = transformʷ x
   ty = transformʷ y
+
+transformʷ-✓ {i} v (addʷ x y) =
+  begin
+    map (eval₀ tv) (transformʷ (addʷ x y))                                      ≡⟨⟩
+    map (eval₀ tv) (drop 1 (foldr Sn′ +ʷ+-core′ a₀′ (zip tx ty)))               ≡˘⟨ drop-distr-map (eval₀ tv) 1 (foldr Sn′ +ʷ+-core′ a₀′ (zip tx ty)) ⟩
+    drop 1 (map (eval₀ tv) (foldr Sn′ +ʷ+-core′ a₀′ (zip tx ty)))               ≡⟨ kong (addʷEval tv tx ty) ⟩
+    drop 1 (foldr Sn +ʷ+-core a₀ (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty))) ≡⟨ kong (transformʷ-✓ v x) ⟩
+    drop 1 (foldr Sn +ʷ+-core a₀ (zip (evalʷ v x) (map (eval₀ tv) ty)))         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    drop 1 (foldr Sn +ʷ+-core a₀ (zip (evalʷ v x) (evalʷ v y)))                 ≡⟨⟩
+    evalʷ v x ⊞ evalʷ v y                                                       ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+  ty = transformʷ y
+
+  a₀′ = [ con₀ false ]
+  a₀ = [ false ]
+
+  Sn′ = Vec Formula₀ ∘ suc
+  Sn = Word ∘ suc
 
 unsatʷ-✓ : ∀ {i} f → (∀ v → eval₀ v (transformᵇ {i} f) ≡ false) → (∀ v → evalᵇ v f ≡ false)
 unsatʷ-✓ f p v = trans (sym (transformᵇ-✓ v f)) (p (transformᵛ v))
