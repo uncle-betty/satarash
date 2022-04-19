@@ -32,13 +32,13 @@ open import Data.Nat.Properties using (
 open import Data.Nat.Tactic.RingSolver using (solve-∀)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; uncurry) renaming (map to mapᵖ)
 open import Data.Vec using (
-    Vec ; [] ; _∷_ ; [_] ; replicate ; _++_ ; splitAt ; take ; drop ; map ; zip ; foldr
+    Vec ; [] ; _∷_ ; [_] ; replicate ; _++_ ; splitAt ; take ; drop ; head ; map ; zip ; foldr
   )
 open import Data.Vec.Properties using (
     ≡-dec ; ∷-injectiveʳ ; ∷-injective ; map-id ; map-++ ; map-∘ ; map-zip ; map-cong ;
     drop-distr-map
   )
-open import Function using (_$_ ; case_of_ ; _∘_ ; id ; const)
+open import Function using (_$_ ; case_of_ ; _∘_ ; _∘₂_ ; id ; const)
 open import Function.Reasoning
 open import Level using (0ℓ)
 open import Relation.Binary.PropositionalEquality using (
@@ -808,9 +808,7 @@ x ≢ʷ y = not (x ≡ʷ y)
 infix 4 _<ʷ_
 
 _<ʷ_ : {i : ℕ} → Word i → Word i → Bool
-x <ʷ y =
-  case (false ∷ x) ⊞ ↕′ y of λ where
-    (c ∷ _) → not c
+x <ʷ y = not (head ((false ∷ x) ⊞ ↕′ y))
 
 module _ where
   private
@@ -1145,13 +1143,11 @@ data Formulaʷ (i : ℕ) : Set
 
 data Formulaᵇ i where
   eqᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  {-
-  neᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  -- neᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
   ltᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  leᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  gtᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  geᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  -}
+  -- leᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  -- gtᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  -- geᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
 
 data Formulaʷ i where
   conʷ : Word i → Formulaʷ i
@@ -1166,17 +1162,21 @@ data Formulaʷ i where
   mulʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   -- iteʷ : Formulaᵇ i → Formulaʷ i → Formulaʷ i → Formulaʷ i
 
+W∘ : (ℕ → ℕ) → ℕ → Set
+W∘ f = Word ∘ f
+
+F∘ : (ℕ → ℕ) → ℕ → Set
+F∘ f = Vec Formula₀ ∘ f
+
 evalᵇ : {i : ℕ} → (ℕ → Word i) → Formulaᵇ i → Bool
 evalʷ : {i : ℕ} → (ℕ → Word i) → Formulaʷ i → Word i
 
 evalᵇ v (eqᵇ x y) = evalʷ v x ≡ʷ evalʷ v y
-{-
-evalᵇ v (neᵇ x y) = evalʷ v x ≢ʷ evalʷ v y
+-- evalᵇ v (neᵇ x y) = evalʷ v x ≢ʷ evalʷ v y
 evalᵇ v (ltᵇ x y) = evalʷ v x <ʷ evalʷ v y
-evalᵇ v (leᵇ x y) = evalʷ v x ≤ʷ evalʷ v y
-evalᵇ v (gtᵇ x y) = evalʷ v x >ʷ evalʷ v y
-evalᵇ v (geᵇ x y) = evalʷ v x ≥ʷ evalʷ v y
--}
+-- evalᵇ v (leᵇ x y) = evalʷ v x ≤ʷ evalʷ v y
+-- evalᵇ v (gtᵇ x y) = evalʷ v x >ʷ evalʷ v y
+-- evalᵇ v (geᵇ x y) = evalʷ v x ≥ʷ evalʷ v y
 
 evalʷ v (conʷ x)     = x
 evalʷ v (varʷ x)     = v x
@@ -1194,67 +1194,8 @@ makeSeq : (k↑ k↓ : ℕ) → Vec ℕ k↓
 makeSeq k↑ zero     = []
 makeSeq k↑ (suc k↓) = k↑ ∷ makeSeq (suc k↑) k↓
 
-W∘ : (ℕ → ℕ) → ℕ → Set
-W∘ f = Word ∘ f
-
-F∘ : (ℕ → ℕ) → ℕ → Set
-F∘ f = Vec Formula₀ ∘ f
-
-transformᵇ : {i : ℕ} → Formulaᵇ i → Formula₀
-transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
-
-transformᵇ {i} (eqᵇ x y) = foldr _ ≡ʷ-core′ (con₀ true) (zip (transformʷ x) (transformʷ y))
-
-transformʷ {i} (conʷ x)   = map con₀ x
-transformʷ {i} (varʷ x)   = map var₀ (makeSeq (x * i) i)
-transformʷ {i} (notʷ x)   = map not₀ (transformʷ x)
-transformʷ {i} (andʷ x y) = map (uncurry and₀) (zip (transformʷ x) (transformʷ y))
-transformʷ {i} (negʷ x)   = drop 1
-  (foldr (Vec Formula₀ ∘ suc) ↕′-core′  [ con₀ true ] (transformʷ x))
-transformʷ {i} (addʷ x y) = drop 1
-  (foldr (Vec Formula₀ ∘ suc) +ʷ+-core′ [ con₀ false ] (zip (transformʷ x) (transformʷ y)))
-transformʷ {i} (mulʷ x y) = drop i
-  (foldr (Vec Formula₀ ∘ (_+ i)) (*ʷ-core′ (transformʷ x)) (replicate (con₀ false)) (transformʷ y))
-
-transformᵛ : {i : ℕ} → (ℕ → Word i) → ℕ → Bool
-transformᵛ {zero}  v n = false
-transformᵛ {suc i} v n = lookup′ (v (n / suc i)) (n % suc i)
-
-≡-eval : ∀ {i} v (x y : Vec Formula₀ i) →
-  eval₀ v (foldr _ ≡ʷ-core′ (con₀ true) (zip x y)) ≡
-           foldr _ ≡ʷ-core  true        (zip (map (eval₀ v) x) (map (eval₀ v) y))
-≡-eval {zero}  v []       []       = refl
-≡-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (≡-eval v xs ys)
-
-∧-eval : ∀ {i} v (x y : Vec Formula₀ i) →
-  map (eval₀ v) (map (uncurry and₀) (zip x y)) ≡
-                 map (uncurry _∧_)  (zip (map (eval₀ v) x) (map (eval₀ v) y))
-∧-eval {zero}  v []       []       = refl
-∧-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (∧-eval v xs ys)
-
-↕-eval₁ : ∀ {i} v (x : Formula₀) (z : Vec Formula₀ (suc i)) →
-  map (eval₀ v) (↕′-core′ x z) ≡ ↕′-core (eval₀ v x) (map (eval₀ v) z)
-↕-eval₁ {i} v x (z ∷ zs) = refl
-
-↕-eval₂ : ∀ {i} v (x : Vec Formula₀ i) →
-    map (eval₀ v) (foldr (F∘ suc) ↕′-core′ [ con₀ true ] x) ≡
-                   foldr (W∘ suc) ↕′-core  [ true ]      (map (eval₀ v) x)
-↕-eval₂ {zero}  v []       = refl
-↕-eval₂ {suc i} v (x ∷ xs)
-  rewrite ↕-eval₁ v x (foldr (Vec Formula₀ ∘ suc) ↕′-core′ [ con₀ true ] xs)
-  = kong (↕-eval₂ v xs)
-
-+-eval₁ : ∀ {i} v (x y : Formula₀) (z : Vec Formula₀ (suc i)) →
-  map (eval₀ v) (+ʷ+-core′ (x , y) z) ≡ +ʷ+-core (eval₀ v x , eval₀ v y) (map (eval₀ v) z)
-+-eval₁ {i} v x y (z ∷ zs) = refl
-
-+-eval₂ : ∀ {i} v (x y : Vec Formula₀ i) →
-    map (eval₀ v) (foldr (F∘ suc) +ʷ+-core′ [ con₀ false ] (zip x y)) ≡
-                   foldr (W∘ suc) +ʷ+-core  [ false ]      (zip (map (eval₀ v) x) (map (eval₀ v) y))
-+-eval₂ {zero}  v []       []       = refl
-+-eval₂ {suc i} v (x ∷ xs) (y ∷ ys)
-  rewrite +-eval₁ v x y (foldr (Vec Formula₀ ∘ suc) +ʷ+-core′ [ con₀ false ] (zip xs ys))
-  = kong (+-eval₂ v xs ys)
+mapHead : ∀ {S T : Set} {i} (f : S → T) (xs : Vec S (suc i)) → head (map f xs) ≡ f (head xs)
+mapHead f (x ∷ xs) = refl
 
 mapEvalRepl : ∀ {i} v x → map (eval₀ v) (replicate {n = i} x) ≡ replicate (eval₀ v x)
 mapEvalRepl {zero}  v x = refl
@@ -1264,75 +1205,191 @@ mapEvalSubst : ∀ {i k} v (p : i ≡ k) (x : Vec Formula₀ i) →
   map (eval₀ v) (subst (Vec Formula₀) p x) ≡ subst Word p (map (eval₀ v) x)
 mapEvalSubst v refl x = refl
 
-*-eval : ∀ {i k} v (x : Vec Formula₀ i) (y : Vec Formula₀ k) →
-    map (eval₀ v) (foldr (F∘ (_+ i)) (*ʷ-core′ x)                (replicate (con₀ false)) y) ≡
-                   foldr (W∘ (_+ i)) (*ʷ-core (map (eval₀ v) x)) (replicate false)        (map (eval₀ v) y)
-*-eval {i} {zero}  v x []       = mapEvalRepl v (con₀ false)
-*-eval {i} {suc k} v x (y ∷ ys) =
+transformᵇ : {i : ℕ} → Formulaᵇ i → Formula₀
+transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
+
+∧-build : {i : ℕ} → (x y : Vec Formula₀ i) → Vec Formula₀ i
+∧-build x y = map (uncurry and₀) (zip x y)
+
+∧-eval : ∀ {i} v (x y : Vec Formula₀ i) →
+  map (eval₀ v) (∧-build x y) ≡ map (eval₀ v) x ∧ʷ map (eval₀ v) y
+∧-eval {zero}  v []       []       = refl
+∧-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (∧-eval v xs ys)
+
+↕′-build : {i : ℕ} → (x : Vec Formula₀ i) → Vec Formula₀ (suc i)
+↕′-build x = foldr (F∘ suc) ↕′-core′ [ con₀ true ] x
+
+↕-build : {i : ℕ} → (x : Vec Formula₀ i) → Vec Formula₀ i
+↕-build = drop 1 ∘ ↕′-build
+
+↕′-eval₁ : ∀ {i} v (x : Formula₀) (z : Vec Formula₀ (suc i)) →
+  map (eval₀ v) (↕′-core′ x z) ≡ ↕′-core (eval₀ v x) (map (eval₀ v) z)
+↕′-eval₁ {i} v x (z ∷ zs) = refl
+
+↕′-eval₂ : ∀ {i} v (x : Vec Formula₀ i) → map (eval₀ v) (↕′-build x) ≡ ↕′ (map (eval₀ v) x)
+↕′-eval₂ {zero}  v []       = refl
+↕′-eval₂ {suc i} v (x ∷ xs)
+  rewrite ↕′-eval₁ v x (↕′-build xs)
+  -- XXX - why does kong fail here?
+  = cong (↕′-core (eval₀ v x)) (↕′-eval₂ v xs)
+
++′-build : {i : ℕ} → (x y : Vec Formula₀ i) → Vec Formula₀ (suc i)
++′-build x y = foldr (F∘ suc) +ʷ+-core′ [ con₀ false ] (zip x y)
+
++-build : {i : ℕ} → (x y : Vec Formula₀ i) → Vec Formula₀ i
++-build = drop 1 ∘₂ +′-build
+
++′-eval₁ : ∀ {i} v (x y : Formula₀) (z : Vec Formula₀ (suc i)) →
+  map (eval₀ v) (+ʷ+-core′ (x , y) z) ≡ +ʷ+-core (eval₀ v x , eval₀ v y) (map (eval₀ v) z)
++′-eval₁ {i} v x y (z ∷ zs) = refl
+
++′-eval₂ : ∀ {i} v (x y : Vec Formula₀ i) →
+    map (eval₀ v) (+′-build x y) ≡ map (eval₀ v) x +ʷ map (eval₀ v) y + false
++′-eval₂ {zero}  v []       []       = refl
++′-eval₂ {suc i} v (x ∷ xs) (y ∷ ys)
+  rewrite +′-eval₁ v x y (+′-build xs ys)
+  -- XXX - why does kong fail here?
+  = cong (+ʷ+-core (eval₀ v x , eval₀ v y)) (+′-eval₂ v xs ys)
+
++-eval : ∀ {i} v (x y : Vec Formula₀ i) →
+    map (eval₀ v) (+-build x y) ≡ map (eval₀ v) x ⊞ map (eval₀ v) y
++-eval v x y =
   begin
-    map (eval₀ v) (foldr (F∘ (_+ i)) (*ʷ-core′ x) a₀′ (y ∷ ys))                     ≡⟨⟩
-    map (eval₀ v) (foldr (F∘ suc) +ʷ+-core′ [ con₀ false ] (zip rec₁ ∧₁))           ≡⟨ +-eval₂ v rec₁ ∧₁ ⟩
+    map (eval₀ v) (+-build x y)                         ≡˘⟨ drop-distr-map (eval₀ v) 1 (+′-build x y) ⟩
+    drop 1 (map (eval₀ v) (+′-build x y))               ≡⟨ kong (+′-eval₂ v x y) ⟩
+    drop 1 (map (eval₀ v) x +ʷ map (eval₀ v) y + false) ≡⟨⟩
+    map (eval₀ v) x ⊞ map (eval₀ v) y                   ∎
+  where open ≡-Reasoning
+
+*′-build : {i k : ℕ} → (x : Vec Formula₀ i) → (y : Vec Formula₀ k) → Vec Formula₀ (k + i)
+*′-build {i} {k} x y = foldr (F∘ (_+ i)) (*ʷ-core′ x) (replicate (con₀ false)) y
+
+*-build : {i k : ℕ} → (x : Vec Formula₀ i) → (y : Vec Formula₀ k) → Vec Formula₀ i
+*-build {i} {k} = drop k ∘₂ *′-build
+
+*′-eval : ∀ {i k} v (x : Vec Formula₀ i) (y : Vec Formula₀ k) →
+    map (eval₀ v) (*′-build x y) ≡ map (eval₀ v) x *ʷ map (eval₀ v) y
+
+*′-eval {i} {zero}  v x []       = mapEvalRepl v (con₀ false)
+*′-eval {i} {suc k} v x (y ∷ ys) =
+  begin
+    map (eval₀ v) (*′-build x (y ∷ ys))                               ≡⟨⟩
+    map (eval₀ v) (+′-build (*′-build x ys) ∧₁)                       ≡⟨ +′-eval₂ v (*′-build x ys) ∧₁ ⟩
     -- XXX - why does kong fail here?
-    map (eval₀ v) rec₁ +ʷ map (eval₀ v) ∧₁ + false                                  ≡⟨ cong (_+ʷ map (eval₀ v) ∧₁ + false) (*-eval v x ys) ⟩
+    map (eval₀ v) (*′-build x ys) +ʷ map (eval₀ v) ∧₁ + false         ≡⟨ cong (_+ʷ map (eval₀ v) ∧₁ + false) (*′-eval v x ys) ⟩
     -- XXX - why does kong fail here?
-    rec₂               +ʷ map (eval₀ v) ∧₁ + false                                  ≡⟨ cong (rec₂ +ʷ_+ false) ∧-lem ⟩
-    rec₂               +ʷ ∧₂               + false                                  ≡⟨⟩
-    foldr (W∘ (_+ i)) (*ʷ-core (map (eval₀ v) x)) a₀ (map (eval₀ v) (y ∷ ys))       ∎
+    (map (eval₀ v) x *ʷ map (eval₀ v) ys) +ʷ map (eval₀ v) ∧₁ + false ≡⟨ cong ((map (eval₀ v) x *ʷ map (eval₀ v) ys) +ʷ_+ false) ∧-lem ⟩
+    (map (eval₀ v) x *ʷ map (eval₀ v) ys) +ʷ ∧₂ + false               ≡⟨⟩
+    map (eval₀ v) x *ʷ map (eval₀ v) (y ∷ ys)                         ∎
   where
   open ≡-Reasoning
 
-  a₀′ = replicate (con₀ false)
-  a₀ = replicate false
+  l₁ = ++-swap′ i k (x ++ replicate (con₀ false))
+  r₁ = replicate y
+  ∧₁ = ∧-build l₁ r₁
 
-  rec₁ = foldr (Vec Formula₀ ∘ (_+ i)) (*ʷ-core′ x) (replicate (con₀ false)) ys
-  rec₂ = foldr (Word ∘ (_+ i)) (*ʷ-core (map (eval₀ v) x)) (replicate false) (map (eval₀ v) ys)
+  l₂ = ++-swap i k (map (eval₀ v) x ++ replicate false)
+  r₂ = replicate (eval₀ v y)
+  ∧₂ = l₂ ∧ʷ r₂
 
-  ∧₁ˡ = ++-swap′ i k (x ++ replicate (con₀ false))
-  ∧₁ʳ = replicate y
-  ∧₁ = map (uncurry and₀) (zip ∧₁ˡ ∧₁ʳ)
-
-  ∧₂ˡ = ++-swap i k (map (eval₀ v) x ++ replicate false)
-  ∧₂ʳ = replicate (eval₀ v y)
-  ∧₂ = map (uncurry _∧_) (zip ∧₂ˡ ∧₂ʳ)
-
-  ∧ˡ-lem : map (eval₀ v) ∧₁ˡ ≡ ∧₂ˡ
+  ∧ˡ-lem : map (eval₀ v) l₁ ≡ l₂
   ∧ˡ-lem =
     begin
-      map (eval₀ v) ∧₁ˡ                                                       ≡⟨⟩
+      map (eval₀ v) l₁                                                        ≡⟨⟩
       map (eval₀ v) (++-swap′ i k (x ++ replicate (con₀ false)))              ≡⟨ mapEvalSubst v (+-comm i k) (x ++ replicate (con₀ false)) ⟩
       -- XXX - why does kong fail here?
       ++-swap i k (map (eval₀ v) (x ++ replicate (con₀ false)))               ≡⟨ cong! (map-++ (eval₀ v) x (replicate (con₀ false))) ⟩
       -- XXX - why does kong fail here?
       ++-swap i k (map (eval₀ v) x ++ map (eval₀ v) (replicate (con₀ false))) ≡⟨ cong! (mapEvalRepl v (con₀ false)) ⟩
       ++-swap i k (map (eval₀ v) x ++ replicate false)                        ≡⟨⟩
-      ∧₂ˡ                                                                     ∎
+      l₂                                                                      ∎
 
-  ∧ʳ-lem : map (eval₀ v) ∧₁ʳ ≡ ∧₂ʳ
+  ∧ʳ-lem : map (eval₀ v) r₁ ≡ r₂
   ∧ʳ-lem =
     begin
-      map (eval₀ v) ∧₁ʳ           ≡⟨⟩
+      map (eval₀ v) r₁            ≡⟨⟩
       map (eval₀ v) (replicate y) ≡⟨ mapEvalRepl v y ⟩
       replicate (eval₀ v y)       ≡⟨⟩
-      ∧₂ʳ                         ∎
+      r₂                          ∎
 
   ∧-lem : map (eval₀ v) ∧₁ ≡ ∧₂
   ∧-lem =
     begin
-      map (eval₀ v) (map (uncurry and₀) (zip ∧₁ˡ ∧₁ʳ))                ≡⟨ ∧-eval v ∧₁ˡ ∧₁ʳ ⟩
-      map (uncurry _∧_) (zip (map (eval₀ v) ∧₁ˡ) (map (eval₀ v) ∧₁ʳ)) ≡⟨ kong ∧ˡ-lem ⟩
-      map (uncurry _∧_) (zip ∧₂ˡ (map (eval₀ v) ∧₁ʳ))                 ≡⟨ kong ∧ʳ-lem ⟩
-      map (uncurry _∧_) (zip ∧₂ˡ ∧₂ʳ)                                 ∎
+      map (eval₀ v) (∧-build l₁ r₁)        ≡⟨ ∧-eval v l₁ r₁ ⟩
+      map (eval₀ v) l₁ ∧ʷ map (eval₀ v) r₁ ≡⟨ kong ∧ˡ-lem ⟩
+      l₂ ∧ʷ map (eval₀ v) r₁               ≡⟨ kong ∧ʳ-lem ⟩
+      l₂ ∧ʷ r₂                             ∎
+
+≡-build : {i : ℕ} → (x y : Vec Formula₀ i) → Formula₀
+≡-build x y = foldr (const Formula₀) ≡ʷ-core′ (con₀ true) (zip x y)
+
+≡-eval : ∀ {i} v (x y : Vec Formula₀ i) →
+  eval₀ v (≡-build x y) ≡ (map (eval₀ v) x ≡ʷ map (eval₀ v) y)
+≡-eval {zero}  v []       []       = refl
+≡-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (≡-eval v xs ys)
+
+<-build : {i : ℕ} → (x y : Vec Formula₀ i) → Formula₀
+<-build x y =
+  let x′ = con₀ false ∷ x in
+  let y′ = ↕′-build y in
+  not₀ (head (+-build x′ y′))
+
+<-eval : ∀ {i} v (x y : Vec Formula₀ i) →
+  eval₀ v (<-build x y) ≡ (map (eval₀ v) x <ʷ map (eval₀ v) y)
+<-eval {i} v x y =
+  begin
+    eval₀ v (<-build x y)                                         ≡⟨⟩
+    not (eval₀ v (head (+-build x′ y′)))                          ≡˘⟨ kong (mapHead (eval₀ v) (+-build x′ (↕′-build y))) ⟩
+    not (head (map (eval₀ v) (+-build x′ y′)))                    ≡⟨ kong (+-eval v x′ (↕′-build y)) ⟩
+    not (head (map (eval₀ v) x′ ⊞ map (eval₀ v) y′))              ≡⟨⟩
+    not (head ((false ∷ map (eval₀ v) x) ⊞ map (eval₀ v) y′))     ≡⟨ kong (↕′-eval₂ v y) ⟩
+    not (head ((false ∷ map (eval₀ v) x) ⊞ ↕′ (map (eval₀ v) y))) ≡⟨⟩
+    map (eval₀ v) x <ʷ map (eval₀ v) y                            ∎
+  where
+  open ≡-Reasoning
+
+  x′ = con₀ false ∷ x
+  y′ = ↕′-build y
+
+transformᵇ {i} (eqᵇ x y) = ≡-build (transformʷ x) (transformʷ y)
+transformᵇ {i} (ltᵇ x y) = <-build (transformʷ x) (transformʷ y)
+
+transformʷ {i} (conʷ x)   = map con₀ x
+transformʷ {i} (varʷ x)   = map var₀ (makeSeq (x * i) i)
+transformʷ {i} (notʷ x)   = map not₀ (transformʷ x)
+transformʷ {i} (andʷ x y) = ∧-build (transformʷ x) (transformʷ y)
+transformʷ {i} (negʷ x)   = ↕-build (transformʷ x)
+transformʷ {i} (addʷ x y) = +-build (transformʷ x) (transformʷ y)
+transformʷ {i} (mulʷ x y) = *-build (transformʷ x) (transformʷ y)
+
+transformᵛ : {i : ℕ} → (ℕ → Word i) → ℕ → Bool
+transformᵛ {zero}  v n = false
+transformᵛ {suc i} v n = lookup′ (v (n / suc i)) (n % suc i)
 
 transformᵇ-✓ : ∀ {i} v f → eval₀ (transformᵛ {i} v) (transformᵇ f) ≡ evalᵇ v f
 transformʷ-✓ : ∀ {i} v f → map (eval₀ (transformᵛ {i} v)) (transformʷ f) ≡ evalʷ v f
 
 transformᵇ-✓ {i} v (eqᵇ x y) =
   begin
-    eval₀ tv (foldr _ ≡ʷ-core′ (con₀ true) (zip tx ty))                ≡⟨ kong (≡-eval tv tx ty) ⟩
-    foldr _ ≡ʷ-core true (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty)) ≡⟨ kong (transformʷ-✓ v x) ⟩
-    foldr _ ≡ʷ-core true (zip (evalʷ v x) (map (eval₀ tv) ty))         ≡⟨ kong (transformʷ-✓ v y) ⟩
-    foldr _ ≡ʷ-core true (zip (evalʷ v x) (evalʷ v y))                 ≡⟨⟩
-    evalʷ v x ≡ʷ evalʷ v y                                             ∎
+    eval₀ tv (transformᵇ (eqᵇ x y))        ≡⟨⟩
+    eval₀ tv (≡-build tx ty)               ≡⟨ kong (≡-eval tv tx ty) ⟩
+    map (eval₀ tv) tx ≡ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
+    evalʷ v x ≡ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x ≡ʷ evalʷ v y                 ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+  ty = transformʷ y
+
+transformᵇ-✓ {i} v (ltᵇ x y) =
+  begin
+    eval₀ tv (transformᵇ (ltᵇ x y))        ≡⟨⟩
+    eval₀ tv (<-build tx ty)               ≡⟨ kong (<-eval tv tx ty) ⟩
+    map (eval₀ tv) tx <ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
+    evalʷ v x <ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x <ʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
 
@@ -1457,12 +1514,11 @@ transformʷ-✓ {i} v (notʷ x) =
 
 transformʷ-✓ {i} v (andʷ x y) =
   begin
-    map (eval₀ tv) (transformʷ (andʷ x y))                           ≡⟨⟩
-    map (eval₀ tv) (map (uncurry and₀) (zip tx ty))                  ≡⟨ ∧-eval tv tx ty ⟩
-    map (uncurry _∧_) (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty))  ≡⟨ kong (transformʷ-✓ v x) ⟩
-    map (uncurry _∧_) (zip (evalʷ v x) (map (eval₀ tv) ty))          ≡⟨ kong (transformʷ-✓ v y) ⟩
-    map (uncurry _∧_) (zip (evalʷ v x) (evalʷ v y))                  ≡⟨⟩
-    evalʷ v x ∧ʷ evalʷ v y                                           ∎
+    map (eval₀ tv) (transformʷ (andʷ x y)) ≡⟨⟩
+    map (eval₀ tv) (∧-build tx ty)         ≡⟨ ∧-eval tv tx ty ⟩
+    map (eval₀ tv) tx ∧ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
+    evalʷ v x ∧ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x ∧ʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
 
@@ -1472,60 +1528,51 @@ transformʷ-✓ {i} v (andʷ x y) =
 
 transformʷ-✓ {i} v (negʷ x) =
   begin
-    map (eval₀ tv) (transformʷ (negʷ x))                     ≡⟨⟩
-    map (eval₀ tv) (drop 1 (foldr (F∘ suc) ↕′-core′ a₀′ tx)) ≡˘⟨ drop-distr-map (eval₀ tv) 1 (foldr (F∘ suc) ↕′-core′ a₀′ tx) ⟩
-    drop 1 (map (eval₀ tv) (foldr (F∘ suc) ↕′-core′ a₀′ tx)) ≡⟨ kong (↕-eval₂ tv tx) ⟩
-    drop 1 (foldr (W∘ suc) ↕′-core a₀ (map (eval₀ tv) tx))   ≡⟨ kong (transformʷ-✓ v x) ⟩
-    drop 1 (foldr (W∘ suc) ↕′-core a₀ (evalʷ v x))           ≡⟨⟩
-    ↕ (evalʷ v x)                                            ∎
+    map (eval₀ tv) (transformʷ (negʷ x))  ≡⟨⟩
+    map (eval₀ tv) (drop 1 (↕′-build tx)) ≡˘⟨ drop-distr-map (eval₀ tv) 1 (↕′-build tx) ⟩
+    -- XXX - why does kong fail here?
+    drop 1 (map (eval₀ tv) (↕′-build tx)) ≡⟨ cong! (↕′-eval₂ tv tx) ⟩
+    drop 1 (↕′ (map (eval₀ tv) tx))       ≡⟨ kong (transformʷ-✓ v x) ⟩
+    drop 1 (↕′ (evalʷ v x))               ≡⟨⟩
+    ↕ (evalʷ v x)                         ∎
   where
   open ≡-Reasoning
 
   tv = transformᵛ v
   tx = transformʷ x
-
-  a₀′ = [ con₀ true ]
-  a₀ = [ true ]
 
 transformʷ-✓ {i} v (addʷ x y) =
   begin
-    map (eval₀ tv) (transformʷ (addʷ x y))                                            ≡⟨⟩
-    map (eval₀ tv) (drop 1 (foldr (F∘ suc) +ʷ+-core′ a₀′ (zip tx ty)))                ≡˘⟨ drop-distr-map (eval₀ tv) 1 (foldr (F∘ suc) +ʷ+-core′ a₀′ (zip tx ty)) ⟩
-    drop 1 (map (eval₀ tv) (foldr (F∘ suc) +ʷ+-core′ a₀′ (zip tx ty)))                ≡⟨ kong (+-eval₂ tv tx ty) ⟩
-    drop 1 (foldr (W∘ suc) +ʷ+-core a₀ (zip (map (eval₀ tv) tx) (map (eval₀ tv) ty))) ≡⟨ kong (transformʷ-✓ v x) ⟩
-    drop 1 (foldr (W∘ suc) +ʷ+-core a₀ (zip (evalʷ v x) (map (eval₀ tv) ty)))         ≡⟨ kong (transformʷ-✓ v y) ⟩
-    drop 1 (foldr (W∘ suc) +ʷ+-core a₀ (zip (evalʷ v x) (evalʷ v y)))                 ≡⟨⟩
-    evalʷ v x ⊞ evalʷ v y                                                             ∎
+    map (eval₀ tv) (transformʷ (addʷ x y))                  ≡⟨⟩
+    map (eval₀ tv) (drop 1 (+′-build tx ty))                ≡˘⟨ drop-distr-map (eval₀ tv) 1 (+′-build tx ty) ⟩
+    -- XXX - why does kong fail here?
+    drop 1 (map (eval₀ tv) (+′-build tx ty))                ≡⟨ cong! (+′-eval₂ tv tx ty) ⟩
+    drop 1 (map (eval₀ tv) tx +ʷ map (eval₀ tv) ty + false) ≡⟨ kong (transformʷ-✓ v x) ⟩
+    drop 1 (evalʷ v x +ʷ map (eval₀ tv) ty + false)         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x ⊞ evalʷ v y                                   ∎
   where
   open ≡-Reasoning
 
   tv = transformᵛ v
   tx = transformʷ x
   ty = transformʷ y
-
-  a₀′ = [ con₀ false ]
-  a₀ = [ false ]
 
 transformʷ-✓ {i} v (mulʷ x y) =
   begin
-    map (eval₀ tv) (transformʷ (mulʷ x y))                                          ≡⟨⟩
-    map (eval₀ tv) (drop i (foldr (F∘ (_+ i)) (*ʷ-core′ tx) a₀′ ty))                ≡˘⟨ drop-distr-map (eval₀ tv) i (foldr (F∘ (_+ i)) (*ʷ-core′ tx) a₀′ ty) ⟩
+    map (eval₀ tv) (transformʷ (mulʷ x y))          ≡⟨⟩
+    map (eval₀ tv) (drop i (*′-build tx ty))        ≡˘⟨ drop-distr-map (eval₀ tv) i (*′-build tx ty) ⟩
     -- XXX - why does kong fail here?
-    drop i (map (eval₀ tv) (foldr (F∘ (_+ i)) (*ʷ-core′ tx) a₀′ ty))                ≡⟨ cong! (*-eval tv tx ty) ⟩
+    drop i (map (eval₀ tv) (*′-build tx ty))        ≡⟨ cong! (*′-eval tv tx ty) ⟩
     -- XXX - why does kong fail here?
-    drop i (foldr (W∘ (_+ i)) (*ʷ-core (map (eval₀ tv) tx)) a₀ (map (eval₀ tv) ty)) ≡⟨ cong (λ # → drop i (foldr (W∘ (_+ i)) (*ʷ-core #) a₀ (map (eval₀ tv) ty))) (transformʷ-✓ v x) ⟩
-    drop i (foldr (W∘ (_+ i)) (*ʷ-core (evalʷ v x)) a₀ (map (eval₀ tv) ty))         ≡⟨ kong (transformʷ-✓ v y) ⟩
-    drop i (foldr (W∘ (_+ i)) (*ʷ-core (evalʷ v x)) a₀ (evalʷ v y))                 ≡⟨⟩
-    evalʷ v x ⊠ evalʷ v y                                                           ∎
+    drop i (map (eval₀ tv) tx *ʷ map (eval₀ tv) ty) ≡⟨ cong (λ # → drop i (# *ʷ map (eval₀ tv) ty)) (transformʷ-✓ v x) ⟩
+    drop i (evalʷ v x *ʷ map (eval₀ tv) ty)         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x ⊠ evalʷ v y                           ∎
   where
   open ≡-Reasoning
 
   tv = transformᵛ v
   tx = transformʷ x
   ty = transformʷ y
-
-  a₀′ = replicate (con₀ false)
-  a₀ = replicate false
 
 unsatʷ-✓ : ∀ {i} f → (∀ v → eval₀ v (transformᵇ {i} f) ≡ false) → (∀ v → evalᵇ v f ≡ false)
 unsatʷ-✓ f p v = trans (sym (transformᵇ-✓ v f)) (p (transformᵛ v))
