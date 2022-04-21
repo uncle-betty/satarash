@@ -1154,8 +1154,8 @@ data Formulaʷ i where
   varʷ : ℕ → Formulaʷ i
   notʷ : Formulaʷ i → Formulaʷ i
   andʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
-  -- orʷ  : Formulaʷ i → Formulaʷ i → Formulaʷ i
-  -- eorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  orʷ  : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  eorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   negʷ : Formulaʷ i → Formulaʷ i
   addʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   subʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
@@ -1182,8 +1182,8 @@ evalʷ v (conʷ x)     = x
 evalʷ v (varʷ x)     = v x
 evalʷ v (notʷ x)     = ~ (evalʷ v x)
 evalʷ v (andʷ x y)   = evalʷ v x ∧ʷ evalʷ v y
--- evalʷ v (orʷ x y)    = evalʷ v x ∨ʷ evalʷ v y
--- evalʷ v (eorʷ x y)   = evalʷ v x xorʷ evalʷ v y
+evalʷ v (orʷ x y)    = evalʷ v x ∨ʷ evalʷ v y
+evalʷ v (eorʷ x y)   = evalʷ v x xorʷ evalʷ v y
 evalʷ v (negʷ x)     = ↕ (evalʷ v x)
 evalʷ v (addʷ x y)   = evalʷ v x ⊞ evalʷ v y
 evalʷ v (subʷ x y)   = evalʷ v x ⊟ evalʷ v y
@@ -1215,6 +1215,22 @@ transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
   map (eval₀ v) (∧-build x y) ≡ map (eval₀ v) x ∧ʷ map (eval₀ v) y
 ∧-eval {zero}  v []       []       = refl
 ∧-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (∧-eval v xs ys)
+
+∨-build : {i : ℕ} → (x y : Vec Formula₀ i) → Vec Formula₀ i
+∨-build x y = map (uncurry or₀) (zip x y)
+
+∨-eval : ∀ {i} v (x y : Vec Formula₀ i) →
+  map (eval₀ v) (∨-build x y) ≡ map (eval₀ v) x ∨ʷ map (eval₀ v) y
+∨-eval {zero}  v []       []       = refl
+∨-eval {suc i} v (x ∷ xs) (y ∷ ys) = kong (∨-eval v xs ys)
+
+eorBuild : {i : ℕ} → (x y : Vec Formula₀ i) → Vec Formula₀ i
+eorBuild x y = map (uncurry xor₀) (zip x y)
+
+eorEval : ∀ {i} v (x y : Vec Formula₀ i) →
+  map (eval₀ v) (eorBuild x y) ≡ map (eval₀ v) x xorʷ map (eval₀ v) y
+eorEval {zero}  v []       []       = refl
+eorEval {suc i} v (x ∷ xs) (y ∷ ys) = kong (eorEval v xs ys)
 
 ↕′-build : {i : ℕ} → (x : Vec Formula₀ i) → Vec Formula₀ (suc i)
 ↕′-build x = foldr (F∘ suc) ↕′-core′ [ con₀ true ] x
@@ -1386,6 +1402,8 @@ transformʷ {i} (conʷ x)   = map con₀ x
 transformʷ {i} (varʷ x)   = map var₀ (makeSeq (x * i) i)
 transformʷ {i} (notʷ x)   = map not₀ (transformʷ x)
 transformʷ {i} (andʷ x y) = ∧-build (transformʷ x) (transformʷ y)
+transformʷ {i} (orʷ x y)  = ∨-build (transformʷ x) (transformʷ y)
+transformʷ {i} (eorʷ x y) = eorBuild (transformʷ x) (transformʷ y)
 transformʷ {i} (negʷ x)   = ↕-build (transformʷ x)
 transformʷ {i} (addʷ x y) = +-build (transformʷ x) (transformʷ y)
 transformʷ {i} (subʷ x y) = ∸-build (transformʷ x) (transformʷ y)
@@ -1554,6 +1572,34 @@ transformʷ-✓ {i} v (andʷ x y) =
     map (eval₀ tv) tx ∧ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
     evalʷ v x ∧ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
     evalʷ v x ∧ʷ evalʷ v y                 ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+  ty = transformʷ y
+
+transformʷ-✓ {i} v (orʷ x y) =
+  begin
+    map (eval₀ tv) (transformʷ (orʷ x y))  ≡⟨⟩
+    map (eval₀ tv) (∨-build tx ty)         ≡⟨ ∨-eval tv tx ty ⟩
+    map (eval₀ tv) tx ∨ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
+    evalʷ v x ∨ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x ∨ʷ evalʷ v y                 ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+  ty = transformʷ y
+
+transformʷ-✓ {i} v (eorʷ x y) =
+  begin
+    map (eval₀ tv) (transformʷ (eorʷ x y))   ≡⟨⟩
+    map (eval₀ tv) (eorBuild tx ty)          ≡⟨ eorEval tv tx ty ⟩
+    map (eval₀ tv) tx xorʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
+    evalʷ v x xorʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x xorʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
 
