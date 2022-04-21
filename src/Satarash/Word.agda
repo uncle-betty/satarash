@@ -1158,7 +1158,7 @@ data Formulaʷ i where
   -- eorʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   negʷ : Formulaʷ i → Formulaʷ i
   addʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
-  -- subʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
+  subʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   mulʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   -- iteʷ : Formulaᵇ i → Formulaʷ i → Formulaʷ i → Formulaʷ i
 
@@ -1186,7 +1186,7 @@ evalʷ v (andʷ x y)   = evalʷ v x ∧ʷ evalʷ v y
 -- evalʷ v (eorʷ x y)   = evalʷ v x xorʷ evalʷ v y
 evalʷ v (negʷ x)     = ↕ (evalʷ v x)
 evalʷ v (addʷ x y)   = evalʷ v x ⊞ evalʷ v y
--- evalʷ v (subʷ x y)   = evalʷ v x ⊟ evalʷ v y
+evalʷ v (subʷ x y)   = evalʷ v x ⊟ evalʷ v y
 evalʷ v (mulʷ x y)   = evalʷ v x ⊠ evalʷ v y
 -- evalʷ v (iteʷ x y z) = if evalᵇ v x then evalʷ v y else evalʷ v z
 
@@ -1194,8 +1194,8 @@ makeSeq : (k↑ k↓ : ℕ) → Vec ℕ k↓
 makeSeq k↑ zero     = []
 makeSeq k↑ (suc k↓) = k↑ ∷ makeSeq (suc k↑) k↓
 
-mapHead : ∀ {S T : Set} {i} (f : S → T) (xs : Vec S (suc i)) → head (map f xs) ≡ f (head xs)
-mapHead f (x ∷ xs) = refl
+headMap : ∀ {S T : Set} {i} (f : S → T) (xs : Vec S (suc i)) → head (map f xs) ≡ f (head xs)
+headMap f (x ∷ xs) = refl
 
 mapEvalRepl : ∀ {i} v x → map (eval₀ v) (replicate {n = i} x) ≡ replicate (eval₀ v x)
 mapEvalRepl {zero}  v x = refl
@@ -1233,6 +1233,16 @@ transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
   -- XXX - why does kong fail here?
   = cong (↕′-core (eval₀ v x)) (↕′-eval₂ v xs)
 
+↕-eval : ∀ {i} v (x : Vec Formula₀ i) → map (eval₀ v) (↕-build x) ≡ ↕ (map (eval₀ v) x)
+↕-eval v x =
+  begin
+    map (eval₀ v) (↕-build x)           ≡⟨⟩
+    map (eval₀ v) (drop 1 (↕′-build x)) ≡˘⟨ drop-distr-map (eval₀ v) 1 (↕′-build x) ⟩
+    drop 1 (map (eval₀ v) (↕′-build x)) ≡⟨ kong (↕′-eval₂ v x ) ⟩
+    drop 1 (↕′ (map (eval₀ v) x))       ≡⟨⟩
+    ↕ (map (eval₀ v) x)                 ∎
+  where open ≡-Reasoning
+
 +′-build : {i : ℕ} → (x y : Vec Formula₀ i) → Vec Formula₀ (suc i)
 +′-build x y = foldr (F∘ suc) +ʷ+-core′ [ con₀ false ] (zip x y)
 
@@ -1259,6 +1269,20 @@ transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
     drop 1 (map (eval₀ v) (+′-build x y))               ≡⟨ kong (+′-eval₂ v x y) ⟩
     drop 1 (map (eval₀ v) x +ʷ map (eval₀ v) y + false) ≡⟨⟩
     map (eval₀ v) x ⊞ map (eval₀ v) y                   ∎
+  where open ≡-Reasoning
+
+∸-build : {i : ℕ} → (x y : Vec Formula₀ i) → Vec Formula₀ i
+∸-build x y = +-build x (↕-build y)
+
+∸-eval : ∀ {i} v (x y : Vec Formula₀ i) →
+  map (eval₀ v) (∸-build x y) ≡ map (eval₀ v) x ⊟ map (eval₀ v) y
+∸-eval v x y =
+  begin
+    map (eval₀ v) (∸-build x y)                 ≡⟨⟩
+    map (eval₀ v) (+-build x (↕-build y))       ≡⟨ +-eval v x (↕-build y) ⟩
+    map (eval₀ v) x ⊞ map (eval₀ v) (↕-build y) ≡⟨ kong (↕-eval v y) ⟩
+    map (eval₀ v) x ⊞ ↕ (map (eval₀ v) y)       ≡⟨⟩
+    map (eval₀ v) x ⊟ map (eval₀ v) y           ∎
   where open ≡-Reasoning
 
 *′-build : {i k : ℕ} → (x : Vec Formula₀ i) → (y : Vec Formula₀ k) → Vec Formula₀ (k + i)
@@ -1339,7 +1363,7 @@ transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
 <-eval {i} v x y =
   begin
     eval₀ v (<-build x y)                                         ≡⟨⟩
-    not (eval₀ v (head (+-build x′ y′)))                          ≡˘⟨ kong (mapHead (eval₀ v) (+-build x′ (↕′-build y))) ⟩
+    not (eval₀ v (head (+-build x′ y′)))                          ≡˘⟨ kong (headMap (eval₀ v) (+-build x′ (↕′-build y))) ⟩
     not (head (map (eval₀ v) (+-build x′ y′)))                    ≡⟨ kong (+-eval v x′ (↕′-build y)) ⟩
     not (head (map (eval₀ v) x′ ⊞ map (eval₀ v) y′))              ≡⟨⟩
     not (head ((false ∷ map (eval₀ v) x) ⊞ map (eval₀ v) y′))     ≡⟨ kong (↕′-eval₂ v y) ⟩
@@ -1364,6 +1388,7 @@ transformʷ {i} (notʷ x)   = map not₀ (transformʷ x)
 transformʷ {i} (andʷ x y) = ∧-build (transformʷ x) (transformʷ y)
 transformʷ {i} (negʷ x)   = ↕-build (transformʷ x)
 transformʷ {i} (addʷ x y) = +-build (transformʷ x) (transformʷ y)
+transformʷ {i} (subʷ x y) = ∸-build (transformʷ x) (transformʷ y)
 transformʷ {i} (mulʷ x y) = *-build (transformʷ x) (transformʷ y)
 
 transformᵛ : {i : ℕ} → (ℕ → Word i) → ℕ → Bool
@@ -1538,13 +1563,11 @@ transformʷ-✓ {i} v (andʷ x y) =
 
 transformʷ-✓ {i} v (negʷ x) =
   begin
-    map (eval₀ tv) (transformʷ (negʷ x))  ≡⟨⟩
-    map (eval₀ tv) (drop 1 (↕′-build tx)) ≡˘⟨ drop-distr-map (eval₀ tv) 1 (↕′-build tx) ⟩
-    -- XXX - why does kong fail here?
-    drop 1 (map (eval₀ tv) (↕′-build tx)) ≡⟨ cong! (↕′-eval₂ tv tx) ⟩
-    drop 1 (↕′ (map (eval₀ tv) tx))       ≡⟨ kong (transformʷ-✓ v x) ⟩
-    drop 1 (↕′ (evalʷ v x))               ≡⟨⟩
-    ↕ (evalʷ v x)                         ∎
+    map (eval₀ tv) (transformʷ (negʷ x)) ≡⟨⟩
+    map (eval₀ tv) (↕-build tx)          ≡⟨ ↕-eval tv tx ⟩
+    ↕ (map (eval₀ tv) tx)                ≡⟨ kong (transformʷ-✓ v x) ⟩
+    drop 1 (↕′ (evalʷ v x))              ≡⟨⟩
+    ↕ (evalʷ v x)                        ∎
   where
   open ≡-Reasoning
 
@@ -1553,13 +1576,25 @@ transformʷ-✓ {i} v (negʷ x) =
 
 transformʷ-✓ {i} v (addʷ x y) =
   begin
-    map (eval₀ tv) (transformʷ (addʷ x y))                  ≡⟨⟩
-    map (eval₀ tv) (drop 1 (+′-build tx ty))                ≡˘⟨ drop-distr-map (eval₀ tv) 1 (+′-build tx ty) ⟩
-    -- XXX - why does kong fail here?
-    drop 1 (map (eval₀ tv) (+′-build tx ty))                ≡⟨ cong! (+′-eval₂ tv tx ty) ⟩
-    drop 1 (map (eval₀ tv) tx +ʷ map (eval₀ tv) ty + false) ≡⟨ kong (transformʷ-✓ v x) ⟩
-    drop 1 (evalʷ v x +ʷ map (eval₀ tv) ty + false)         ≡⟨ kong (transformʷ-✓ v y) ⟩
-    evalʷ v x ⊞ evalʷ v y                                   ∎
+    map (eval₀ tv) (transformʷ (addʷ x y)) ≡⟨⟩
+    map (eval₀ tv) (+-build tx ty)         ≡⟨ +-eval tv tx ty ⟩
+    map (eval₀ tv) tx ⊞ map (eval₀ tv) ty  ≡⟨ kong (transformʷ-✓ v x) ⟩
+    evalʷ v x ⊞ map (eval₀ tv) ty          ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x ⊞ evalʷ v y                  ∎
+  where
+  open ≡-Reasoning
+
+  tv = transformᵛ v
+  tx = transformʷ x
+  ty = transformʷ y
+
+transformʷ-✓ {i} v (subʷ x y) =
+  begin
+    map (eval₀ tv) (transformʷ (subʷ x y)) ≡⟨⟩
+    map (eval₀ tv) (∸-build tx ty)         ≡⟨ ∸-eval tv tx ty ⟩
+    map (eval₀ tv) tx ⊟ map (eval₀ tv) ty  ≡⟨ kong (transformʷ-✓ v x) ⟩
+    evalʷ v x ⊟ map (eval₀ tv) ty          ≡⟨ kong (transformʷ-✓ v y) ⟩
+    evalʷ v x ⊟ evalʷ v y                  ∎
   where
   open ≡-Reasoning
 
