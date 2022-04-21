@@ -1455,8 +1455,7 @@ transformᵇEq-✓ {i} v x y =
   begin
     eval₀ tv (transformᵇ (eqᵇ x y))        ≡⟨⟩
     eval₀ tv (≡-build tx ty)               ≡⟨ kong (≡-eval tv tx ty) ⟩
-    map (eval₀ tv) tx ≡ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x ≡ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx ≡ʷ map (eval₀ tv) ty ≡⟨ cong₂ _≡ʷ_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x ≡ʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
@@ -1471,8 +1470,7 @@ transformᵇLt-✓ {i} v x y =
   begin
     eval₀ tv (transformᵇ (ltᵇ x y))        ≡⟨⟩
     eval₀ tv (<-build tx ty)               ≡⟨ kong (<-eval tv tx ty) ⟩
-    map (eval₀ tv) tx <ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x <ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx <ʷ map (eval₀ tv) ty ≡⟨ cong₂ _<ʷ_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x <ʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
@@ -1605,8 +1603,7 @@ transformʷ-✓ {i} v (andʷ x y) =
   begin
     map (eval₀ tv) (transformʷ (andʷ x y)) ≡⟨⟩
     map (eval₀ tv) (∧-build tx ty)         ≡⟨ ∧-eval tv tx ty ⟩
-    map (eval₀ tv) tx ∧ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x ∧ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx ∧ʷ map (eval₀ tv) ty ≡⟨ cong₂ _∧ʷ_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x ∧ʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
@@ -1619,8 +1616,7 @@ transformʷ-✓ {i} v (orʷ x y) =
   begin
     map (eval₀ tv) (transformʷ (orʷ x y))  ≡⟨⟩
     map (eval₀ tv) (∨-build tx ty)         ≡⟨ ∨-eval tv tx ty ⟩
-    map (eval₀ tv) tx ∨ʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x ∨ʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx ∨ʷ map (eval₀ tv) ty ≡⟨ cong₂ _∨ʷ_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x ∨ʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
@@ -1633,8 +1629,7 @@ transformʷ-✓ {i} v (eorʷ x y) =
   begin
     map (eval₀ tv) (transformʷ (eorʷ x y))   ≡⟨⟩
     map (eval₀ tv) (eorBuild tx ty)          ≡⟨ eorEval tv tx ty ⟩
-    map (eval₀ tv) tx xorʷ map (eval₀ tv) ty ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x xorʷ map (eval₀ tv) ty         ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx xorʷ map (eval₀ tv) ty ≡⟨ cong₂ _xorʷ_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x xorʷ evalʷ v y                 ∎
   where
   open ≡-Reasoning
@@ -1660,8 +1655,7 @@ transformʷ-✓ {i} v (addʷ x y) =
   begin
     map (eval₀ tv) (transformʷ (addʷ x y)) ≡⟨⟩
     map (eval₀ tv) (+-build tx ty)         ≡⟨ +-eval tv tx ty ⟩
-    map (eval₀ tv) tx ⊞ map (eval₀ tv) ty  ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x ⊞ map (eval₀ tv) ty          ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx ⊞ map (eval₀ tv) ty  ≡⟨ cong₂ _⊞_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x ⊞ evalʷ v y                  ∎
   where
   open ≡-Reasoning
@@ -1674,8 +1668,7 @@ transformʷ-✓ {i} v (subʷ x y) =
   begin
     map (eval₀ tv) (transformʷ (subʷ x y)) ≡⟨⟩
     map (eval₀ tv) (∸-build tx ty)         ≡⟨ ∸-eval tv tx ty ⟩
-    map (eval₀ tv) tx ⊟ map (eval₀ tv) ty  ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x ⊟ map (eval₀ tv) ty          ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx ⊟ map (eval₀ tv) ty  ≡⟨ cong₂ _⊟_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x ⊟ evalʷ v y                  ∎
   where
   open ≡-Reasoning
@@ -1688,8 +1681,7 @@ transformʷ-✓ {i} v (mulʷ x y) =
   begin
     map (eval₀ tv) (transformʷ (mulʷ x y)) ≡⟨⟩
     map (eval₀ tv) (*-build tx ty)         ≡⟨ *-eval tv tx ty ⟩
-    map (eval₀ tv) tx ⊠ map (eval₀ tv) ty  ≡⟨ kong (transformʷ-✓ v x) ⟩
-    evalʷ v x ⊠ map (eval₀ tv) ty          ≡⟨ kong (transformʷ-✓ v y) ⟩
+    map (eval₀ tv) tx ⊠ map (eval₀ tv) ty  ≡⟨ cong₂ _⊠_ (transformʷ-✓ v x) (transformʷ-✓ v y) ⟩
     evalʷ v x ⊠ evalʷ v y                  ∎
   where
   open ≡-Reasoning
@@ -1703,8 +1695,7 @@ transformʷ-✓ {i} v (iteʷ x y z) =
     map (eval₀ tv) (transformʷ (iteʷ x y z))                       ≡⟨⟩
     map (eval₀ tv) (iteBuild tx ty tz)                             ≡⟨ iteEval tv tx ty tz ⟩
     (if eval₀ tv tx then map (eval₀ tv) ty else map (eval₀ tv) tz) ≡⟨ kong (transformᵇ-✓ v x) ⟩
-    (if evalᵇ v x then map (eval₀ tv) ty else map (eval₀ tv) tz)   ≡⟨ kong (transformʷ-✓ v y) ⟩
-    (if evalᵇ v x then evalʷ v y else map (eval₀ tv) tz)           ≡⟨ kong (transformʷ-✓ v z) ⟩
+    (if evalᵇ v x then map (eval₀ tv) ty else map (eval₀ tv) tz)   ≡⟨ cong₂ (if evalᵇ v x then_else_) (transformʷ-✓ v y) (transformʷ-✓ v z) ⟩
     (if evalᵇ v x then evalʷ v y else evalʷ v z)                   ∎
   where
   open ≡-Reasoning
