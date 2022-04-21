@@ -1143,11 +1143,11 @@ data Formulaʷ (i : ℕ) : Set
 
 data Formulaᵇ i where
   eqᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  -- neᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  neᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
   ltᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  -- leᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  -- gtᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  -- geᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  leᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  gtᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  geᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
 
 data Formulaʷ i where
   conʷ : Word i → Formulaʷ i
@@ -1172,11 +1172,11 @@ evalᵇ : {i : ℕ} → (ℕ → Word i) → Formulaᵇ i → Bool
 evalʷ : {i : ℕ} → (ℕ → Word i) → Formulaʷ i → Word i
 
 evalᵇ v (eqᵇ x y) = evalʷ v x ≡ʷ evalʷ v y
--- evalᵇ v (neᵇ x y) = evalʷ v x ≢ʷ evalʷ v y
+evalᵇ v (neᵇ x y) = evalʷ v x ≢ʷ evalʷ v y
 evalᵇ v (ltᵇ x y) = evalʷ v x <ʷ evalʷ v y
--- evalᵇ v (leᵇ x y) = evalʷ v x ≤ʷ evalʷ v y
--- evalᵇ v (gtᵇ x y) = evalʷ v x >ʷ evalʷ v y
--- evalᵇ v (geᵇ x y) = evalʷ v x ≥ʷ evalʷ v y
+evalᵇ v (leᵇ x y) = evalʷ v x ≤ʷ evalʷ v y
+evalᵇ v (gtᵇ x y) = evalʷ v x >ʷ evalʷ v y
+evalᵇ v (geᵇ x y) = evalʷ v x ≥ʷ evalʷ v y
 
 evalʷ v (conʷ x)     = x
 evalʷ v (varʷ x)     = v x
@@ -1352,7 +1352,11 @@ transformʷ : {i : ℕ} → Formulaʷ i → Vec Formula₀ i
   y′ = ↕′-build y
 
 transformᵇ {i} (eqᵇ x y) = ≡-build (transformʷ x) (transformʷ y)
+transformᵇ {i} (neᵇ x y) = not₀ (≡-build (transformʷ x) (transformʷ y))
 transformᵇ {i} (ltᵇ x y) = <-build (transformʷ x) (transformʷ y)
+transformᵇ {i} (leᵇ x y) = not₀ (<-build (transformʷ y) (transformʷ x))
+transformᵇ {i} (gtᵇ x y) = <-build (transformʷ y) (transformʷ x)
+transformᵇ {i} (geᵇ x y) = not₀ (<-build (transformʷ x) (transformʷ y))
 
 transformʷ {i} (conʷ x)   = map con₀ x
 transformʷ {i} (varʷ x)   = map var₀ (makeSeq (x * i) i)
@@ -1383,6 +1387,8 @@ transformᵇ-✓ {i} v (eqᵇ x y) =
   tx = transformʷ x
   ty = transformʷ y
 
+transformᵇ-✓ {i} v (neᵇ x y) = cong not (transformᵇ-✓ v (eqᵇ x y))
+
 transformᵇ-✓ {i} v (ltᵇ x y) =
   begin
     eval₀ tv (transformᵇ (ltᵇ x y))        ≡⟨⟩
@@ -1396,6 +1402,10 @@ transformᵇ-✓ {i} v (ltᵇ x y) =
   tv = transformᵛ v
   tx = transformʷ x
   ty = transformʷ y
+
+transformᵇ-✓ {i} v (leᵇ x y) = cong not (transformᵇ-✓ v (ltᵇ y x))
+transformᵇ-✓ {i} v (gtᵇ x y) = transformᵇ-✓ v (ltᵇ y x)
+transformᵇ-✓ {i} v (geᵇ x y) = cong not (transformᵇ-✓ v (ltᵇ x y))
 
 transformʷ-✓ {i} v (conʷ x) =
   begin
