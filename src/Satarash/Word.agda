@@ -10,6 +10,8 @@ open import Data.Bool using (
     _≟_ to _≟ᵇ_ ; _<_ to _<ᵇ_
   )
 open import Data.Bool.Properties using (∧-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; not-injective)
+open import Data.Char using (Char)
+open import Data.List using (List) renaming (_∷_ to _∷ˡ_ ; [] to []ˡ)
 open import Data.Maybe using (Maybe ; nothing ; just)
 open import Data.Nat using (
     ℕ ; zero ; suc ; pred ; _+_ ; _*_ ; _∸_ ; _^_ ; _≤_ ; _≰_ ; z≤n ; s≤s ; z<s ; _<_ ; _≮_ ; _>_ ;
@@ -22,15 +24,17 @@ open import Data.Nat.DivMod using (
     m≤n⇒m%n≡m ; [m+kn]%n≡m%n ; +-distrib-/
   )
 open import Data.Nat.Properties using (
-    ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ; <⇒≯ ;
+    ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ; <⇒≯ ; ≰⇒> ;
     +-identityʳ ; +-comm ; +-assoc ; +-suc ; +-monoˡ-≤ ; +-monoʳ-≤ ; +-monoˡ-< ; +-monoʳ-< ;
     +-cancelʳ-< ; +-cancelʳ-≤ ; n<1+n ; m≤n+m ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ; m+[n∸m]≡n ;
     *-suc ; *-zeroʳ ; *-identityˡ ; *-identityʳ ; *-comm ; *-assoc ; *-monoˡ-≤ ; *-monoʳ-≤ ;
     *-monoˡ-< ; *-distribˡ-+ ; *-distribʳ-+ ; ^-distribˡ-+-* ;
     module ≤-Reasoning
   )
+open import Data.Nat.Show using (show)
 open import Data.Nat.Tactic.RingSolver using (solve-∀)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; uncurry) renaming (map to mapᵖ)
+open import Data.String using (String ; fromList) renaming (_++_ to _++ˢ_)
 open import Data.Unit using (⊤ ; tt)
 open import Data.Vec using (
     Vec ; [] ; _∷_ ; [_] ; replicate ; _++_ ; splitAt ; take ; drop ; head ; map ; zip ; foldr
@@ -49,13 +53,15 @@ open import Relation.Binary.PropositionalEquality using (
   )
 open import Relation.Binary using (DecidableEquality)
 open import Relation.Binary.PropositionalEquality.Algebra using (isMagma)
-open import Relation.Nullary using (yes ; no)
+open import Relation.Nullary using (¬_ ; yes ; no)
 open import Relation.Nullary.Negation using (contradiction)
 open import Tactic.Cong using (cong!)
 
 open import Kong.Tactic using (kong)
 
-open import Satarash.Tseytin as T using (Formula₀ ; con₀ ; var₀ ; and₀ ; or₀ ; not₀ ; xor₀ ; eval₀)
+open import Satarash.Tseytin as T using (
+    Formula₀ ; con₀ ; var₀ ; and₀ ; or₀ ; not₀ ; xor₀ ; imp₀ ; eval₀ ; _⇒_
+  )
 
 --- words ------------------------------------------------------------------------------------------
 
@@ -865,6 +871,16 @@ xs ≡ʷ ys = foldr _ ≡ʷ-core true (zip xs ys)
 ≡ʷ-✓₂ {suc i} {true ∷ xs}  {false ∷ ys} refl = λ ()
 ≡ʷ-✓₂ {suc i} {true ∷ xs}  {true ∷ ys}  p    = ≡ʷ-✓₂ p ∘ ∷-injectiveʳ
 
+≡ʷ-✓₃ : ∀ {i} {x y : Word i} → x ≡ y → (x ≡ʷ y) ≡ true
+≡ʷ-✓₃ {i} {x} {y} p with x ≡ʷ y in eq
+≡ʷ-✓₃ {i} {x} {y} p    | true         = refl
+≡ʷ-✓₃ {i} {x} {y} p    | false        = contradiction p (≡ʷ-✓₂ eq)
+
+≡ʷ-✓₄ : ∀ {i} {x y : Word i} → x ≢ y → (x ≡ʷ y) ≡ false
+≡ʷ-✓₄ {i} {x} {y} p with x ≡ʷ y in eq
+≡ʷ-✓₄ {i} {x} {y} p    | false        = refl
+≡ʷ-✓₄ {i} {x} {y} p    | true         = contradiction (≡ʷ-✓₁ eq) p
+
 --- not equal --------------------------------------------------------------------------------------
 
 infix 4 _≢ʷ_
@@ -877,6 +893,12 @@ x ≢ʷ y = not (x ≡ʷ y)
 
 ≢ʷ-✓₂ : ∀ {i} {x y : Word i} → (x ≢ʷ y) ≡ false → x ≡ y
 ≢ʷ-✓₂ p = ≡ʷ-✓₁ (not-injective p)
+
+≢ʷ-✓₃ : ∀ {i} {x y : Word i} → x ≢ y → (x ≢ʷ y) ≡ true
+≢ʷ-✓₃ p = cong not (≡ʷ-✓₄ p)
+
+≢ʷ-✓₄ : ∀ {i} {x y : Word i} → x ≡ y → (x ≢ʷ y) ≡ false
+≢ʷ-✓₄ p = cong not (≡ʷ-✓₃ p)
 
 --- less than --------------------------------------------------------------------------------------
 
@@ -974,8 +996,29 @@ module _ where
     loc₃ : bits y ≤ bits x
     loc₃ = lem₅ (bits<2^i y) loc₂
 
-<ʷ⇒<ˡ : ∀ {i} {x y : Word i} → (x <ʷ y) ≡ true → x <ˡ y
-<ʷ⇒<ˡ {i} = bits⇒<ˡ ∘ <ʷ-✓₁ {i}
+  <ʷ-✓₃ : ∀ {i x y} → bits {i} x < bits y → (x <ʷ y) ≡ true
+  <ʷ-✓₃ {i} {x} {y} p with x <ʷ y in eq
+  <ʷ-✓₃ {i} {x} {y} p    | true         = refl
+  <ʷ-✓₃ {i} {x} {y} p    | false        = contradiction p (<ʷ-✓₂ {i} eq )
+
+  <ʷ-✓₄ : ∀ {i x y} → bits {i} x ≮ bits y → (x <ʷ y) ≡ false
+  <ʷ-✓₄ {i} {x} {y} p with x <ʷ y in eq
+  <ʷ-✓₄ {i} {x} {y} p    | false        = refl
+  <ʷ-✓₄ {i} {x} {y} p    | true         = contradiction (<ʷ-✓₁ {i} eq) p
+
+<ʷ⇒<ˡ₁ : ∀ {i} {x y : Word i} → (x <ʷ y) ≡ true → x <ˡ y
+<ʷ⇒<ˡ₁ {i} = bits⇒<ˡ ∘ <ʷ-✓₁ {i}
+
+<ˡ⇒<ʷ₁ : ∀ {i} {x y : Word i} → x <ˡ y → (x <ʷ y) ≡ true
+<ˡ⇒<ʷ₁ {i} = <ʷ-✓₃ {i} ∘ <ˡ⇒bits
+
+<ʷ⇒<ˡ₂ : ∀ {i} {x y : Word i} → (x <ʷ y) ≡ false → ¬ (x <ˡ y)
+<ʷ⇒<ˡ₂ p q = case trans (sym p) (<ˡ⇒<ʷ₁ q) of λ ()
+
+<ˡ⇒<ʷ₂ : ∀ {i} {x y : Word i} → ¬ (x <ˡ y) → (x <ʷ y) ≡ false
+<ˡ⇒<ʷ₂ {i} {x} {y} p with x <ʷ y in eq
+<ˡ⇒<ʷ₂ {i} {x} {y} p    | false        = refl
+<ˡ⇒<ʷ₂ {i} {x} {y} p    | true         = contradiction (<ʷ⇒<ˡ₁ eq) p
 
 --- less than or equal to --------------------------------------------------------------------------
 
@@ -990,8 +1033,25 @@ x ≤ʷ y = not (y <ʷ x)
 ≤ʷ-✓₂ : ∀ {i} {x} {y} → (x ≤ʷ y) ≡ false → bits {i} x ≰ bits y
 ≤ʷ-✓₂ {i} {x} {y} p = <⇒≱ (<ʷ-✓₁ {i} (not-injective p))
 
-≤ʷ⇒≤ˡ : ∀ {i} {x y : Word i} → (x ≤ʷ y) ≡ true → x ≤ˡ y
-≤ʷ⇒≤ˡ {i} = bits⇒≤ˡ ∘ ≤ʷ-✓₁ {i}
+≤ʷ-✓₃ : ∀ {i} {x} {y} → bits {i} x ≤ bits y → (x ≤ʷ y) ≡ true
+≤ʷ-✓₃ {i} {x} {y} p = cong not (<ʷ-✓₄ {i} (≤⇒≯ p))
+
+≤ʷ-✓₄ : ∀ {i} {x} {y} → bits {i} x ≰ bits y → (x ≤ʷ y) ≡ false
+≤ʷ-✓₄ {i} {x} {y} p = cong not (<ʷ-✓₃ {i} (≰⇒> p))
+
+≤ʷ⇒≤ˡ₁ : ∀ {i} {x y : Word i} → (x ≤ʷ y) ≡ true → x ≤ˡ y
+≤ʷ⇒≤ˡ₁ {i} = bits⇒≤ˡ ∘ ≤ʷ-✓₁ {i}
+
+≤ˡ⇒≤ʷ₁ : ∀ {i} {x y : Word i} → x ≤ˡ y → (x ≤ʷ y) ≡ true
+≤ˡ⇒≤ʷ₁ {i} = ≤ʷ-✓₃ {i} ∘ ≤ˡ⇒bits
+
+≤ʷ⇒≤ˡ₂ : ∀ {i} {x y : Word i} → (x ≤ʷ y) ≡ false → ¬ (x ≤ˡ y)
+≤ʷ⇒≤ˡ₂ p q = case trans (sym p) (≤ˡ⇒≤ʷ₁ q) of λ ()
+
+≤ˡ⇒≤ʷ₂ : ∀ {i} {x y : Word i} → ¬ (x ≤ˡ y) → (x ≤ʷ y) ≡ false
+≤ˡ⇒≤ʷ₂ {i} {x} {y} p with x ≤ʷ y in eq
+≤ˡ⇒≤ʷ₂ {i} {x} {y} p    | false        = refl
+≤ˡ⇒≤ʷ₂ {i} {x} {y} p    | true         = contradiction (≤ʷ⇒≤ˡ₁ eq) p
 
 --- greater than -----------------------------------------------------------------------------------
 
@@ -1001,13 +1061,28 @@ _>ʷ_ : {i : ℕ} → Word i → Word i → Bool
 x >ʷ y = y <ʷ x
 
 >ʷ-✓₁ : ∀ {i} {x} {y} → (x >ʷ y) ≡ true → bits {i} x > bits y
->ʷ-✓₁ {i} {x} {y} p = <ʷ-✓₁ {i} p
+>ʷ-✓₁ {i} = <ʷ-✓₁ {i}
 
 >ʷ-✓₂ : ∀ {i} {x} {y} → (x >ʷ y) ≡ false → bits {i} x ≯ bits y
->ʷ-✓₂ {i} {x} {y} p = <ʷ-✓₂ {i} p
+>ʷ-✓₂ {i} = <ʷ-✓₂ {i}
 
->ʷ⇒>ˡ : ∀ {i} {x y : Word i} → (x >ʷ y) ≡ true → x >ˡ y
->ʷ⇒>ˡ {i} = bits⇒<ˡ ∘ >ʷ-✓₁ {i}
+>ʷ-✓₃ : ∀ {i} {x} {y} → bits {i} x > bits y → (x >ʷ y) ≡ true
+>ʷ-✓₃ {i} = <ʷ-✓₃ {i}
+
+>ʷ-✓₄ : ∀ {i} {x} {y} → bits {i} x ≯ bits y → (x >ʷ y) ≡ false
+>ʷ-✓₄ {i} = <ʷ-✓₄ {i}
+
+>ʷ⇒>ˡ₁ : ∀ {i} {x y : Word i} → (x >ʷ y) ≡ true → x >ˡ y
+>ʷ⇒>ˡ₁ = <ʷ⇒<ˡ₁
+
+>ˡ⇒>ʷ₁ : ∀ {i} {x y : Word i} → x >ˡ y → (x >ʷ y) ≡ true
+>ˡ⇒>ʷ₁ = <ˡ⇒<ʷ₁
+
+>ʷ⇒>ˡ₂ : ∀ {i} {x y : Word i} → (x >ʷ y) ≡ false → ¬ (x >ˡ y)
+>ʷ⇒>ˡ₂ = <ʷ⇒<ˡ₂
+
+>ˡ⇒>ʷ₂ : ∀ {i} {x y : Word i} → ¬ (x >ˡ y) → (x >ʷ y) ≡ false
+>ˡ⇒>ʷ₂ = <ˡ⇒<ʷ₂
 
 --- greater than or equal to -----------------------------------------------------------------------
 
@@ -1017,13 +1092,28 @@ _≥ʷ_ : {i : ℕ} → Word i → Word i → Bool
 x ≥ʷ y = y ≤ʷ x
 
 ≥ʷ-✓₁ : ∀ {i} {x} {y} → (x ≥ʷ y) ≡ true → bits {i} x ≥ bits y
-≥ʷ-✓₁ {i} {x} {y} p = ≤ʷ-✓₁ {i} p
+≥ʷ-✓₁ {i} = ≤ʷ-✓₁ {i}
 
 ≥ʷ-✓₂ : ∀ {i} {x} {y} → (x ≥ʷ y) ≡ false → bits {i} x ≱ bits y
-≥ʷ-✓₂ {i} {x} {y} p = ≤ʷ-✓₂ {i} p
+≥ʷ-✓₂ {i} = ≤ʷ-✓₂ {i}
 
-≥ʷ⇒≥ˡ : ∀ {i} {x y : Word i} → (x ≥ʷ y) ≡ true → x ≥ˡ y
-≥ʷ⇒≥ˡ {i} = bits⇒≤ˡ ∘ ≥ʷ-✓₁ {i}
+≥ʷ-✓₃ : ∀ {i} {x} {y} → bits {i} x ≥ bits y → (x ≥ʷ y) ≡ true
+≥ʷ-✓₃ {i} = ≤ʷ-✓₃ {i}
+
+≥ʷ-✓₄ : ∀ {i} {x} {y} → bits {i} x ≱ bits y → (x ≥ʷ y) ≡ false
+≥ʷ-✓₄ {i} = ≤ʷ-✓₄ {i}
+
+≥ʷ⇒≥ˡ₁ : ∀ {i} {x y : Word i} → (x ≥ʷ y) ≡ true → x ≥ˡ y
+≥ʷ⇒≥ˡ₁ = ≤ʷ⇒≤ˡ₁
+
+≥ˡ⇒≥ʷ₁ : ∀ {i} {x y : Word i} → x ≥ˡ y → (x ≥ʷ y) ≡ true
+≥ˡ⇒≥ʷ₁ = ≤ˡ⇒≤ʷ₁
+
+≥ʷ⇒≥ˡ₂ : ∀ {i} {x y : Word i} → (x ≥ʷ y) ≡ false → ¬ (x ≥ˡ y)
+≥ʷ⇒≥ˡ₂ = ≤ʷ⇒≤ˡ₂
+
+≥ˡ⇒≥ʷ₂ : ∀ {i} {x y : Word i} → ¬ (x ≥ˡ y) → (x ≥ʷ y) ≡ false
+≥ˡ⇒≥ʷ₂ = ≤ˡ⇒≤ʷ₂
 
 --- ring solver ------------------------------------------------------------------------------------
 
@@ -1229,12 +1319,13 @@ data Formulaᵇ (i : ℕ) : Set
 data Formulaʷ (i : ℕ) : Set
 
 data Formulaᵇ i where
-  eqᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  neᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  ltᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  leᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  gtᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
-  geᵇ : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  eqᵇ  : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  neᵇ  : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  ltᵇ  : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  leᵇ  : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  gtᵇ  : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  geᵇ  : Formulaʷ i → Formulaʷ i → Formulaᵇ i
+  impᵇ : Formulaᵇ i → Formulaᵇ i → Formulaᵇ i
 
 data Formulaʷ i where
   conʷ : Word i → Formulaʷ i
@@ -1249,6 +1340,37 @@ data Formulaʷ i where
   mulʷ : Formulaʷ i → Formulaʷ i → Formulaʷ i
   iteʷ : Formulaᵇ i → Formulaʷ i → Formulaʷ i → Formulaʷ i
 
+showᶜ : {i : ℕ} → Word i → String
+showᵇ : {i : ℕ} → Formulaᵇ i → String
+showʷ : {i : ℕ} → Formulaʷ i → String
+
+showᶜ {i} xs = fromList (go xs)
+  where
+  go : {i : ℕ} → Word i → List Char
+  go {zero}  []           = []ˡ
+  go {suc i} (false ∷ xs) = '0' ∷ˡ go xs
+  go {suc i} (true  ∷ xs) = '1' ∷ˡ go xs
+
+showᵇ {i} (eqᵇ x y)  = "(eq " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showᵇ {i} (neᵇ x y)  = "(ne " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showᵇ {i} (ltᵇ x y)  = "(lt " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showᵇ {i} (leᵇ x y)  = "(le " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showᵇ {i} (gtᵇ x y)  = "(gt " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showᵇ {i} (geᵇ x y)  = "(ge " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showᵇ {i} (impᵇ x y) = "(imp " ++ˢ showᵇ x ++ˢ " " ++ˢ showᵇ y ++ˢ ")"
+
+showʷ {i} (conʷ x)     = "(con " ++ˢ showᶜ x ++ˢ ")"
+showʷ {i} (varʷ x)     = "(var " ++ˢ show x ++ˢ ")"
+showʷ {i} (notʷ x)     = "(not " ++ˢ showʷ x ++ˢ ")"
+showʷ {i} (andʷ x y)   = "(and " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showʷ {i} (orʷ x y)    = "(or " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showʷ {i} (eorʷ x y)   = "(eor " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showʷ {i} (negʷ x)     = "(neg " ++ˢ showʷ x ++ˢ ")"
+showʷ {i} (addʷ x y)   = "(add " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showʷ {i} (subʷ x y)   = "(sub " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showʷ {i} (mulʷ x y)   = "(mul " ++ˢ showʷ x ++ˢ " " ++ˢ showʷ y ++ˢ ")"
+showʷ {i} (iteʷ x y z) = "(ite " ++ˢ showᵇ x ++ˢ " " ++ˢ showʷ y ++ˢ " " ++ˢ showʷ z ++ˢ ")"
+
 W∘ : (ℕ → ℕ) → ℕ → Set
 W∘ f = Word ∘ f
 
@@ -1258,12 +1380,13 @@ F∘ f = Vec Formula₀ ∘ f
 evalᵇ : {i : ℕ} → (ℕ → Word i) → Formulaᵇ i → Bool
 evalʷ : {i : ℕ} → (ℕ → Word i) → Formulaʷ i → Word i
 
-evalᵇ v (eqᵇ x y) = evalʷ v x ≡ʷ evalʷ v y
-evalᵇ v (neᵇ x y) = evalʷ v x ≢ʷ evalʷ v y
-evalᵇ v (ltᵇ x y) = evalʷ v x <ʷ evalʷ v y
-evalᵇ v (leᵇ x y) = evalʷ v x ≤ʷ evalʷ v y
-evalᵇ v (gtᵇ x y) = evalʷ v x >ʷ evalʷ v y
-evalᵇ v (geᵇ x y) = evalʷ v x ≥ʷ evalʷ v y
+evalᵇ v (eqᵇ x y)  = evalʷ v x ≡ʷ evalʷ v y
+evalᵇ v (neᵇ x y)  = evalʷ v x ≢ʷ evalʷ v y
+evalᵇ v (ltᵇ x y)  = evalʷ v x <ʷ evalʷ v y
+evalᵇ v (leᵇ x y)  = evalʷ v x ≤ʷ evalʷ v y
+evalᵇ v (gtᵇ x y)  = evalʷ v x >ʷ evalʷ v y
+evalᵇ v (geᵇ x y)  = evalʷ v x ≥ʷ evalʷ v y
+evalᵇ v (impᵇ x y) = evalᵇ v x ⇒ evalᵇ v y
 
 evalʷ v (conʷ x)     = x
 evalʷ v (varʷ x)     = v x
@@ -1510,12 +1633,13 @@ iteEval {suc i} v x (y ∷ ys) (z ∷ zs) | false
   x′ = con₀ false ∷ x
   y′ = ↕′-build y
 
-transformᵇ {i} (eqᵇ x y) = ≡-build (transformʷ x) (transformʷ y)
-transformᵇ {i} (neᵇ x y) = not₀ (≡-build (transformʷ x) (transformʷ y))
-transformᵇ {i} (ltᵇ x y) = <-build (transformʷ x) (transformʷ y)
-transformᵇ {i} (leᵇ x y) = not₀ (<-build (transformʷ y) (transformʷ x))
-transformᵇ {i} (gtᵇ x y) = <-build (transformʷ y) (transformʷ x)
-transformᵇ {i} (geᵇ x y) = not₀ (<-build (transformʷ x) (transformʷ y))
+transformᵇ {i} (eqᵇ x y)  = ≡-build (transformʷ x) (transformʷ y)
+transformᵇ {i} (neᵇ x y)  = not₀ (≡-build (transformʷ x) (transformʷ y))
+transformᵇ {i} (ltᵇ x y)  = <-build (transformʷ x) (transformʷ y)
+transformᵇ {i} (leᵇ x y)  = not₀ (<-build (transformʷ y) (transformʷ x))
+transformᵇ {i} (gtᵇ x y)  = <-build (transformʷ y) (transformʷ x)
+transformᵇ {i} (geᵇ x y)  = not₀ (<-build (transformʷ x) (transformʷ y))
+transformᵇ {i} (impᵇ x y) = imp₀ (transformᵇ x) (transformᵇ y)
 
 transformʷ {i} (conʷ x)     = map con₀ x
 transformʷ {i} (varʷ x)     = map var₀ (makeSeq (x * i) i)
@@ -1566,12 +1690,13 @@ transformᵇLt-✓ {i} v x y =
   tx = transformʷ x
   ty = transformʷ y
 
-transformᵇ-✓ {i} v (eqᵇ x y) = transformᵇEq-✓ v x y
-transformᵇ-✓ {i} v (neᵇ x y) = cong not (transformᵇEq-✓ v x y)
-transformᵇ-✓ {i} v (ltᵇ x y) = transformᵇLt-✓ v x y
-transformᵇ-✓ {i} v (leᵇ x y) = cong not (transformᵇLt-✓ v y x)
-transformᵇ-✓ {i} v (gtᵇ x y) = transformᵇLt-✓ v y x
-transformᵇ-✓ {i} v (geᵇ x y) = cong not (transformᵇLt-✓ v x y)
+transformᵇ-✓ {i} v (eqᵇ x y)  = transformᵇEq-✓ v x y
+transformᵇ-✓ {i} v (neᵇ x y)  = cong not (transformᵇEq-✓ v x y)
+transformᵇ-✓ {i} v (ltᵇ x y)  = transformᵇLt-✓ v x y
+transformᵇ-✓ {i} v (leᵇ x y)  = cong not (transformᵇLt-✓ v y x)
+transformᵇ-✓ {i} v (gtᵇ x y)  = transformᵇLt-✓ v y x
+transformᵇ-✓ {i} v (geᵇ x y)  = cong not (transformᵇLt-✓ v x y)
+transformᵇ-✓ {i} v (impᵇ x y) = cong₂ _⇒_ (transformᵇ-✓ v x) (transformᵇ-✓ v y)
 
 transformʷ-✓ {i} v (conʷ x) =
   begin
@@ -1794,3 +1919,6 @@ transformʷ-✓ {i} v (iteʷ x y z) =
 
 unsatʷ-✓ : ∀ {i} f → (∀ v → eval₀ v (transformᵇ {i} f) ≡ false) → (∀ v → evalᵇ v f ≡ false)
 unsatʷ-✓ f p v = trans (sym (transformᵇ-✓ v f)) (p (transformᵛ v))
+
+zeroWord : {i : ℕ} → Word i
+zeroWord = replicate false
