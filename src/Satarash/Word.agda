@@ -5,9 +5,9 @@ open import Algebra.Structures using (
     IsMagma ; IsSemigroup ; IsMonoid ; IsGroup ; IsAbelianGroup ; IsRing ; IsCommutativeRing
   )
 open import Data.Bool using (
-    Bool ; true ; false ; _∧_ ; _∨_ ; not ; _xor_ ; if_then_else_
+    Bool ; true ; false ; f≤t ; b≤b ; f<t ; _∧_ ; _∨_ ; not ; _xor_ ; if_then_else_
   ) renaming (
-    _≟_ to _≟ᵇ_
+    _≟_ to _≟ᵇ_ ; _<_ to _<ᵇ_
   )
 open import Data.Bool.Properties using (∧-zeroʳ ; ∧-identityʳ ; ∨-identityʳ ; not-injective)
 open import Data.Maybe using (Maybe ; nothing ; just)
@@ -22,15 +22,16 @@ open import Data.Nat.DivMod using (
     m≤n⇒m%n≡m ; [m+kn]%n≡m%n ; +-distrib-/
   )
 open import Data.Nat.Properties using (
-    ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ;
+    ≤-refl ; <-irrefl ; <⇒≢ ; <⇒≤ ; <⇒≱ ; ≤⇒≯ ; ≮⇒≥ ; <⇒≯ ;
     +-identityʳ ; +-comm ; +-assoc ; +-suc ; +-monoˡ-≤ ; +-monoʳ-≤ ; +-monoˡ-< ; +-monoʳ-< ;
-    n<1+n ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ; m+[n∸m]≡n ;
+    +-cancelʳ-< ; +-cancelʳ-≤ ; n<1+n ; m≤n+m ; m+n∸n≡m ; m∸n+n≡m ; m∸n≤m ; m+[n∸m]≡n ;
     *-suc ; *-zeroʳ ; *-identityˡ ; *-identityʳ ; *-comm ; *-assoc ; *-monoˡ-≤ ; *-monoʳ-≤ ;
     *-monoˡ-< ; *-distribˡ-+ ; *-distribʳ-+ ; ^-distribˡ-+-* ;
     module ≤-Reasoning
   )
 open import Data.Nat.Tactic.RingSolver using (solve-∀)
 open import Data.Product using (_×_ ; _,_ ; proj₁ ; proj₂ ; uncurry) renaming (map to mapᵖ)
+open import Data.Unit using (⊤ ; tt)
 open import Data.Vec using (
     Vec ; [] ; _∷_ ; [_] ; replicate ; _++_ ; splitAt ; take ; drop ; head ; map ; zip ; foldr
   )
@@ -38,11 +39,13 @@ open import Data.Vec.Properties using (
     ≡-dec ; ∷-injectiveʳ ; ∷-injective ; map-id ; map-++ ; map-∘ ; map-zip ; map-cong ;
     drop-distr-map
   )
-open import Function using (_$_ ; case_of_ ; _∘_ ; _∘₂_ ; id ; const)
+open import Data.Vec.Relation.Binary.Lex.NonStrict using (Lex-≤ ; Lex-< ; base ; this ; next)
+open import Function using (_$_ ; case_of_ ; _∘_ ; _∘₂_ ; id ; const ; flip)
 open import Function.Reasoning
 open import Level using (0ℓ)
 open import Relation.Binary.PropositionalEquality using (
-    _≡_ ; _≢_ ; refl ; sym ; ≢-sym ; cong ; cong₂ ; trans ; subst ; _≗_ ; module ≡-Reasoning
+    _≡_ ; _≢_ ; refl ; sym ; ≢-sym ; cong ; cong₂ ; trans ; subst ; subst₂ ; _≗_ ;
+    module ≡-Reasoning
   )
 open import Relation.Binary using (DecidableEquality)
 open import Relation.Binary.PropositionalEquality.Algebra using (isMagma)
@@ -63,6 +66,18 @@ infix 4 _≟ʷ_
 
 _≟ʷ_ : {i : ℕ} → DecidableEquality (Word i)
 _≟ʷ_ {i} = ≡-dec _≟ᵇ_
+
+_≤ˡ_ : {i : ℕ} → Word i → Word i → Set
+_≤ˡ_ = Lex-≤ _≡_ _<ᵇ_
+
+_<ˡ_ : {i : ℕ} → Word i → Word i → Set
+_<ˡ_ = Lex-< _≡_ _<ᵇ_
+
+_≥ˡ_ : {i : ℕ} → Word i → Word i → Set
+_≥ˡ_ = flip (Lex-≤ _≡_ _<ᵇ_)
+
+_>ˡ_ : {i : ℕ} → Word i → Word i → Set
+_>ˡ_ = flip (Lex-< _≡_ _<ᵇ_)
 
 substʷ : {i k : ℕ} → i ≡ k → Word i → Word k
 substʷ = subst Word
@@ -259,6 +274,37 @@ bits′SplitWord : ∀ {i k} xs ys a → bits′ (xs ++ ys) a ≡ bits′ {k} ys
 bits′SplitWord {zero}  {k} []       ys a = refl
 bits′SplitWord {suc i} {k} (x ∷ xs) ys a = bits′SplitWord xs ys (2 * a + bit x)
 
+bits′Acc-< : ∀ {i} {x y : Word i} {aˣ aʸ} → aˣ < aʸ → bits′ x aˣ < bits′ y aʸ
+bits′Acc-< {i} {x} {y} {aˣ} {aʸ} p =
+  begin-strict
+    bits′ x aˣ             ≡⟨ bits′SplitAcc x 0 aˣ ⟩
+    bits′ x 0 + 2 ^ i * aˣ <⟨ +-monoˡ-< (2 ^ i * aˣ) (bits′<2^i x 0) ⟩
+    2 ^ i + 2 ^ i * aˣ     ≡˘⟨ *-suc (2 ^ i) aˣ ⟩
+    2 ^ i * suc aˣ         ≤⟨ *-monoʳ-≤ (2 ^ i) p ⟩
+    2 ^ i * aʸ             ≤⟨ +-monoˡ-≤ (2 ^ i * aʸ) z≤n ⟩
+    bits′ y 0 + 2 ^ i * aʸ ≡˘⟨ bits′SplitAcc y 0 aʸ ⟩
+    bits′ y aʸ             ∎
+  where open ≤-Reasoning
+
+-- XXX - somehow turn the next two proofs into one?
+bits′Acc-≡-< : ∀ {i} {x y : Word i} {a₁} → bits′ x a₁ < bits′ y a₁ → (a₂ : ℕ) →
+  bits′ x a₂ < bits′ y a₂
+bits′Acc-≡-< {i} {x} {y} {a₁} p a₂ =
+     p                                                                    ∶ bits′ x a₁ < bits′ y a₁
+  |> subst₂ _<_ (bits′SplitAcc x 0 a₁) (bits′SplitAcc y 0 a₁)             ∶ bits′ x 0 + 2 ^ i * a₁ < bits′ y 0 + 2 ^ i * a₁
+  |> +-cancelʳ-< (bits′ x 0) (bits′ y 0)                                  ∶ bits′ x 0 < bits′ y 0
+  |> +-monoˡ-< (2 ^ i * a₂)                                               ∶ bits′ x 0 + 2 ^ i * a₂ < bits′ y 0 + 2 ^ i * a₂
+  |> subst₂ _<_ (sym (bits′SplitAcc x 0 a₂)) (sym (bits′SplitAcc y 0 a₂)) ∶ bits′ x a₂ < bits′ y a₂
+
+bits′Acc-≡-≤ : ∀ {i} {x y : Word i} {a₁} → bits′ x a₁ ≤ bits′ y a₁ → (a₂ : ℕ) →
+  bits′ x a₂ ≤ bits′ y a₂
+bits′Acc-≡-≤ {i} {x} {y} {a₁} p a₂ =
+     p                                                                    ∶ bits′ x a₁ ≤ bits′ y a₁
+  |> subst₂ _≤_ (bits′SplitAcc x 0 a₁) (bits′SplitAcc y 0 a₁)             ∶ bits′ x 0 + 2 ^ i * a₁ ≤ bits′ y 0 + 2 ^ i * a₁
+  |> +-cancelʳ-≤ (bits′ x 0) (bits′ y 0)                                  ∶ bits′ x 0 ≤ bits′ y 0
+  |> +-monoˡ-≤ (2 ^ i * a₂)                                               ∶ bits′ x 0 + 2 ^ i * a₂ ≤ bits′ y 0 + 2 ^ i * a₂
+  |> subst₂ _≤_ (sym (bits′SplitAcc x 0 a₂)) (sym (bits′SplitAcc y 0 a₂)) ∶ bits′ x a₂ ≤ bits′ y a₂
+
 bitsSubstʷ : ∀ {i k} (p : i ≡ k) xs → bits (substʷ p xs) ≡ bits xs
 bitsSubstʷ {i} {k} refl xs = refl
 
@@ -294,6 +340,35 @@ module _ where
 
 bitsInjective : ∀ {n} {x y : Word n} → bits x ≡ bits y → x ≡ y
 bitsInjective = bits′Injective
+
+-- XXX - proof duplication for ≤ and < necessary?
+bits⇒<ˡ : ∀ {i} {x y : Word i} → bits x < bits y → x <ˡ y
+bits⇒<ˡ {zero}  {[]}         {[]}         ()
+bits⇒<ˡ {suc i} {false ∷ xs} {false ∷ ys} p  = next refl (bits⇒<ˡ p)
+bits⇒<ˡ {suc i} {false ∷ xs} {true ∷ ys}  p  = this (f<t , λ ()) refl
+bits⇒<ˡ {suc i} {true ∷ xs}  {false ∷ ys} p  = contradiction p (<⇒≯ (bits′Acc-< {i} (s≤s z≤n)))
+bits⇒<ˡ {suc i} {true ∷ xs}  {true ∷ ys}  p  = next refl (bits⇒<ˡ (bits′Acc-≡-< {i} p 0))
+
+bits⇒≤ˡ : ∀ {i} {x y : Word i} → bits x ≤ bits y → x ≤ˡ y
+bits⇒≤ˡ {zero}  {[]}         {[]}         p  = base tt
+bits⇒≤ˡ {suc i} {false ∷ xs} {false ∷ ys} p  = next refl (bits⇒≤ˡ p)
+bits⇒≤ˡ {suc i} {false ∷ xs} {true ∷ ys}  p  = this (f<t , λ ()) refl
+bits⇒≤ˡ {suc i} {true ∷ xs}  {false ∷ ys} p  = contradiction p (<⇒≱ (bits′Acc-< {i} (s≤s z≤n)))
+bits⇒≤ˡ {suc i} {true ∷ xs}  {true ∷ ys}  p  = next refl (bits⇒≤ˡ (bits′Acc-≡-≤ {i} p 0))
+
+<ˡ⇒bits : ∀ {i} {x y : Word i} → x <ˡ y → bits x < bits y
+<ˡ⇒bits {zero}  {[]}         {[]}         (base ())
+<ˡ⇒bits {suc i} {false ∷ xs} {false ∷ ys} (next refl p) = <ˡ⇒bits p
+<ˡ⇒bits {suc i} {false ∷ xs} {true ∷ ys}  p             = bits′Acc-< {i} (s≤s z≤n)
+<ˡ⇒bits {suc i} {true ∷ xs}  {false ∷ ys} (this () p)
+<ˡ⇒bits {suc i} {true ∷ xs}  {true ∷ ys}  (next refl p) = bits′Acc-≡-< {i} (<ˡ⇒bits p) 1
+
+≤ˡ⇒bits : ∀ {i} {x y : Word i} → x ≤ˡ y → bits x ≤ bits y
+≤ˡ⇒bits {zero}  {[]}         {[]}         p             = z≤n
+≤ˡ⇒bits {suc i} {false ∷ xs} {false ∷ ys} (next refl p) = ≤ˡ⇒bits p
+≤ˡ⇒bits {suc i} {false ∷ xs} {true ∷ ys}  p             = <⇒≤ (bits′Acc-< {i} (s≤s z≤n))
+≤ˡ⇒bits {suc i} {true ∷ xs}  {false ∷ ys} (this () p)
+≤ˡ⇒bits {suc i} {true ∷ xs}  {true ∷ ys}  (next refl p) = bits′Acc-≡-≤ {i} (≤ˡ⇒bits p) 1
 
 --- adder ------------------------------------------------------------------------------------------
 
@@ -899,6 +974,9 @@ module _ where
     loc₃ : bits y ≤ bits x
     loc₃ = lem₅ (bits<2^i y) loc₂
 
+<ʷ⇒<ˡ : ∀ {i} {x y : Word i} → (x <ʷ y) ≡ true → x <ˡ y
+<ʷ⇒<ˡ {i} = bits⇒<ˡ ∘ <ʷ-✓₁ {i}
+
 --- less than or equal to --------------------------------------------------------------------------
 
 infix 4 _≤ʷ_
@@ -911,6 +989,9 @@ x ≤ʷ y = not (y <ʷ x)
 
 ≤ʷ-✓₂ : ∀ {i} {x} {y} → (x ≤ʷ y) ≡ false → bits {i} x ≰ bits y
 ≤ʷ-✓₂ {i} {x} {y} p = <⇒≱ (<ʷ-✓₁ {i} (not-injective p))
+
+≤ʷ⇒≤ˡ : ∀ {i} {x y : Word i} → (x ≤ʷ y) ≡ true → x ≤ˡ y
+≤ʷ⇒≤ˡ {i} = bits⇒≤ˡ ∘ ≤ʷ-✓₁ {i}
 
 --- greater than -----------------------------------------------------------------------------------
 
@@ -925,6 +1006,9 @@ x >ʷ y = y <ʷ x
 >ʷ-✓₂ : ∀ {i} {x} {y} → (x >ʷ y) ≡ false → bits {i} x ≯ bits y
 >ʷ-✓₂ {i} {x} {y} p = <ʷ-✓₂ {i} p
 
+>ʷ⇒>ˡ : ∀ {i} {x y : Word i} → (x >ʷ y) ≡ true → x >ˡ y
+>ʷ⇒>ˡ {i} = bits⇒<ˡ ∘ >ʷ-✓₁ {i}
+
 --- greater than or equal to -----------------------------------------------------------------------
 
 infix 4 _≥ʷ_
@@ -937,6 +1021,9 @@ x ≥ʷ y = y ≤ʷ x
 
 ≥ʷ-✓₂ : ∀ {i} {x} {y} → (x ≥ʷ y) ≡ false → bits {i} x ≱ bits y
 ≥ʷ-✓₂ {i} {x} {y} p = ≤ʷ-✓₂ {i} p
+
+≥ʷ⇒≥ˡ : ∀ {i} {x y : Word i} → (x ≥ʷ y) ≡ true → x ≥ˡ y
+≥ʷ⇒≥ˡ {i} = bits⇒≤ˡ ∘ ≥ʷ-✓₁ {i}
 
 --- ring solver ------------------------------------------------------------------------------------
 
