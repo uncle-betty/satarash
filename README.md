@@ -1,3 +1,7 @@
+*NOTE - I've abandoned this code. Its performance leaves much to be desired and
+I'll start over from scratch based on what I learned. I just made too many
+wrong assumptions regarding how to write fast code in Agda.*
+
 **Sataraš (satarash)**
 
 Today's SAT solvers offer to produce a proof of any unsatisfiability result
